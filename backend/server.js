@@ -74,10 +74,19 @@ app.post("/olist/rastreio", (req, res) => {
         success: true
     });
 });
+// receber atualização de nota fiscal
+app.post("/olist/notas", (req, res) => {
+    console.log("🧾 Atualização de nota fiscal recebida do Olist:");
+    console.log(req.body);
 
+    res.status(200).json({
+        success: true
+    });
+});
 // ================================
 // INICIAR SERVIDOR
 // ================================
+
 
 app.listen(PORT, () => {
     console.log(`🚀 Backend MONTÊ rodando na porta ${PORT}`);
