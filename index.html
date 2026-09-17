@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <meta name="description"
+          content="MONTÊ — Bolsas e acessórios">
+
+    <title>MONTÊ — Bolsas</title>
+
+    <link rel="stylesheet" href="style.css">
+
+    <link rel="preconnect"
+          href="https://fonts.googleapis.com">
+
+    <link rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossorigin>
+
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Playfair+Display:wght@400;500&display=swap"
+          rel="stylesheet">
+</head>
+
+
+<body>
+
+
+<!-- =====================================================
+     BARRA SUPERIOR
+===================================================== -->
+
+<div class="shipping-bar">
+
+    <span>
+        FRETE FIXO R$ 15,00 — CAPITAL
+    </span>
+
+    <span class="shipping-separator">•</span>
+
+    <span>
+        R$ 20,00 — REGIÃO METROPOLITANA
+    </span>
+
+</div>
+
+
+<!-- =====================================================
+     CABEÇALHO
+===================================================== -->
+
+<header class="header">
+
+    <button class="mobile-menu"
+            onclick="toggleMobileMenu()">
+
+        ☰
+
+    </button>
+
+
+    <a href="#inicio"
+       class="logo">
+
+        MONTÊ
+
+    </a>
+
+
+    <nav class="main-navigation"
+         id="mainNavigation">
+
+        <a href="#novidades"
+           onclick="closeMobileMenu()">
+
+            NOVIDADES
+
+        </a>
+
+        <a href="#colecao"
+           onclick="closeMobileMenu()">
+
+            COLEÇÃO
+
+        </a>
+
+        <a href="#sale"
+           onclick="closeMobileMenu()">
+
+            SALE
+
+        </a>
+
+    </nav>
+
+
+    <div class="header-actions">
+
+        <button onclick="openSearch()"
+                aria-label="Pesquisar">
+
+            <span class="icon">⌕</span>
+
+        </button>
+
+
+        <button onclick="openCart()"
+                class="cart-button"
+                aria-label="Carrinho">
+
+            <span class="icon">□</span>
+
+            <span id="cartCount"
+                  class="cart-count">
+
+                0
+
+            </span>
+
+        </button>
+
+    </div>
+
+</header>
+
+
+<!-- =====================================================
+     CAMPO DE PESQUISA
+===================================================== -->
+
+<div id="searchOverlay"
+     class="search-overlay">
+
+    <div class="search-box">
+
+        <button onclick="closeSearch()"
+                class="close-search">
+
+            ×
+
+        </button>
+
+        <input
+            type="text"
+            id="searchInput"
+            placeholder="Buscar produto..."
+            oninput="searchProducts()"
+        >
+
+    </div>
+
+</div>
+
+
+<!-- =====================================================
+     CONTEÚDO PRINCIPAL
+===================================================== -->
+
+<main id="inicio">
+
+
+<!-- =====================================================
+     HERO / CARROSSEL
+===================================================== -->
+
+<section class="hero">
+
+    <div class="carousel"
+         id="carousel">
+
+
+        <!-- BANNER 1 -->
+
+        <div class="slide active">
+
+            <img src="assets/banner1.jpg"
+                 alt="MONTÊ">
+
+            <div class="slide-content">
+
+                <p>MONTÊ</p>
+
+                <h1>
+                    NOVA<br>
+                    COLEÇÃO
+                </h1>
+
+                <a href="#colecao"
+                   class="hero-button">
+
+                    VER COLEÇÃO
+
+                </a>
+
+            </div>
+
+        </div>
+
+
+        <!-- BANNER 2 -->
+
+        <div class="slide">
+
+            <img src="assets/banner2.jpg"
+                 alt="MONTÊ">
+
+        </div>
+
+
+        <!-- BANNER 3 -->
+
+        <div class="slide">
+
+            <img src="assets/banner3.jpg"
+                 alt="MONTÊ">
+
+        </div>
+
+
+        <!-- BANNER 4 -->
+
+        <div class="slide">
+
+            <img src="assets/banner4.jpg"
+                 alt="MONTÊ">
+
+        </div>
+
+
+        <!-- BANNER 5 -->
+
+        <div class="slide">
+
+            <img src="assets/banner5.jpg"
+                 alt="MONTÊ">
+
+        </div>
+
+
+        <button class="carousel-prev"
+                onclick="previousSlide()">
+
+            ‹
+
+        </button>
+
+
+        <button class="carousel-next"
+                onclick="nextSlide()">
+
+            ›
+
+        </button>
+
+
+        <div class="carousel-dots"
+             id="carouselDots">
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     NOVIDADES
+===================================================== -->
+
+<section id="novidades"
+         class="product-section">
+
+    <div class="section-heading">
+
+        <div>
+
+            <p class="section-label">
+                MONTÊ
+            </p>
+
+            <h2>
+                NOVIDADES
+            </h2>
+
+        </div>
+
+        <a href="#colecao">
+            VER TODOS
+        </a>
+
+    </div>
+
+
+    <div id="newProducts"
+         class="products-grid">
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     COLEÇÃO
+===================================================== -->
+
+<section id="colecao"
+         class="product-section collection-section">
+
+    <div class="section-heading">
+
+        <div>
+
+            <p class="section-label">
+                MONTÊ
+            </p>
+
+            <h2>
+                COLEÇÃO
+            </h2>
+
+        </div>
+
+    </div>
+
+
+    <div class="collection-toolbar">
+
+        <button onclick="filterProducts('all')"
+                class="filter-button active"
+                data-filter="all">
+
+            TODOS
+
+        </button>
+
+        <button onclick="filterProducts('bolsas')"
+                class="filter-button"
+                data-filter="bolsas">
+
+            BOLSAS
+
+        </button>
+
+        <button onclick="filterProducts('acessorios')"
+                class="filter-button"
+                data-filter="acessorios">
+
+            ACESSÓRIOS
+
+        </button>
+
+    </div>
+
+
+    <div id="allProducts"
+         class="products-grid">
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     SALE
+===================================================== -->
+
+<section id="sale"
+         class="sale-section">
+
+    <div class="sale-heading">
+
+        <p>
+            MONTÊ
+        </p>
+
+        <h2>
+            SALE
+        </h2>
+
+        <span>
+            Seleção especial
+        </span>
+
+    </div>
+
+
+    <div id="saleProducts"
+         class="products-grid">
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     NEWSLETTER
+===================================================== -->
+
+<section class="newsletter">
+
+    <div>
+
+        <p class="section-label">
+            MONTÊ
+        </p>
+
+        <h2>
+            ENTRE PARA A NOSSA LISTA
+        </h2>
+
+        <p>
+            Receba novidades, lançamentos e conteúdos
+            exclusivos da MONTÊ.
+        </p>
+
+    </div>
+
+
+    <form onsubmit="subscribeNewsletter(event)">
+
+        <input
+            type="email"
+            placeholder="Seu melhor e-mail"
+            required
+        >
+
+        <button type="submit">
+
+            CADASTRAR
+
+        </button>
+
+    </form>
+
+</section>
+
+
+</main>
+
+
+<!-- =====================================================
+     FOOTER
+===================================================== -->
+
+<footer class="footer">
+
+    <div class="footer-brand">
+
+        <div class="footer-logo">
+            MONTÊ
+        </div>
+
+        <p>
+            Bolsas e acessórios.
+        </p>
+
+    </div>
+
+
+    <div class="footer-column">
+
+        <h3>
+            MONTÊ
+        </h3>
+
+        <a href="#novidades">
+            Novidades
+        </a>
+
+        <a href="#colecao">
+            Coleção
+        </a>
+
+        <a href="#sale">
+            Sale
+        </a>
+
+    </div>
+
+
+    <div class="footer-column">
+
+        <h3>
+            ATENDIMENTO
+        </h3>
+
+        <a href="#">
+            Contato
+        </a>
+
+        <a href="#">
+            Trocas e devoluções
+        </a>
+
+        <a href="#">
+            Política de privacidade
+        </a>
+
+    </div>
+
+
+    <div class="footer-column">
+
+        <h3>
+            REDES
+        </h3>
+
+        <a href="#">
+            Instagram
+        </a>
+
+        <a href="#">
+            WhatsApp
+        </a>
+
+    </div>
+
+
+    <div class="footer-bottom">
+
+        © 2026 MONTÊ — Todos os direitos reservados.
+
+    </div>
+
+</footer>
+
+
+<!-- =====================================================
+     MODAL DO PRODUTO
+===================================================== -->
+
+<div id="productModal"
+     class="modal">
+
+    <div class="modal-content">
+
+        <button class="modal-close"
+                onclick="closeProductModal()">
+
+            ×
+
+        </button>
+
+
+        <div class="product-detail">
+
+
+            <div class="product-gallery">
+
+                <div class="gallery-main">
+
+                    <img id="modalMainImage"
+                         src=""
+                         alt="">
+
+                </div>
+
+
+                <div id="galleryThumbnails"
+                     class="gallery-thumbnails">
+
+                </div>
+
+            </div>
+
+
+            <div class="product-information">
+
+                <p id="modalCategory"
+                   class="product-category">
+
+                </p>
+
+
+                <h2 id="modalName">
+
+                </h2>
+
+
+                <div id="modalPrice"
+                     class="modal-price">
+
+                </div>
+
+
+                <p id="modalDescription"
+                   class="modal-description">
+
+                </p>
+
+
+                <div class="product-divider">
+                </div>
+
+
+                <p class="quantity-title">
+                    QUANTIDADE
+                </p>
+
+
+                <div class="quantity-selector">
+
+                    <button onclick="changeQuantity(-1)">
+                        −
+                    </button>
+
+                    <span id="quantity">
+                        1
+                    </span>
+
+                    <button onclick="changeQuantity(1)">
+                        +
+                    </button>
+
+                </div>
+
+
+                <button
+                    id="addProductButton"
+                    class="add-cart-large">
+
+                    ADICIONAR AO CARRINHO
+
+                </button>
+
+
+                <div class="product-shipping">
+
+                    <strong>
+                        ENVIO
+                    </strong>
+
+                    <p>
+                        Frete fixo de R$ 15,00 para a capital
+                        e R$ 20,00 para região metropolitana.
+                    </p>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =====================================================
+     CARRINHO
+===================================================== -->
+
+<div id="cartOverlay"
+     class="cart-overlay"
+     onclick="closeCartOutside(event)">
+
+
+    <aside class="cart">
+
+        <div class="cart-header">
+
+            <h2>
+                SEU CARRINHO
+            </h2>
+
+            <button onclick="closeCart()">
+                ×
+            </button>
+
+        </div>
+
+
+        <div id="cartItems"
+             class="cart-items">
+
+        </div>
+
+
+        <div class="cart-footer">
+
+            <div class="subtotal">
+
+                <span>
+                    SUBTOTAL
+                </span>
+
+                <strong id="cartTotal">
+                    R$ 0,00
+                </strong>
+
+            </div>
+
+
+            <p class="cart-shipping-info">
+
+                Frete calculado conforme região de entrega.
+
+            </p>
+
+
+            <button
+                onclick="checkout()"
+                class="checkout-button">
+
+                FINALIZAR COMPRA
+
+            </button>
+
+
+            <button
+                onclick="closeCart()"
+                class="continue-shopping">
+
+                CONTINUAR COMPRANDO
+
+            </button>
+
+        </div>
+
+    </aside>
+
+</div>
+
+
+<!-- =====================================================
+     TOAST
+===================================================== -->
+
+<div id="toast"
+     class="toast">
+
+</div>
+
+
+<script src="script.js"></script>
+
+</body>
+
+</html>
