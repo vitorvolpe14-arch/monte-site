@@ -202,12 +202,12 @@ app.post(
                 items
                     .map((item) => {
 
-                        const quantity = 
-                            Number(
-                                item.quantity
+                        const quantity =
+                         Number(
+                              item.quantity
                             ) || 1;
 
-                        const price = 0.01
+                        const price =
                             Number(
                                 item.price
                             );
@@ -285,7 +285,7 @@ app.post(
 
                 redirect_url:
                     `${SITE_URL}/pagamento-sucesso`,
-
+                    
                 webhook_url:
                     `${SITE_URL}/webhook-infinitepay`,    
 
@@ -549,166 +549,6 @@ app.get(
 /* =====================================================
    INICIAR SERVIDOR
 ===================================================== */
-/* =====================================================
-   WEBHOOK INFINITEPAY
-===================================================== */
-
-app.post(
-    "/webhook-infinitepay",
-    async (req, res) => {
-
-        try {
-
-            console.log(
-                "===================================="
-            );
-
-            console.log(
-                "💰 WEBHOOK INFINITEPAY RECEBIDO"
-            );
-
-            console.log(
-                "===================================="
-            );
-
-            console.log(
-                JSON.stringify(
-                    req.body,
-                    null,
-                    2
-                )
-            );
-
-            const {
-                invoice_slug,
-                amount,
-                paid_amount,
-                installments,
-                capture_method,
-                transaction_nsu,
-                order_nsu,
-                receipt_url,
-                items
-            } = req.body || {};
-
-            /* -----------------------------------------
-               VALIDAÇÃO BÁSICA
-            ----------------------------------------- */
-
-            if (!order_nsu) {
-
-                console.error(
-                    "❌ Webhook sem order_nsu"
-                );
-
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "order_nsu não informado."
-                });
-
-            }
-
-            if (!transaction_nsu) {
-
-                console.error(
-                    "❌ Webhook sem transaction_nsu"
-                );
-
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "transaction_nsu não informado."
-                });
-
-            }
-
-            /* -----------------------------------------
-               PAGAMENTO CONFIRMADO
-            ----------------------------------------- */
-
-            console.log(
-                "✅ PAGAMENTO APROVADO"
-            );
-
-            console.log(
-                "Pedido:",
-                order_nsu
-            );
-
-            console.log(
-                "Transação:",
-                transaction_nsu
-            );
-
-            console.log(
-                "Valor:",
-                amount
-            );
-
-            console.log(
-                "Valor pago:",
-                paid_amount
-            );
-
-            console.log(
-                "Forma:",
-                capture_method
-            );
-
-            console.log(
-                "Comprovante:",
-                receipt_url
-            );
-
-            /* -----------------------------------------
-               AQUI ENTRARÁ O OLIST
-            ----------------------------------------- */
-
-            // NÃO vamos integrar o Olist ainda.
-            //
-            // Primeiro vamos confirmar que o webhook
-            // está chegando corretamente no Render.
-            //
-            // Depois vamos usar:
-            //
-            // order_nsu
-            // transaction_nsu
-            // items
-            // valor
-            // cliente
-            //
-            // para criar/atualizar o pedido.
-
-            /* -----------------------------------------
-               RESPONDE RAPIDAMENTE À INFINITEPAY
-            ----------------------------------------- */
-
-            return res.status(200).json({
-                success: true,
-                message: null
-            });
-
-        } catch (error) {
-
-            console.error(
-                "❌ ERRO NO WEBHOOK INFINITEPAY:"
-            );
-
-            console.error(
-                error
-            );
-
-            return res.status(400).json({
-                success: false,
-                message:
-                    "Erro ao processar webhook."
-            });
-
-        }
-
-    }
-);
 
 app.listen(
     PORT,
