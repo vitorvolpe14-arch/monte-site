@@ -1245,48 +1245,58 @@ async function checkout() {
     }
 
 
+    // 5. Monta os produtos
     const items = cart
-    .map(item => {
+        .map(item => {
 
-        const price = 0.01;
+            const price = 0.01
+                Number(item.price);
 
-        const quantity =
-            Number(item.quantity) || 1;
+            const quantity =
+                Number(item.quantity) || 1;
 
-        if (
-            !Number.isFinite(price) ||
-            price <= 0
-        ) {
-            return null;
-        }
 
-        return {
+            if (
+                !Number.isFinite(price) ||
+                price <= 0
+            ) {
+                return null;
+            }
 
-            quantity: quantity,
 
-            price: price,
+            return {
 
-            description:
-                String(
+                quantity: quantity,
+
+                price: price,
+
+                description: String(
                     item.name || "Produto MONTÊ"
                 ),
 
-            sku:
-                item.sku
+                sku:
+                    item.sku
                     ? String(item.sku)
                     : null
-        };
 
-    })
-    .filter(Boolean);
+            };
+
+        })
+        .filter(Boolean);
 
 
-items.push({
-    quantity: 1,
-    price: 0,
-    description: "Frete de teste",
-    sku: "FRETE-TESTE"
-});
+    // 6. Adiciona frete
+    items.push({
+
+        quantity: 1,
+
+        price: Number(shipping),
+
+        description: "Frete de entrega",
+
+        sku: "FRETE"
+
+    });
 
 
     // Segurança
