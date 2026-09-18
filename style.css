@@ -1909,3 +1909,269 @@ a {
     }
 
 }
+/* =====================================================
+   FORMULÁRIO DE CHECKOUT
+===================================================== */
+
+.checkout-form {
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 1px solid #ddd;
+}
+
+.checkout-form h3 {
+    font-size: 9px;
+    letter-spacing: 2px;
+    font-weight: 500;
+    margin: 0 0 15px;
+}
+
+.checkout-form input {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #ddd;
+    background: white;
+    padding: 13px 12px;
+    margin-bottom: 10px;
+    font-family: inherit;
+    font-size: 11px;
+    outline: none;
+}
+
+.checkout-form input:focus {
+    border-color: #222;
+}
+
+.checkout-row {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr;
+    gap: 10px;
+}
+
+.shipping-result {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+    padding: 15px 0;
+    border-top: 1px solid #ddd;
+    border-bottom: 1px solid #ddd;
+    font-size: 10px;
+    letter-spacing: 1px;
+}
+
+.shipping-result strong {
+    font-weight: 500;
+}
+/* =========================================
+   CORREÇÃO DO CARRINHO — MONTÊ
+   ========================================= */
+
+/* Fundo do carrinho */
+.cart-overlay,
+.cart-modal,
+.cart-drawer,
+#cartDrawer {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+}
+
+/* Painel lateral do carrinho */
+.cart-content,
+.cart-panel,
+.cart-drawer-content,
+#cartDrawer .cart-content,
+#cartDrawer .cart-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: min(520px, 100%);
+    height: 100dvh;
+    max-height: 100dvh;
+    background: #fff;
+
+    display: flex;
+    flex-direction: column;
+
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+/* Área interna que contém produtos + formulário */
+.cart-body,
+.cart-items,
+.cart-scroll,
+.cart-drawer-body,
+#cartDrawer .cart-body,
+#cartDrawer .cart-items {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+
+    box-sizing: border-box;
+}
+
+/* Impede o conteúdo de ficar escondido atrás do rodapé */
+.cart-footer,
+.cart-actions,
+.checkout-section {
+    flex-shrink: 0;
+}
+
+/* Produto dentro do carrinho */
+.cart-item {
+    flex-shrink: 0;
+}
+
+/* Barra de rolagem */
+.cart-body::-webkit-scrollbar,
+.cart-items::-webkit-scrollbar,
+.cart-scroll::-webkit-scrollbar,
+.cart-drawer-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.cart-body::-webkit-scrollbar-thumb,
+.cart-items::-webkit-scrollbar-thumb,
+.cart-scroll::-webkit-scrollbar-thumb,
+.cart-drawer-body::-webkit-scrollbar-thumb {
+    background: #bbb;
+    border-radius: 10px;
+}
+
+/* =========================================
+   CELULAR / TELAS PEQUENAS
+   ========================================= */
+
+@media (max-width: 600px) {
+
+    .cart-content,
+    .cart-panel,
+    .cart-drawer-content,
+    #cartDrawer .cart-content,
+    #cartDrawer .cart-panel {
+        width: 100%;
+        height: 100dvh;
+        max-height: 100dvh;
+    }
+
+    .cart-body,
+    .cart-items,
+    .cart-scroll,
+    .cart-drawer-body {
+        overflow-y: auto;
+        max-height: none;
+    }
+}
+
+/* =========================================
+   EVITA O SITE PRINCIPAL DE ROLAR POR BAIXO
+   DO CARRINHO
+   ========================================= */
+
+body.cart-open,
+body.modal-open {
+    overflow: hidden;
+}
+/* ==========================================
+   CORREÇÃO DEFINITIVA DO CARRINHO MONTÊ
+   ========================================== */
+
+/* O painel inteiro do carrinho será rolável */
+#cartOverlay .cart {
+    height: 100vh !important;
+    max-height: 100vh !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+
+    box-sizing: border-box !important;
+
+    display: block !important;
+
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Remove qualquer altura/posição que esteja prendendo
+   o formulário dentro do carrinho */
+#cartOverlay .cart-footer {
+    position: static !important;
+    height: auto !important;
+    max-height: none !important;
+
+    overflow: visible !important;
+
+    box-sizing: border-box !important;
+}
+
+/* Área dos produtos */
+#cartOverlay #cartItems {
+    position: static !important;
+
+    height: auto !important;
+    max-height: none !important;
+
+    overflow: visible !important;
+
+    box-sizing: border-box !important;
+}
+
+/* Formulário */
+#cartOverlay .checkout-form {
+    position: static !important;
+
+    height: auto !important;
+    max-height: none !important;
+
+    overflow: visible !important;
+
+    box-sizing: border-box !important;
+
+    padding-bottom: 40px;
+}
+
+/* Mantém o cabeçalho no topo enquanto o carrinho rola */
+#cartOverlay .cart-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #fff;
+}
+
+/* Barra de rolagem do carrinho */
+#cartOverlay .cart::-webkit-scrollbar {
+    width: 7px;
+}
+
+#cartOverlay .cart::-webkit-scrollbar-thumb {
+    background: #b8b8b8;
+    border-radius: 10px;
+}
+
+#cartOverlay .cart::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+
+/* ==========================================
+   CELULAR
+   ========================================== */
+
+@media (max-width: 600px) {
+
+    #cartOverlay .cart {
+        width: 100% !important;
+        height: 100dvh !important;
+        max-height: 100dvh !important;
+
+        overflow-y: auto !important;
+    }
+
+    #cartOverlay .cart-footer {
+        padding-bottom: 50px;
+    }
+}

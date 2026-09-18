@@ -1,9 +1,10 @@
 const express = require("express");
+const path = require("path");
 const cors = require("cors");
 require("dotenv").config();
 
 const app = express();
-
+app.use(express.static(path.join(__dirname, "..")));
 app.use(cors());
 app.use(express.json());
 
@@ -14,11 +15,7 @@ const PORT = process.env.PORT || 3000;
 // ================================
 
 app.get("/", (req, res) => {
-    res.json({
-        status: "online",
-        loja: "MONTÊ",
-        mensagem: "Backend da MONTÊ funcionando!"
-    });
+    res.sendFile(path.join(__dirname, "..", "index.html"));
 });
 
 // ================================
@@ -86,7 +83,111 @@ app.post("/olist/notas", (req, res) => {
 // ================================
 // INICIAR SERVIDOR
 // ================================
+// ==========================================
+// INFINITEPAY - CRIAR CHECKOUT
+// ==========================================
 
+app.post("/api/criar-checkout", async (req, res) => {
+  try {
+    const { items, customer } = req.body;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Carrinho vazio."
+      });
+    }
+
+    if (
+      !customer ||
+      !customer.name ||
+      !customer.email ||
+      !customer.phone
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Dados do cliente incompletos."
+      });
+    }
+
+    const orderNsu = 'MONTE-${Date.now()}';
+
+    // A InfinitePay recebe os valores em centavos
+    const infinitePayItems = items.map((item) => ({
+      quantity: Number(item.quantity) || 1,
+      price: Math.round(Number(item.price) * 100),
+      description: item.description
+    }));
+
+    const payload = {
+      handle: "monte-64839705-0z9",
+
+      order_nsu: orderNsu,
+
+      redirect_url:
+        "https://monte-site-tfjk.onrender.com/pagamento-sucesso",
+
+      items: infinitePayItems,
+
+      customer: {
+        name: customer.name,
+        email: customer.email,
+        phone_number: customer.phone
+      },
+
+      address: customer.address
+        ? {
+            cep: customer.address.cep,
+            street: customer.address.street,
+            number: customer.address.number,
+            neighborhood: customer.address.neighborhood,
+            complement: customer.address.complement || ""
+          }
+        : undefined
+    };
+
+    const response = await fetch(
+      "https://api.checkout.infinitepay.io/links",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify(payload)
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("Erro InfinitePay:", data);
+
+      return res.status(400).json({
+        success: false,
+        message: "Não foi possível criar o checkout.",
+        error: data
+      });
+    }
+
+    console.log("Checkout InfinitePay criado:", data);
+
+    return res.json({
+      success: true,
+      url: data.url,
+      order_nsu: orderNsu
+    });
+
+  } catch (error) {
+    console.error("Erro ao criar checkout:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Erro interno ao criar checkout."
+    });
+  }
+});
 
 app.listen(PORT, () => {
     console.log(`🚀 Backend MONTÊ rodando na porta ${PORT}`);

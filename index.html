@@ -694,11 +694,98 @@
             </div>
 
 
-            <p class="cart-shipping-info">
+            <div class="checkout-form">
 
-                Frete calculado conforme região de entrega.
+    <h3>SEUS DADOS</h3>
 
-            </p>
+    <input
+        type="text"
+        id="customerName"
+        placeholder="Nome completo"
+        autocomplete="name"
+    >
+
+    <input
+        type="email"
+        id="customerEmail"
+        placeholder="E-mail"
+        autocomplete="email"
+    >
+
+    <input
+        type="tel"
+        id="customerPhone"
+        placeholder="Telefone"
+        autocomplete="tel"
+    >
+
+    <h3>ENDEREÇO DE ENTREGA</h3>
+
+    <input
+        type="text"
+        id="customerCep"
+        placeholder="CEP"
+        maxlength="9"
+        autocomplete="postal-code"
+    >
+
+    <input
+        type="text"
+        id="customerStreet"
+        placeholder="Rua"
+        autocomplete="street-address"
+    >
+
+    <div class="checkout-row">
+
+        <input
+            type="text"
+            id="customerNumber"
+            placeholder="Número"
+            autocomplete="address-line2"
+        >
+
+        <input
+            type="text"
+            id="customerComplement"
+            placeholder="Complemento"
+        >
+
+    </div>
+
+    <input
+        type="text"
+        id="customerNeighborhood"
+        placeholder="Bairro"
+        autocomplete="address-level3"
+    >
+
+    <input
+        type="text"
+        id="customerCity"
+        placeholder="Cidade"
+        autocomplete="address-level2"
+    >
+
+    <input
+        type="text"
+        id="customerState"
+        placeholder="Estado"
+        maxlength="2"
+        autocomplete="address-level1"
+    >
+
+    <div class="shipping-result">
+
+        <span>FRETE</span>
+
+        <strong id="shippingValue">
+            Informe seu endereço
+        </strong>
+
+    </div>
+
+</div>
 
 
             <button

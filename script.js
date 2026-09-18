@@ -18,198 +18,302 @@
 
 
 const products = [
-
     {
         id: 1,
-
         name: "Bag Oslo",
-
         category: "bolsas",
-
         price: 499,
-
-        description:
-            "Bolsa em couro croco legítimo, com acabamento marcante e design contemporâneo.",
-
+        description: "Bolsa em couro croco legítimo, com design marcante e acabamento premium.",
         images: [
-            "assets/produtos/oslo-1.jpg",
-            "assets/produtos/oslo-2.jpg",
-            "assets/produtos/oslo-3.jpg"
+            "assets/Oslo 1.jpg",
+            "assets/Oslo 2.jpg",
+            "assets/Oslo 3.jpg"
         ],
-
         newProduct: true,
-
-        sale: false
+        sale: false,
+        sku: "BGSLO"
     },
-
 
     {
         id: 2,
-
         name: "Bag Vienna",
-
         category: "bolsas",
-
         price: 549,
-
-        description:
-            "Design estruturado e acabamento cuidadosamente desenvolvido para compor diferentes produções.",
-
+        description: "Bolsa de design sofisticado e acabamento premium.",
         images: [
-            "assets/produtos/vienna-1.jpg",
-            "assets/produtos/vienna-2.jpg",
-            "assets/produtos/vienna-3.jpg"
+            "assets/Vienna 1.jpg",
+            "assets/Vienna 2.jpg",
+            "assets/Vienna 3.jpg"
         ],
-
         newProduct: true,
-
-        sale: false
+        sale: false,
+        sku: "VIENNA"
     },
-
 
     {
         id: 3,
-
         name: "Bag Milão",
-
         category: "bolsas",
-
         price: 499,
-
-        description:
-            "Uma peça versátil da coleção MONTÊ.",
-
+        description: "Bolsa inspirada no estilo italiano, com acabamento elegante e contemporâneo.",
         images: [
-            "assets/produtos/milao-1.jpg",
-            "assets/produtos/milao-2.jpg"
+            "assets/Milao 1.jpg",
+            "assets/Milao 2.jpg"
         ],
-
-        newProduct: true,
-
-        sale: false
+        newProduct: false,
+        sale: false,
+        sku: "BGMILA"
     },
-
 
     {
         id: 4,
-
         name: "Bag Cannes",
-
         category: "bolsas",
-
         price: 579,
-
-        description:
-            "Bolsa com acabamento premium e proporções pensadas para o uso diário.",
-
+        description: "Bolsa com design marcante e acabamento premium.",
         images: [
-            "assets/produtos/cannes-1.jpg",
-            "assets/produtos/cannes-2.jpg"
+            "assets/Cannes7.JPG.jpeg",
+            "assets/Cannes1.JPG.jpeg",
+            "assets/Cannes2.JPG.jpeg",
+            "assets/Cannes3.JPG.jpeg",
+            "assets/Cannes4.JPG.jpeg",
+            "assets/Cannes5.JPG.jpeg",
+            "assets/Cannes6.JPG.jpeg",
+            
         ],
-
         newProduct: false,
-
-        sale: false
+        sale: false,
+        sku: "BAGCNS"
     },
-
 
     {
         id: 5,
-
         name: "Bag Louvre",
-
         category: "bolsas",
-
         price: 519,
-
-        description:
-            "Design inspirado na arquitetura e estética europeia.",
-
+        description: "Bolsa de linhas sofisticadas e acabamento premium.",
         images: [
-            "assets/produtos/louvre-1.jpg",
-            "assets/produtos/louvre-2.jpg"
+            "assets/Louvre1.jpg",
+            "assets/Louvre 2.jpg",
+            "assets/Louvre 3.jpg"
         ],
-
         newProduct: false,
-
-        sale: false
+        sale: false,
+        sku: "BAGLVR"
     },
-
 
     {
         id: 6,
-
-        name: "Bag Atena",
-
+        name: "Bag Atenas",
         category: "bolsas",
-
         price: 459,
-
-        description:
-            "Uma bolsa compacta desenvolvida para acompanhar diferentes momentos.",
-
+        description: "Bolsa de design contemporâneo e acabamento premium.",
         images: [
-            "assets/produtos/atena-1.jpg",
-            "assets/produtos/atena-2.jpg"
+            "assets/Atena 1.jpg",
+            "assets/Atena 2.jpg",
+            "assets/Atena 3.jpg"
         ],
-
         newProduct: false,
-
         sale: false
     },
-
 
     {
         id: 7,
-
         name: "Cinto MONTÊ",
-
         category: "acessorios",
-
         price: 229,
-
-        description:
-            "Cinto fino com acabamento premium.",
-
+        description: "Cinto MONTÊ com acabamento premium.",
         images: [
-            "assets/produtos/cinto-1.jpg",
-            "assets/produtos/cinto-2.jpg"
+            "assets/Cinto 1.jpg",
+            "assets/Cinto 2.jpg"
         ],
-
-        newProduct: true,
-
+        newProduct: false,
         sale: false
     },
 
-
-    /*
-       PRODUTO EM SALE
-    */
-
     {
         id: 8,
-
         name: "Bag Malta",
-
         category: "bolsas",
-
         price: 399,
-
         oldPrice: 499,
-
-        description:
-            "Peça selecionada da coleção MONTÊ.",
-
+        description: "Bolsa com design versátil e acabamento premium.",
         images: [
-            "assets/produtos/malta-1.jpg",
-            "assets/produtos/malta-2.jpg"
+            "assets/Malta 1.jpg",
+            "assets/Malta 2.jpg",
+            "assets/Malta 3.jpg"
         ],
-
         newProduct: false,
+        sale: true,
+        sku: "MALTAO"
+    },
 
-        sale: true
+    {
+        id: 9,
+        name: "Bag Atenas",
+        category: "bolsas",
+        sku: "IRL01"
+    },
+
+    {
+        id: 10,
+        name: "Bag Austria",
+        category: "bolsas",
+        sku: "ASTRAO"
+    },
+
+    {
+        id: 11,
+        name: "Bag Berlim",
+        category: "bolsas",
+        sku: "BERLIM"
+    },
+
+    {
+        id: 12,
+        name: "Bag Charm",
+        category: "bolsas",
+        sku: "BAGCHR"
+    },
+
+    {
+        id: 13,
+        name: "Bag Coliseu",
+        category: "bolsas",
+        sku: "COLSUM"
+    },
+
+    {
+        id: 14,
+        name: "Bag Croácia",
+        category: "bolsas",
+        sku: "CRTIVA"
+    },
+
+    {
+        id: 15,
+        name: "Bag Holanda",
+        category: "bolsas",
+        sku: "NEDLND"
+    },
+
+    {
+        id: 16,
+        name: "Bag Hungria",
+        category: "bolsas",
+        sku: "BAGHNG"
+    },
+
+    {
+        id: 17,
+        name: "Bag Ibiza",
+        category: "bolsas",
+        sku: "IBIZA"
+    },
+
+    {
+        id: 18,
+        name: "Bag Instambul",
+        category: "bolsas",
+        sku: "INSTAM"
+    },
+
+    {
+        id: 19,
+        name: "Bag Irlanda",
+        category: "bolsas"
+    },
+
+    {
+        id: 20,
+        name: "Bag Londres",
+        category: "bolsas",
+        sku: "LONDON"
+    },
+
+    {
+        id: 21,
+        name: "Bag Louvre Baby",
+        category: "bolsas",
+        sku: "LVRBBY"
+    },
+
+    {
+        id: 22,
+        name: "Bag Oxford",
+        category: "bolsas",
+        sku: "OXFORD"
+    },
+
+    {
+        id: 23,
+        name: "Bag Paris",
+        category: "bolsas",
+        sku: "PARISO"
+    },
+
+    {
+        id: 24,
+        name: "Bag Porto Fino",
+        category: "bolsas",
+        sku: "PORTFIN"
+    },
+
+    {
+        id: 25,
+        name: "Bag Positano",
+        category: "bolsas",
+        sku: "PSTANO"
+    },
+
+    {
+        id: 26,
+        name: "Bag Saint-Tropez",
+        category: "bolsas",
+        sku: "SNTROP"
+    },
+
+    {
+        id: 27,
+        name: "Bag Suecia",
+        category: "bolsas",
+        sku: "SWESLD"
+    },
+
+    {
+        id: 28,
+        name: "Bag Suíça",
+        category: "bolsas",
+        sku: "SWZLND"
+    },
+
+    {
+        id: 29,
+        name: "Bag Valencia",
+        category: "bolsas",
+        sku: "VLNCA10"
+    },
+
+    {
+        id: 30,
+        name: "Bag Versailles",
+        category: "bolsas",
+        sku: "VERSLL"
+    },
+
+    {
+        id: 31,
+        name: "Bag Versailles Soft",
+        category: "bolsas",
+        sku: "VERSFT"
+    },
+
+    {
+        id: 32,
+        name: "Bag Zurique",
+        category: "bolsas",
+        sku: "ZURQUE"
     }
-
 ];
 
 
@@ -253,14 +357,33 @@ function createProductCard(product) {
 
     card.className = "product-card";
 
+    const image =
+        product.images && product.images.length
+            ? product.images[0]
+            : "data:image/svg+xml;charset=UTF-8," +
+              encodeURIComponent(`
+                <svg xmlns="http://www.w3.org/2000/svg"
+                     width="600"
+                     height="800"
+                     viewBox="0 0 600 800">
+                    <rect width="600" height="800" fill="#f3f3f1"/>
+                    <text x="300"
+                          y="390"
+                          text-anchor="middle"
+                          font-family="Arial"
+                          font-size="18"
+                          letter-spacing="4"
+                          fill="#222">
+                        MONTÊ
+                    </text>
+                </svg>
+              `);
 
     let priceHTML = "";
-
 
     if (product.sale && product.oldPrice) {
 
         priceHTML = `
-
             <span class="old-price">
                 ${formatPrice(product.oldPrice)}
             </span>
@@ -268,16 +391,16 @@ function createProductCard(product) {
             <span class="sale-price">
                 ${formatPrice(product.price)}
             </span>
-
         `;
 
     } else {
 
         priceHTML =
-            formatPrice(product.price);
+            product.price !== undefined
+                ? formatPrice(product.price)
+                : "Preço em breve";
 
     }
-
 
     card.innerHTML = `
 
@@ -304,13 +427,12 @@ function createProductCard(product) {
             }
 
             <img
-                src="${product.images[0]}"
+                src="${image}"
                 alt="${product.name}"
                 loading="lazy"
             >
 
         </div>
-
 
         <div class="product-info">
 
@@ -326,15 +448,12 @@ function createProductCard(product) {
 
     `;
 
-
     card.addEventListener(
         "click",
         () => openProductModal(product.id)
     );
 
-
     return card;
-
 }
 
 
@@ -937,6 +1056,111 @@ function closeCartOutside(event) {
 
 }
 
+/* =====================================================
+   FRETE
+===================================================== */
+
+const metropolitanCities = [
+    "AQUIRAZ",
+    "CAUCAIA",
+    "EUSEBIO",
+    "GUAIUBA",
+    "ITAITINGA",
+    "MARACANAU",
+];
+
+
+function normalizeCity(city) {
+
+    return city
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toUpperCase();
+
+}
+
+
+function getShippingValue() {
+
+    const cityInput =
+        document.getElementById("customerCity");
+
+    const stateInput =
+        document.getElementById("customerState");
+
+    if (!cityInput || !stateInput) {
+        return null;
+    }
+
+    const city =
+        normalizeCity(cityInput.value);
+
+    const state =
+        stateInput.value
+            .trim()
+            .toUpperCase();
+
+    if (
+        city === "FORTALEZA" &&
+        state === "CE"
+    ) {
+
+        return 15;
+
+    }
+
+    if (
+        state === "CE" &&
+        metropolitanCities.includes(city)
+    ) {
+
+        return 20;
+
+    }
+
+    return null;
+
+}
+
+
+/* =====================================================
+   ATUALIZAR FRETE
+===================================================== */
+
+function updateShipping() {
+
+    const shippingValueElement =
+        document.getElementById(
+            "shippingValue"
+        );
+
+    if (!shippingValueElement) {
+        return;
+    }
+
+    const shipping =
+        getShippingValue();
+
+    if (shipping === 15) {
+
+        shippingValueElement.textContent =
+            "R$ 15,00";
+
+    } else if (shipping === 20) {
+
+        shippingValueElement.textContent =
+            "R$ 20,00";
+
+    } else {
+
+        shippingValueElement.textContent =
+            "Informe cidade e estado";
+
+    }
+
+}
+
 
 /* =====================================================
    CHECKOUT
@@ -951,84 +1175,248 @@ function checkout() {
         );
 
         return;
-
     }
 
 
-    /*
-       =================================================
-       INTEGRAÇÃO INFINITEPAY
-       =================================================
+    const name =
+        document.getElementById(
+            "customerName"
+        )?.value.trim();
 
-       AQUI SERÁ INSERIDA A INTEGRAÇÃO
-       DO CHECKOUT DA SUA CONTA INFINITEPAY.
+    const email =
+        document.getElementById(
+            "customerEmail"
+        )?.value.trim();
 
-       NÃO COLOQUE SUA SENHA OU TOKEN
-       DIRETAMENTE NESTE ARQUIVO.
+    const phone =
+        document.getElementById(
+            "customerPhone"
+        )?.value.trim();
 
-       O ideal é enviar o pedido para
-       seu backend/API e criar o checkout
-       de forma segura.
+    const cep =
+        document.getElementById(
+            "customerCep"
+        )?.value.trim();
 
-    */
+    const street =
+        document.getElementById(
+            "customerStreet"
+        )?.value.trim();
 
+    const number =
+        document.getElementById(
+            "customerNumber"
+        )?.value.trim();
 
-    const order = {
+    const city =
+        document.getElementById(
+            "customerCity"
+        )?.value.trim();
 
-        items: cart.map(item => ({
-
-            id: item.id,
-
-            name: item.name,
-
-            quantity: item.quantity,
-
-            price: item.price
-
-        })),
-
-        total: cart.reduce(
-            (total, item) =>
-                total +
-                item.price *
-                item.quantity,
-            0
-        )
-
-    };
+    const state =
+        document.getElementById(
+            "customerState"
+        )?.value.trim();
 
 
-    console.log(
-        "Pedido preparado:",
-        order
-    );
+    if (
+        !name ||
+        !email ||
+        !phone ||
+        !cep ||
+        !street ||
+        !number ||
+        !city ||
+        !state
+    ) {
+
+        showToast(
+            "Preencha todos os dados de entrega."
+        );
+
+        return;
+    }
 
 
-    /*
-       EXEMPLO DO FLUXO:
+    const shipping =
+        getShippingValue();
 
-       1. Cliente clica em FINALIZAR COMPRA.
 
-       2. Seu site envia "order" para
-          seu servidor.
+    if (shipping === null) {
 
-       3. Seu servidor cria o checkout
-          através da integração InfinitePay.
+        showToast(
+            "No momento, entregamos com frete fixo apenas em Fortaleza e região metropolitana."
+        );
 
-       4. InfinitePay retorna a URL
-          de pagamento.
+        return;
+    }
 
-       5. Cliente é redirecionada para
-          o checkout.
 
-    */
+    const items = cart.map(item => ({
+    quantity: Number(item.quantity) || 1,
+    price: Number(item.price),
+    description: item.name,
+    sku: item.sku || null
+}));
+
+
+    /* FRETE COMO ITEM DO CHECKOUT */
+
+   items.push({
+    quantity: 1,
+    price: Number(shipping),
+    description: "Frete de entrega"
+});
 
 
     showToast(
-        "Checkout preparado. Configure a integração InfinitePay."
+        "Preparando seu pagamento..."
     );
 
+
+    fetch(
+        "http://127.0.0.1:3000/api/criar-checkout",
+        {
+
+            method: "POST",
+
+            headers: {
+                "Content-Type":
+                    "application/json"
+            },
+
+            body: JSON.stringify({
+
+                items: items,
+
+                customer: {
+
+                    name: name,
+
+                    email: email,
+
+                    phone: phone,
+
+                    address: {
+
+                        cep: cep,
+
+                        street: street,
+
+                        number: number,
+
+                        city: city,
+
+                        state: state
+
+                    }
+
+                }
+
+            })
+
+        }
+    )
+
+    .then(async response => {
+
+        const data =
+            await response.json();
+
+
+        if (
+            !response.ok ||
+            !data.success ||
+            !data.url
+        ) {
+
+            console.error(
+                "Erro ao criar checkout:",
+                data
+            );
+
+            throw new Error(
+                data.message ||
+                "Não foi possível criar o pagamento."
+            );
+
+        }
+
+
+        return data;
+
+    })
+
+    .then(data => {
+
+        console.log(
+            "Checkout InfinitePay:",
+            data
+        );
+
+
+        window.location.href =
+            data.url;
+
+    })
+
+    .catch(error => {
+
+        console.error(
+            "Erro no pagamento:",
+            error
+        );
+
+
+        showToast(
+            "Não foi possível abrir o pagamento. Tente novamente."
+        );
+
+    });
+
 }
+
+
+/* =====================================================
+   EVENTOS DO FRETE
+===================================================== */
+
+document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+
+        const city =
+            document.getElementById(
+                "customerCity"
+            );
+
+        const state =
+            document.getElementById(
+                "customerState"
+            );
+
+
+        if (city) {
+
+            city.addEventListener(
+                "input",
+                updateShipping
+            );
+
+        }
+
+
+        if (state) {
+
+            state.addEventListener(
+                "input",
+                updateShipping
+            );
+
+        }
+
+    }
+);
 
 
 /* =====================================================
