@@ -1163,62 +1163,53 @@ function updateShipping() {
 
 
 /* =====================================================
-   CHECKOUT
+   CHECKOUT — INFINITEPAY
 ===================================================== */
 
-function checkout() {
+async function checkout() {
 
-    if (cart.length === 0) {
+    // 1. Verifica carrinho
+    if (!Array.isArray(cart) || cart.length === 0) {
 
-        showToast(
-            "Seu carrinho está vazio."
-        );
+        showToast("Seu carrinho está vazio.");
 
         return;
     }
 
 
+    // 2. Captura os dados
     const name =
-        document.getElementById(
-            "customerName"
-        )?.value.trim();
+        document.getElementById("customerName")?.value.trim();
 
     const email =
-        document.getElementById(
-            "customerEmail"
-        )?.value.trim();
+        document.getElementById("customerEmail")?.value.trim();
 
     const phone =
-        document.getElementById(
-            "customerPhone"
-        )?.value.trim();
+        document.getElementById("customerPhone")?.value.trim();
 
     const cep =
-        document.getElementById(
-            "customerCep"
-        )?.value.trim();
+        document.getElementById("customerCep")?.value.trim();
 
     const street =
-        document.getElementById(
-            "customerStreet"
-        )?.value.trim();
+        document.getElementById("customerStreet")?.value.trim();
 
     const number =
-        document.getElementById(
-            "customerNumber"
-        )?.value.trim();
+        document.getElementById("customerNumber")?.value.trim();
+
+    const complement =
+        document.getElementById("customerComplement")?.value.trim();
+
+    const neighborhood =
+        document.getElementById("customerNeighborhood")?.value.trim();
 
     const city =
-        document.getElementById(
-            "customerCity"
-        )?.value.trim();
+        document.getElementById("customerCity")?.value.trim();
 
     const state =
-        document.getElementById(
-            "customerState"
-        )?.value.trim();
+        document.getElementById("customerState")?.value.trim().toUpperCase();
 
 
+    // 3. Validação
     if (
         !name ||
         !email ||
@@ -1226,6 +1217,7 @@ function checkout() {
         !cep ||
         !street ||
         !number ||
+        !neighborhood ||
         !city ||
         !state
     ) {
@@ -1238,6 +1230,7 @@ function checkout() {
     }
 
 
+    // 4. Calcula frete
     const shipping =
         getShippingValue();
 
@@ -1245,28 +1238,91 @@ function checkout() {
     if (shipping === null) {
 
         showToast(
-            "No momento, entregamos com frete fixo apenas em Fortaleza e região metropolitana."
+            "Informe uma cidade válida de Fortaleza ou região metropolitana."
         );
 
         return;
     }
 
 
-    const items = cart.map(item => ({
-    quantity: Number(item.quantity) || 1,
-    price: Number(item.price),
-    description: item.name,
-    sku: item.sku || null
-}));
+    // 5. Monta os produtos
+    const items = cart
+        .map(item => {
+
+            const price =
+                Number(item.price);
+
+            const quantity =
+                Number(item.quantity) || 1;
 
 
-    /* FRETE COMO ITEM DO CHECKOUT */
+            if (
+                !Number.isFinite(price) ||
+                price <= 0
+            ) {
+                return null;
+            }
 
-   items.push({
-    quantity: 1,
-    price: Number(shipping),
-    description: "Frete de entrega"
-});
+
+            return {
+
+                quantity: quantity,
+
+                price: price,
+
+                description: String(
+                    item.name || "Produto MONTÊ"
+                ),
+
+                sku:
+                    item.sku
+                    ? String(item.sku)
+                    : null
+
+            };
+
+        })
+        .filter(Boolean);
+
+
+    // 6. Adiciona frete
+    items.push({
+
+        quantity: 1,
+
+        price: Number(shipping),
+
+        description: "Frete de entrega",
+
+        sku: "FRETE"
+
+    });
+
+
+    // Segurança
+    if (items.length === 0) {
+
+        showToast(
+            "Não foi possível identificar os produtos do carrinho."
+        );
+
+        return;
+    }
+
+
+    // 7. Desabilita o botão durante o processamento
+    const checkoutButton =
+        document.querySelector(".checkout-button");
+
+
+    if (checkoutButton) {
+
+        checkoutButton.disabled = true;
+
+        checkoutButton.textContent =
+            "PREPARANDO PAGAMENTO...";
+
+    }
 
 
     showToast(
@@ -1274,149 +1330,183 @@ function checkout() {
     );
 
 
-    fetch(
-        "https://monte-site-itjk.onrender.com/api/criar-checkout",
-        {
+    try {
 
-            method: "POST",
+        // 8. Envia para o backend do Render
+        const response =
+            await fetch(
+                "https://monte-site-itjk.onrender.com/api/criar-checkout",
+                {
 
-            headers: {
-                "Content-Type":
-                    "application/json"
-            },
+                    method: "POST",
 
-            body: JSON.stringify({
+                    headers: {
 
-                items: items,
+                        "Content-Type":
+                            "application/json",
 
-                customer: {
+                        "Accept":
+                            "application/json"
 
-                    name: name,
+                    },
 
-                    email: email,
+                    body: JSON.stringify({
 
-                    phone: phone,
+                        items: items,
 
-                    address: {
+                        customer: {
 
-                        cep: cep,
+                            name: name,
 
-                        street: street,
+                            email: email,
 
-                        number: number,
+                            phone: phone,
 
-                        city: city,
+                            address: {
 
-                        state: state
+                                cep: cep,
 
-                    }
+                                street: street,
+
+                                number: number,
+
+                                complement:
+                                    complement || "",
+
+                                neighborhood:
+                                    neighborhood,
+
+                                city: city,
+
+                                state: state
+
+                            }
+
+                        }
+
+                    })
 
                 }
-
-            })
-
-        }
-    )
-
-    .then(async response => {
-
-        const data =
-            await response.json();
+            );
 
 
-        if (
-            !response.ok ||
-            !data.success ||
-            !data.url
-        ) {
+        // 9. Tenta ler a resposta como texto primeiro
+        // Isso evita quebrar quando o Render retorna HTML
+        const responseText =
+            await response.text();
+
+
+        let data = null;
+
+
+        try {
+
+            data =
+                JSON.parse(responseText);
+
+        } catch (jsonError) {
 
             console.error(
-                "Erro ao criar checkout:",
+                "Resposta não é JSON:",
+                responseText
+            );
+
+        }
+
+
+        // 10. Se o servidor respondeu erro
+        if (!response.ok) {
+
+            console.error(
+                "Erro HTTP do backend:",
+                response.status,
+                responseText
+            );
+
+
+            throw new Error(
+                data?.message ||
+                `Erro do servidor (${response.status}).`
+            );
+        }
+
+
+        // 11. Procura a URL do checkout
+        const checkoutUrl =
+            data?.url ||
+            data?.checkoutUrl ||
+            data?.paymentUrl ||
+            data?.redirectUrl;
+
+
+        if (!checkoutUrl) {
+
+            console.error(
+                "Backend não retornou URL:",
                 data
             );
 
-            throw new Error(
-                data.message ||
-                "Não foi possível criar o pagamento."
-            );
 
+            throw new Error(
+                data?.message ||
+                "O servidor não retornou o link da InfinitePay."
+            );
         }
 
 
-        return data;
+        // 12. Confirma que parece ser uma URL válida
+        let validUrl;
 
-    })
+        try {
 
-    .then(data => {
+            validUrl =
+                new URL(checkoutUrl);
 
-        console.log(
-            "Checkout InfinitePay:",
-            data
+        } catch {
+
+            throw new Error(
+                "O servidor retornou um link de pagamento inválido."
+            );
+        }
+
+
+        // 13. Fecha o carrinho
+        closeCart();
+
+
+        // 14. Abre a InfinitePay
+        window.location.assign(
+            validUrl.href
         );
 
 
-        window.location.href =
-            data.url;
-
-    })
-
-    .catch(error => {
+    } catch (error) {
 
         console.error(
-            "Erro no pagamento:",
+            "ERRO COMPLETO NO CHECKOUT:",
             error
         );
 
 
         showToast(
-            "Não foi possível abrir o pagamento. Tente novamente."
+            error.message ||
+            "Não foi possível abrir o pagamento."
         );
 
-    });
 
-}
+        // Reativa o botão
+        if (checkoutButton) {
 
+            checkoutButton.disabled = false;
 
-/* =====================================================
-   EVENTOS DO FRETE
-===================================================== */
-
-document.addEventListener(
-    "DOMContentLoaded",
-    () => {
-
-        const city =
-            document.getElementById(
-                "customerCity"
-            );
-
-        const state =
-            document.getElementById(
-                "customerState"
-            );
-
-
-        if (city) {
-
-            city.addEventListener(
-                "input",
-                updateShipping
-            );
-
-        }
-
-
-        if (state) {
-
-            state.addEventListener(
-                "input",
-                updateShipping
-            );
+            checkoutButton.textContent =
+                "FINALIZAR COMPRA";
 
         }
 
     }
-);
+
+}
 
 
 /* =====================================================
