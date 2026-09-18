@@ -22,10 +22,10 @@ const products = [
         id: 1,
         name: "Bag Oslo",
         category: "bolsas",
-        price: 499,
+        price: 699,
         description: "Bolsa em couro croco legítimo, com design marcante e acabamento premium.",
         images: [
-            "assets/Oslo 1.jpg",
+            "assets/Oslo1.jpg,jpeg",
             "assets/Oslo 2.jpg",
             "assets/Oslo 3.jpg"
         ],
@@ -38,7 +38,7 @@ const products = [
         id: 2,
         name: "Bag Vienna",
         category: "bolsas",
-        price: 549,
+        price: 499,
         description: "Bolsa de design sofisticado e acabamento premium.",
         images: [
             "assets/Vienna 1.jpg",
@@ -1245,58 +1245,48 @@ async function checkout() {
     }
 
 
-    // 5. Monta os produtos
     const items = cart
-        .map(item => {
+    .map(item => {
 
-            const price =
-                Number(item.price);
+        const price = 0.01;
 
-            const quantity =
-                Number(item.quantity) || 1;
+        const quantity =
+            Number(item.quantity) || 1;
 
+        if (
+            !Number.isFinite(price) ||
+            price <= 0
+        ) {
+            return null;
+        }
 
-            if (
-                !Number.isFinite(price) ||
-                price <= 0
-            ) {
-                return null;
-            }
+        return {
 
+            quantity: quantity,
 
-            return {
+            price: price,
 
-                quantity: quantity,
-
-                price: price,
-
-                description: String(
+            description:
+                String(
                     item.name || "Produto MONTÊ"
                 ),
 
-                sku:
-                    item.sku
+            sku:
+                item.sku
                     ? String(item.sku)
                     : null
+        };
 
-            };
-
-        })
-        .filter(Boolean);
+    })
+    .filter(Boolean);
 
 
-    // 6. Adiciona frete
-    items.push({
-
-        quantity: 1,
-
-        price: Number(shipping),
-
-        description: "Frete de entrega",
-
-        sku: "FRETE"
-
-    });
+items.push({
+    quantity: 1,
+    price: 0,
+    description: "Frete de teste",
+    sku: "FRETE-TESTE"
+});
 
 
     // Segurança
