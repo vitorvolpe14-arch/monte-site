@@ -1249,7 +1249,7 @@ async function checkout() {
     const items = cart
         .map(item => {
 
-            const price = 0.01
+            const price =
                 Number(item.price);
 
             const quantity =
