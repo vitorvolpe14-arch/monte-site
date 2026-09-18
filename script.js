@@ -1275,7 +1275,7 @@ function checkout() {
 
 
     fetch(
-        "https://monte-site-tfjk.onrender.com/api/criar-checkout",
+        "https://monte-site-itjk.onrender.com/api/criar-checkout",
         {
 
             method: "POST",
