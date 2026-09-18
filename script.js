@@ -1275,7 +1275,7 @@ function checkout() {
 
 
     fetch(
-        "http://127.0.0.1:3000/api/criar-checkout",
+        "http://monte-site-tfjk.onrender.com/api/criar-checkout",
         {
 
             method: "POST",
