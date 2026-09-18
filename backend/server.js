@@ -5,7 +5,13 @@ require("dotenv").config();
 
 const app = express();
 app.use(express.static(path.join(__dirname, "..")));
-app.use(cors());
+const corsOptions = {
+  origin: "https://monte-site-itjk.onrender.com",
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type"]
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
