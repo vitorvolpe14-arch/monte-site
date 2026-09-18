@@ -6,12 +6,10 @@ require("dotenv").config();
 const app = express();
 app.use(express.static(path.join(__dirname, "..")));
 const corsOptions = {
-  origin: "https://monte-site-itjk.onrender.com",
+  origin: "*",
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type"]
 };
-
-app.use(cors(corsOptions));
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
@@ -130,8 +128,8 @@ app.post("/api/criar-checkout", async (req, res) => {
 
       order_nsu: orderNsu,
 
-      redirect_url:
-        "https://monte-site-tfjk.onrender.com/pagamento-sucesso",
+    redirect_url:
+        "https://monte-site-itjk.onrender.com/pagamento-sucesso",
 
       items: infinitePayItems,
 
@@ -153,7 +151,7 @@ app.post("/api/criar-checkout", async (req, res) => {
     };
 
     const response = await fetch(
-      "https://api.checkout.infinitepay.io/links",
+      "/api/criar-checkout",
       {
         method: "POST",
 
