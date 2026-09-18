@@ -23,6 +23,97 @@ const INFINITEPAY_HANDLE =
     "monte-64839705-0z9";
 
 /* =====================================================
+   SUPABASE
+===================================================== */
+
+const SUPABASE_URL =
+    process.env.SUPABASE_URL;
+
+const SUPABASE_SECRET_KEY =
+    process.env.SUPABASE_SECRET_KEY;
+
+
+async function supabaseRequest(
+    table,
+    options = {}
+) {
+
+    if (
+        !SUPABASE_URL ||
+        !SUPABASE_SECRET_KEY
+    ) {
+
+        throw new Error(
+            "Supabase não configurado no ambiente."
+        );
+
+    }
+
+    const response =
+        await fetch(
+            `${SUPABASE_URL}/rest/v1/${table}`,
+            {
+                ...options,
+
+                headers: {
+                    "Content-Type":
+                        "application/json",
+
+                    "apikey":
+                        SUPABASE_SECRET_KEY,
+
+                    "Authorization":
+                        `Bearer ${SUPABASE_SECRET_KEY}`,
+
+                    "Prefer":
+                        "return=representation",
+
+                    ...(options.headers || {})
+                }
+            }
+        );
+
+
+    const text =
+        await response.text();
+
+
+    let data;
+
+    try {
+
+        data =
+            text
+                ? JSON.parse(text)
+                : null;
+
+    } catch {
+
+        data = text;
+
+    }
+
+
+    if (!response.ok) {
+
+        console.error(
+            "❌ Erro Supabase:",
+            response.status,
+            data
+        );
+
+        throw new Error(
+            `Supabase ${response.status}`
+        );
+
+    }
+
+
+    return data;
+
+}
+
+/* =====================================================
    MIDDLEWARES
 ===================================================== */
 
