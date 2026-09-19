@@ -804,6 +804,92 @@ async function getOrCreateOlistContact(customer) {
    CRIAR PEDIDO NO OLIST
 ===================================================== */
 
+async function findOlistOrderByEcommerceNumber(orderNsu) {
+
+    const cleanOrderNsu = safeString(orderNsu);
+
+    if (!cleanOrderNsu) {
+        return null;
+    }
+
+    console.log(
+        "🔎 Procurando pedido existente no Olist pelo número:",
+        cleanOrderNsu
+    );
+
+    const data = await olistRequest(
+        `/pedidos?numeroPedidoEcommerce=${encodeURIComponent(cleanOrderNsu)}`
+    );
+
+    const orders =
+        Array.isArray(data)
+            ? data
+            : (
+                Array.isArray(data?.itens)
+                    ? data.itens
+                    : (
+                        Array.isArray(data?.items)
+                            ? data.items
+                            : (
+                                Array.isArray(data?.pedidos)
+                                    ? data.pedidos
+                                    : (
+                                        Array.isArray(data?.data)
+                                            ? data.data
+                                            : []
+                                    )
+                            )
+                    )
+            );
+
+    console.log(
+        "📦 Pedidos encontrados no Olist:",
+        orders.length
+    );
+
+    const existingOrder =
+        orders.find(item => {
+
+            const ecommerceNumber =
+                safeString(
+                    item?.numeroPedidoEcommerce ??
+                    item?.numero_pedido_ecommerce ??
+                    item?.ecommerce?.numeroPedidoEcommerce
+                );
+
+            return (
+                ecommerceNumber === cleanOrderNsu
+            );
+
+        });
+
+    if (existingOrder) {
+
+        console.log(
+            "✅ Pedido já existe no Olist:",
+            {
+                id: existingOrder.id,
+                numero:
+                    existingOrder.numero ??
+                    existingOrder.numeroPedido
+            }
+        );
+
+        return existingOrder;
+    }
+
+    console.log(
+        "ℹ️ Pedido ainda não existe no Olist."
+    );
+
+    return null;
+}
+
+
+/* =====================================================
+   CRIAR PEDIDO NO OLIST
+===================================================== */
+
 async function createOlistOrder(order) {
 
     console.log(
@@ -811,10 +897,40 @@ async function createOlistOrder(order) {
         order.order_nsu
     );
 
+    /*
+       PRIMEIRO:
+       verifica se o pedido já existe.
+       Isso evita duplicidade.
+    */
+
+    const existingOrder =
+        await findOlistOrderByEcommerceNumber(
+            order.order_nsu
+        );
+
+    if (existingOrder) {
+
+        console.log(
+            "♻️ Reutilizando pedido já existente no Olist."
+        );
+
+        return existingOrder;
+    }
+
+
+    /*
+       LOCALIZA OU CRIA CLIENTE
+    */
+
     const contact =
         await getOrCreateOlistContact(
             order.customer
         );
+
+
+    /*
+       CONVERTE PRODUTOS
+    */
 
     const olistItems = [];
 
@@ -833,6 +949,7 @@ async function createOlistOrder(order) {
             throw new Error(
                 `Produto "${item.description}" está sem SKU.`
             );
+
         }
 
         const product =
@@ -855,15 +972,40 @@ async function createOlistOrder(order) {
                 normalizeMoney(
                     item.price
                 )
+
         });
+
     }
 
-  const payload = {
-    idContato: contact.id,
-    numeroPedidoEcommerce: safeString(order.order_nsu),
-    itens: olistItems,
-    valorFrete: normalizeMoney(order.shipping?.value || 0)
-};
+
+    /*
+       PAYLOAD DO PEDIDO
+    */
+
+    const payload = {
+
+        idContato:
+            contact.id,
+
+        numeroPedidoEcommerce:
+            safeString(
+                order.order_nsu
+            ),
+
+        itens:
+            olistItems,
+
+        valorFrete:
+            normalizeMoney(
+                order.shipping?.value || 0
+            )
+
+    };
+
+
+    /*
+       ENDEREÇO DE ENTREGA
+    */
 
     if (
         order.customer?.address
@@ -908,32 +1050,98 @@ async function createOlistOrder(order) {
                 safeString(
                     address.state
                 )
+
         };
+
     }
+
 
     console.log(
         "📤 Enviando pedido para Olist..."
     );
 
-    const data =
-        await olistRequest(
-            "/pedidos",
-            {
-                method: "POST",
-                body: JSON.stringify(
-                    payload
-                )
-            }
-        );
-
     console.log(
-        "✅ PEDIDO CRIADO NO OLIST:",
-        data
+        "🧾 Número externo do pedido:",
+        payload.numeroPedidoEcommerce
     );
 
-    return data;
-}
 
+    /*
+       TENTA CRIAR O PEDIDO
+    */
+
+    try {
+
+        const data =
+            await olistRequest(
+                "/pedidos",
+                {
+                    method: "POST",
+
+                    body:
+                        JSON.stringify(
+                            payload
+                        )
+                }
+            );
+
+        console.log(
+            "✅ PEDIDO CRIADO NO OLIST:",
+            data
+        );
+
+        return data;
+
+    } catch (error) {
+
+        /*
+           Se a API disser que o registro já existe,
+           fazemos uma nova consulta antes de considerar
+           o processo como erro.
+        */
+
+        const errorMessage =
+            safeString(
+                error?.message
+            );
+
+        if (
+            errorMessage.includes(
+                "Olist API 409"
+            )
+        ) {
+
+            console.log(
+                "⚠️ Olist retornou 409."
+            );
+
+            console.log(
+                "🔎 Verificando se o pedido foi criado mesmo assim..."
+            );
+
+            const orderAfterConflict =
+                await findOlistOrderByEcommerceNumber(
+                    order.order_nsu
+                );
+
+            if (
+                orderAfterConflict
+            ) {
+
+                console.log(
+                    "✅ Pedido encontrado após o 409."
+                );
+
+                return orderAfterConflict;
+            }
+
+        }
+
+        throw error;
+
+    }
+
+}
 /* =====================================================
    OLIST
    INICIAR AUTORIZAÇÃO OAUTH
