@@ -858,26 +858,11 @@ async function createOlistOrder(order) {
         });
     }
 
-   const payload = {
-
-    idContato:
-        contact.id,
-
-    numeroPedidoEcommerce:
-        safeString(
-            order.order_nsu
-        ),
-
-    ecommerce:
-        "MONTÊ E-commerce",
-
-    itens:
-        olistItems,
-
-    valorFrete:
-        normalizeMoney(
-            order.shipping?.value || 0
-        )
+  const payload = {
+    idContato: contact.id,
+    numeroPedidoEcommerce: safeString(order.order_nsu),
+    itens: olistItems,
+    valorFrete: normalizeMoney(order.shipping?.value || 0)
 };
 
     if (
