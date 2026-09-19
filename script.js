@@ -18,6 +18,38 @@
 
 
 const products = [
+
+    {
+        id: "TESTE",
+        name: "PRODUTO TESTE",
+        category: "teste",
+        price: 0.01,
+        description: "Produto temporário para teste de checkout.",
+        images: [
+            "data:image/svg+xml;charset=UTF-8," +
+            encodeURIComponent(`
+                <svg xmlns="http://www.w3.org/2000/svg"
+                     width="600"
+                     height="800"
+                     viewBox="0 0 600 800">
+                    <rect width="600" height="800" fill="#f3f3f1"/>
+                    <text x="300"
+                          y="390"
+                          text-anchor="middle"
+                          font-family="Arial"
+                          font-size="28"
+                          letter-spacing="4"
+                          fill="#222">
+                        TESTE
+                    </text>
+                </svg>
+            `)
+        ],
+        newProduct: true,
+        sale: false,
+        sku: "TESTE001"
+    },
+
     {
         id: 1,
         name: "Bag Oslo",
@@ -78,8 +110,7 @@ const products = [
             "assets/Cannes3.JPG.jpeg",
             "assets/Cannes4.JPG.jpeg",
             "assets/Cannes5.JPG.jpeg",
-            "assets/Cannes6.JPG.jpeg",
-            
+            "assets/Cannes6.JPG.jpeg"
         ],
         newProduct: false,
         sale: false,
@@ -314,8 +345,8 @@ const products = [
         category: "bolsas",
         sku: "ZURQUE"
     }
-];
 
+];
 
 /* =====================================================
    ESTADO
