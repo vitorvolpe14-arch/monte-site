@@ -363,6 +363,529 @@ async function olistRequest(
 
 }
 
+/* =====================================================
+   MONTÊ → OLIST
+   MEMÓRIA DOS PEDIDOS AGUARDANDO PAGAMENTO
+===================================================== */
+
+const pendingOrders = new Map();
+const processedPayments = new Set();
+
+/* =====================================================
+   NORMALIZAR VALOR
+===================================================== */
+
+function normalizeMoney(value) {
+    const number = Number(value);
+
+    if (!Number.isFinite(number)) {
+        return 0;
+    }
+
+    return Number(number.toFixed(2));
+}
+
+/* =====================================================
+   NORMALIZAR TEXTO
+===================================================== */
+
+function safeString(value) {
+    if (value === undefined || value === null) {
+        return "";
+    }
+
+    return String(value).trim();
+}
+
+/* =====================================================
+   GUARDAR PEDIDO ANTES DO PAGAMENTO
+===================================================== */
+
+function savePendingOrder(order) {
+
+    if (!order || !order.order_nsu) {
+        throw new Error("Pedido sem order_nsu.");
+    }
+
+    pendingOrders.set(
+        order.order_nsu,
+        {
+            ...order,
+            created_at: Date.now(),
+            payment_confirmed: false,
+            olist_created: false
+        }
+    );
+
+    console.log(
+        "💾 Pedido salvo aguardando pagamento:",
+        order.order_nsu
+    );
+}
+
+/* =====================================================
+   RECUPERAR PEDIDO
+===================================================== */
+
+function getPendingOrder(orderNsu) {
+
+    if (!orderNsu) {
+        return null;
+    }
+
+    return pendingOrders.get(orderNsu) || null;
+}
+
+/* =====================================================
+   LIMPEZA DE PEDIDOS ANTIGOS
+===================================================== */
+
+function cleanupPendingOrders() {
+
+    const expiration =
+        1000 *
+        60 *
+        60 *
+        24;
+
+    const now = Date.now();
+
+    for (
+        const [orderNsu, order]
+        of pendingOrders.entries()
+    ) {
+
+        if (
+            order.created_at &&
+            now - order.created_at > expiration
+        ) {
+
+            pendingOrders.delete(orderNsu);
+
+            console.log(
+                "🧹 Pedido pendente removido:",
+                orderNsu
+            );
+        }
+    }
+}
+
+setInterval(
+    cleanupPendingOrders,
+    1000 * 60 * 60
+);
+
+/* =====================================================
+   LOCALIZAR PRODUTO NO OLIST PELO SKU
+===================================================== */
+
+async function findOlistProductBySku(sku) {
+
+    const cleanSku =
+        safeString(sku);
+
+    if (!cleanSku) {
+        throw new Error(
+            "Produto sem SKU."
+        );
+    }
+
+    console.log(
+        "🔎 Procurando produto no Olist pelo SKU:",
+        cleanSku
+    );
+
+    /*
+       A consulta é feita pela API V3.
+       O retorno é analisado de forma defensiva,
+       pois a estrutura pode variar conforme a versão
+       da API/permissões da conta.
+    */
+
+    const data =
+        await olistRequest(
+            `/produtos?codigo=${encodeURIComponent(cleanSku)}`
+        );
+
+    const products =
+        Array.isArray(data)
+            ? data
+            : (
+                data?.itens ||
+                data?.items ||
+                data?.produtos ||
+                data?.data ||
+                []
+            );
+
+    const product =
+        products.find(
+            item =>
+                safeString(
+                    item?.codigo
+                ).toLowerCase()
+                ===
+                cleanSku.toLowerCase()
+        );
+
+    if (!product) {
+
+        throw new Error(
+            `Produto com SKU ${cleanSku} não encontrado no Olist.`
+        );
+    }
+
+    if (!product.id) {
+
+        throw new Error(
+            `Produto ${cleanSku} foi encontrado, mas não possui ID.`
+        );
+    }
+
+    console.log(
+        "✅ Produto encontrado no Olist:",
+        product.id,
+        cleanSku
+    );
+
+    return product;
+}
+
+/* =====================================================
+   LOCALIZAR CLIENTE NO OLIST
+===================================================== */
+
+async function findOlistContact(customer) {
+
+    const email =
+        safeString(
+            customer?.email
+        );
+
+    if (!email) {
+        throw new Error(
+            "Cliente sem e-mail."
+        );
+    }
+
+    console.log(
+        "🔎 Procurando cliente no Olist:",
+        email
+    );
+
+    const data =
+        await olistRequest(
+            `/contatos?email=${encodeURIComponent(email)}`
+        );
+
+    const contacts =
+        Array.isArray(data)
+            ? data
+            : (
+                data?.itens ||
+                data?.items ||
+                data?.contatos ||
+                data?.data ||
+                []
+            );
+
+    const contact =
+        contacts.find(
+            item =>
+                safeString(
+                    item?.email
+                ).toLowerCase()
+                ===
+                email.toLowerCase()
+        );
+
+    if (contact?.id) {
+
+        console.log(
+            "✅ Cliente já existe no Olist:",
+            contact.id
+        );
+
+        return contact;
+    }
+
+    return null;
+}
+
+/* =====================================================
+   CRIAR CLIENTE NO OLIST
+===================================================== */
+
+async function createOlistContact(customer) {
+
+    console.log(
+        "👤 Cliente não encontrado. Criando no Olist..."
+    );
+
+    const payload = {
+
+        nome:
+            safeString(
+                customer?.name
+            ),
+
+        email:
+            safeString(
+                customer?.email
+            ),
+
+        telefone:
+            safeString(
+                customer?.phone
+            )
+    };
+
+    if (
+        customer?.address
+    ) {
+
+        payload.endereco = {
+
+            cep:
+                safeString(
+                    customer.address.cep
+                ),
+
+            logradouro:
+                safeString(
+                    customer.address.street
+                ),
+
+            numero:
+                safeString(
+                    customer.address.number
+                ),
+
+            complemento:
+                safeString(
+                    customer.address.complement
+                ),
+
+            bairro:
+                safeString(
+                    customer.address.neighborhood
+                ),
+
+            cidade:
+                safeString(
+                    customer.address.city
+                ),
+
+            uf:
+                safeString(
+                    customer.address.state
+                )
+        };
+    }
+
+    const data =
+        await olistRequest(
+            "/contatos",
+            {
+                method: "POST",
+                body: JSON.stringify(
+                    payload
+                )
+            }
+        );
+
+    const contact =
+        data?.id
+            ? data
+            : (
+                data?.data ||
+                data?.contato ||
+                data?.item ||
+                null
+            );
+
+    if (
+        !contact?.id
+    ) {
+
+        throw new Error(
+            "Olist não retornou o ID do cliente criado."
+        );
+    }
+
+    console.log(
+        "✅ Cliente criado no Olist:",
+        contact.id
+    );
+
+    return contact;
+}
+
+/* =====================================================
+   OBTER OU CRIAR CLIENTE
+===================================================== */
+
+async function getOrCreateOlistContact(customer) {
+
+    const existing =
+        await findOlistContact(
+            customer
+        );
+
+    if (existing) {
+        return existing;
+    }
+
+    return await createOlistContact(
+        customer
+    );
+}
+
+/* =====================================================
+   CRIAR PEDIDO NO OLIST
+===================================================== */
+
+async function createOlistOrder(order) {
+
+    console.log(
+        "📦 Preparando pedido para o Olist:",
+        order.order_nsu
+    );
+
+    const contact =
+        await getOrCreateOlistContact(
+            order.customer
+        );
+
+    const olistItems = [];
+
+    for (
+        const item
+        of order.items
+    ) {
+
+        const sku =
+            safeString(
+                item.sku
+            );
+
+        if (!sku) {
+
+            throw new Error(
+                `Produto "${item.description}" está sem SKU.`
+            );
+        }
+
+        const product =
+            await findOlistProductBySku(
+                sku
+            );
+
+        olistItems.push({
+
+            produto: {
+                id: product.id
+            },
+
+            quantidade:
+                Number(
+                    item.quantity
+                ) || 1,
+
+            valorUnitario:
+                normalizeMoney(
+                    item.price
+                )
+        });
+    }
+
+    const payload = {
+
+        idContato:
+            contact.id,
+
+        numeroPedidoEcommerce:
+            safeString(
+                order.order_nsu
+            ),
+
+        itens:
+            olistItems,
+
+        valorFrete:
+            normalizeMoney(
+                order.shipping?.value || 0
+            )
+    };
+
+    if (
+        order.customer?.address
+    ) {
+
+        const address =
+            order.customer.address;
+
+        payload.enderecoEntrega = {
+
+            cep:
+                safeString(
+                    address.cep
+                ),
+
+            logradouro:
+                safeString(
+                    address.street
+                ),
+
+            numero:
+                safeString(
+                    address.number
+                ),
+
+            complemento:
+                safeString(
+                    address.complement
+                ),
+
+            bairro:
+                safeString(
+                    address.neighborhood
+                ),
+
+            cidade:
+                safeString(
+                    address.city
+                ),
+
+            uf:
+                safeString(
+                    address.state
+                )
+        };
+    }
+
+    console.log(
+        "📤 Enviando pedido para Olist..."
+    );
+
+    const data =
+        await olistRequest(
+            "/pedidos",
+            {
+                method: "POST",
+                body: JSON.stringify(
+                    payload
+                )
+            }
+        );
+
+    console.log(
+        "✅ PEDIDO CRIADO NO OLIST:",
+        data
+    );
+
+    return data;
+}
 
 /* =====================================================
    OLIST
@@ -1028,10 +1551,10 @@ app.post(
     }
 );
 
-
 /* =====================================================
    INFINITEPAY
    CRIAR CHECKOUT
+   COM PEDIDO SALVO ANTES DO PAGAMENTO
 ===================================================== */
 
 app.post(
@@ -1041,9 +1564,8 @@ app.post(
         try {
 
             console.log(
-                "🛒 Solicitação de checkout recebida"
+                "🛒 Solicitação de checkout recebida."
             );
-
 
             const {
                 items,
@@ -1051,9 +1573,9 @@ app.post(
             } = req.body || {};
 
 
-            /* -----------------------------------------
+            /* =================================================
                VALIDAÇÃO DO CARRINHO
-            ----------------------------------------- */
+            ================================================= */
 
             if (
                 !Array.isArray(items) ||
@@ -1062,8 +1584,7 @@ app.post(
 
                 return res.status(400).json({
 
-                    success:
-                        false,
+                    success: false,
 
                     message:
                         "Carrinho vazio."
@@ -1073,9 +1594,9 @@ app.post(
             }
 
 
-            /* -----------------------------------------
+            /* =================================================
                VALIDAÇÃO DO CLIENTE
-            ----------------------------------------- */
+            ================================================= */
 
             if (
                 !customer ||
@@ -1086,8 +1607,7 @@ app.post(
 
                 return res.status(400).json({
 
-                    success:
-                        false,
+                    success: false,
 
                     message:
                         "Dados do cliente incompletos."
@@ -1097,13 +1617,12 @@ app.post(
             }
 
 
-            /* -----------------------------------------
+            /* =================================================
                NORMALIZA PRODUTOS
-            ----------------------------------------- */
+            ================================================= */
 
-            const infinitePayItems =
+            const normalizedItems =
                 items
-
                     .map(
                         (item) => {
 
@@ -1122,9 +1641,21 @@ app.post(
                             const description =
                                 String(
                                     item.description ||
+                                    item.name ||
                                     "Produto MONTÊ"
                                 );
 
+
+                            const sku =
+                                String(
+                                    item.sku ||
+                                    ""
+                                ).trim();
+
+
+                            /*
+                               Produto normal
+                            */
 
                             if (
                                 !Number.isFinite(
@@ -1150,41 +1681,67 @@ app.post(
                             }
 
 
+                            /*
+                               Para integração com Olist,
+                               produtos precisam ter SKU.
+                            */
+
+                            if (
+                                !sku
+                            ) {
+
+                                console.warn(
+                                    "⚠️ Produto sem SKU:",
+                                    description
+                                );
+
+                            }
+
+
                             return {
+
+                                id:
+                                    item.id ||
+                                    null,
+
+                                name:
+                                    item.name ||
+                                    description,
+
+                                description:
+                                    description,
+
+                                sku:
+                                    sku,
 
                                 quantity:
                                     quantity,
 
                                 price:
-                                    Math.round(
-                                        price * 100
-                                    ),
-
-                                description:
-                                    description
+                                    Number(
+                                        price.toFixed(2)
+                                    )
 
                             };
 
                         }
                     )
-
                     .filter(
                         Boolean
                     );
 
 
-            /* -----------------------------------------
+            /* =================================================
                CONFIRMA PRODUTOS VÁLIDOS
-            ----------------------------------------- */
+            ================================================= */
 
             if (
-                infinitePayItems.length === 0
+                normalizedItems.length === 0
             ) {
 
                 return res.status(400).json({
 
-                    success:
-                        false,
+                    success: false,
 
                     message:
                         "Nenhum produto válido foi encontrado."
@@ -1194,17 +1751,211 @@ app.post(
             }
 
 
-            /* -----------------------------------------
+            /* =================================================
+               SEPARA FRETE DOS PRODUTOS
+            ================================================= */
+
+            let productItems =
+                normalizedItems;
+
+            let shippingValue =
+                0;
+
+
+            /*
+               O frontend da MONTÊ envia o frete como
+               um item com SKU = FRETE.
+
+               Esse item não deve virar produto no Olist.
+            */
+
+            const shippingItem =
+                normalizedItems.find(
+                    item =>
+                        item.sku
+                            .toUpperCase()
+                            ===
+                        "FRETE"
+                );
+
+
+            if (
+                shippingItem
+            ) {
+
+                shippingValue =
+                    Number(
+                        shippingItem.price
+                    ) *
+                    Number(
+                        shippingItem.quantity
+                    );
+
+
+                productItems =
+                    normalizedItems.filter(
+                        item =>
+                            item.sku
+                                .toUpperCase()
+                                !==
+                            "FRETE"
+                    );
+
+            }
+
+
+            /* =================================================
+               VERIFICA SE SOBROU PRODUTO
+            ================================================= */
+
+            if (
+                productItems.length === 0
+            ) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    message:
+                        "Nenhum produto foi encontrado no pedido."
+
+                });
+
+            }
+
+
+            /* =================================================
                ORDER NSU
-            ----------------------------------------- */
+            ================================================= */
 
             const orderNsu =
                 `MONTE-${Date.now()}`;
 
 
-            /* -----------------------------------------
+            /* =================================================
+               SALVA O PEDIDO ANTES DO PAGAMENTO
+            ================================================= */
+
+            const pendingOrder = {
+
+                order_nsu:
+                    orderNsu,
+
+                customer: {
+
+                    name:
+                        String(
+                            customer.name
+                        ),
+
+                    email:
+                        String(
+                            customer.email
+                        ),
+
+                    phone:
+                        String(
+                            customer.phone
+                        ),
+
+                    address:
+                        customer.address
+                            ? {
+
+                                cep:
+                                    customer.address.cep ||
+                                    "",
+
+                                street:
+                                    customer.address.street ||
+                                    "",
+
+                                neighborhood:
+                                    customer.address.neighborhood ||
+                                    "",
+
+                                number:
+                                    customer.address.number ||
+                                    "",
+
+                                complement:
+                                    customer.address.complement ||
+                                    "",
+
+                                city:
+                                    customer.address.city ||
+                                    "",
+
+                                state:
+                                    customer.address.state ||
+                                    ""
+
+                            }
+                            : null
+
+                },
+
+                items:
+                    productItems,
+
+                shipping: {
+
+                    value:
+                        Number(
+                            shippingValue.toFixed(2)
+                        )
+
+                },
+
+                created_at:
+                    Date.now(),
+
+                payment_confirmed:
+                    false,
+
+                olist_created:
+                    false
+
+            };
+
+
+            savePendingOrder(
+                pendingOrder
+            );
+
+
+            /* =================================================
+               CONVERTE PRODUTOS PARA INFINITEPAY
+            ================================================= */
+
+            const infinitePayItems =
+                normalizedItems
+                    .map(
+                        (item) => {
+
+                            return {
+
+                                quantity:
+                                    item.quantity,
+
+                                price:
+                                    Math.round(
+                                        item.price *
+                                        100
+                                    ),
+
+                                description:
+                                    item.description
+
+                            };
+
+                        }
+                    );
+
+
+            /* =================================================
                PAYLOAD INFINITEPAY
-            ----------------------------------------- */
+            ================================================= */
 
             const payload = {
 
@@ -1245,9 +1996,9 @@ app.post(
             };
 
 
-            /* -----------------------------------------
-               ENDEREÇO
-            ----------------------------------------- */
+            /* =================================================
+               ENDEREÇO PARA INFINITEPAY
+            ================================================= */
 
             if (
                 customer.address
@@ -1280,19 +2031,33 @@ app.post(
             }
 
 
+            /* =================================================
+               LOG
+            ================================================= */
+
+            console.log(
+                "📦 Pedido salvo:",
+                orderNsu
+            );
+
+            console.log(
+                "💰 Valor do frete:",
+                shippingValue
+            );
+
+            console.log(
+                "🛍️ Quantidade de produtos:",
+                productItems.length
+            );
+
             console.log(
                 "📤 Enviando checkout para InfinitePay..."
             );
 
-            console.log(
-                "Order NSU:",
-                orderNsu
-            );
 
-
-            /* -----------------------------------------
+            /* =================================================
                CHAMADA REAL DA INFINITEPAY
-            ----------------------------------------- */
+            ================================================= */
 
             const response =
                 await fetch(
@@ -1321,9 +2086,9 @@ app.post(
                 );
 
 
-            /* -----------------------------------------
+            /* =================================================
                LÊ RESPOSTA
-            ----------------------------------------- */
+            ================================================= */
 
             const responseText =
                 await response.text();
@@ -1351,16 +2116,26 @@ app.post(
             }
 
 
-            /* -----------------------------------------
-               ERRO DA INFINITEPAY
-            ----------------------------------------- */
+            /* =================================================
+               ERRO INFINITEPAY
+            ================================================= */
 
             if (
                 !response.ok
             ) {
 
+                /*
+                   Se o checkout falhar, removemos o pedido
+                   temporário para não deixar lixo na memória.
+                */
+
+                pendingOrders.delete(
+                    orderNsu
+                );
+
+
                 console.error(
-                    "❌ InfinitePay respondeu com erro"
+                    "❌ InfinitePay respondeu com erro."
                 );
 
                 console.error(
@@ -1392,17 +2167,22 @@ app.post(
             }
 
 
-            /* -----------------------------------------
+            /* =================================================
                VERIFICA URL
-            ----------------------------------------- */
+            ================================================= */
 
             if (
                 !data ||
                 !data.url
             ) {
 
+                pendingOrders.delete(
+                    orderNsu
+                );
+
+
                 console.error(
-                    "❌ InfinitePay não retornou URL"
+                    "❌ InfinitePay não retornou URL."
                 );
 
                 console.error(
@@ -1426,16 +2206,17 @@ app.post(
             }
 
 
-            /* -----------------------------------------
+            /* =================================================
                SUCESSO
-            ----------------------------------------- */
+            ================================================= */
 
             console.log(
-                "✅ Checkout InfinitePay criado"
+                "✅ Checkout InfinitePay criado."
             );
 
             console.log(
-                "URL recebida com sucesso"
+                "🔑 Order NSU:",
+                orderNsu
             );
 
 
@@ -1485,11 +2266,352 @@ app.post(
     }
 );
 
+/*=====================================================
+   INFINITEPAY
+   WEBHOOK DE PAGAMENTO
+===================================================== */
 
+app.post(
+    "/webhook-infinitepay",
+    async (req, res) => {
+
+        try {
+
+            console.log(
+                "💳 Webhook da InfinitePay recebido."
+            );
+
+            console.log(
+                "📩 Dados recebidos:",
+                req.body
+            );
+
+
+            /* =================================================
+               RESPONDE IMEDIATAMENTE À INFINITEPAY
+               
+               Isso evita que a InfinitePay considere o
+               webhook como indisponível enquanto o Olist
+               está sendo processado.
+            ================================================= */
+
+            res.status(200).json({
+
+                success:
+                    true
+
+            });
+
+
+            /* =================================================
+               DADOS DO WEBHOOK
+            ================================================= */
+
+            const webhook =
+                req.body || {};
+
+
+            /*
+               A InfinitePay utiliza order_nsu para
+               identificar o pedido criado pelo nosso sistema.
+            */
+
+            const orderNsu =
+                safeString(
+                    webhook.order_nsu
+                );
+
+
+            const transactionNsu =
+                safeString(
+                    webhook.transaction_nsu
+                );
+
+
+            /* =================================================
+               VERIFICA ORDER NSU
+            ================================================= */
+
+            if (
+                !orderNsu
+            ) {
+
+                console.error(
+                    "❌ Webhook recebido sem order_nsu."
+                );
+
+                return;
+
+            }
+
+
+            console.log(
+                "🔑 Order NSU recebido:",
+                orderNsu
+            );
+
+
+            console.log(
+                "💳 Transaction NSU:",
+                transactionNsu || "não informado"
+            );
+
+
+            /* =================================================
+               EVITA PROCESSAMENTO DUPLICADO
+            ================================================= */
+
+            if (
+                processedPayments.has(
+                    orderNsu
+                )
+            ) {
+
+                console.log(
+                    "ℹ️ Pagamento já processado:",
+                    orderNsu
+                );
+
+                return;
+
+            }
+
+
+            /* =================================================
+               LOCALIZA PEDIDO
+            ================================================= */
+
+            const order =
+                getPendingOrder(
+                    orderNsu
+                );
+
+
+            if (
+                !order
+            ) {
+
+                console.error(
+                    "❌ Pedido não encontrado na memória:"
+                );
+
+                console.error(
+                    orderNsu
+                );
+
+                return;
+
+            }
+
+
+            /* =================================================
+               VERIFICA STATUS DO PAGAMENTO
+            ================================================= */
+
+            /*
+               A InfinitePay pode enviar diferentes campos
+               dependendo da versão/evento.
+
+               Por isso verificamos os campos mais comuns.
+            */
+
+            const status =
+                safeString(
+                    webhook.status ||
+                    webhook.payment_status ||
+                    webhook.current_status ||
+                    webhook.transaction_status
+                ).toLowerCase();
+
+
+            console.log(
+                "💰 Status recebido da InfinitePay:",
+                status || "não informado"
+            );
+
+
+            /*
+               Se houver status explícito e ele indicar
+               falha/cancelamento, não enviamos ao Olist.
+            */
+
+            const failedStatuses = [
+
+                "failed",
+                "failure",
+                "cancelled",
+                "canceled",
+                "refused",
+                "rejected",
+                "denied",
+                "expired"
+
+            ];
+
+
+            if (
+                failedStatuses.includes(
+                    status
+                )
+            ) {
+
+                console.log(
+                    "❌ Pagamento não aprovado. Pedido não será enviado ao Olist."
+                );
+
+                return;
+
+            }
+
+
+            /* =================================================
+               MARCA PAGAMENTO COMO CONFIRMADO
+            ================================================= */
+
+            order.payment_confirmed =
+                true;
+
+
+            order.transaction_nsu =
+                transactionNsu;
+
+
+            order.payment_data =
+                webhook;
+
+
+            /* =================================================
+               ENVIA PEDIDO PARA O OLIST
+            ================================================= */
+
+            console.log(
+                "🚀 Pagamento confirmado."
+            );
+
+            console.log(
+                "📦 Enviando pedido para o Olist..."
+            );
+
+
+            try {
+
+                const olistResult =
+                    await createOlistOrder(
+                        order
+                    );
+
+
+                /* =============================================
+                   MARCA COMO CRIADO
+                ============================================= */
+
+                order.olist_created =
+                    true;
+
+
+                order.olist_result =
+                    olistResult;
+
+
+                order.olist_created_at =
+                    new Date().toISOString();
+
+
+                processedPayments.add(
+                    orderNsu
+                );
+
+
+                console.log(
+                    "=========================================="
+                );
+
+                console.log(
+                    "✅ PEDIDO ENVIADO PARA O OLIST"
+                );
+
+                console.log(
+                    "🔑 Order NSU:",
+                    orderNsu
+                );
+
+                console.log(
+                    "💳 Transaction NSU:",
+                    transactionNsu
+                );
+
+                console.log(
+                    "📦 Resposta Olist:",
+                    olistResult
+                );
+
+                console.log(
+                    "=========================================="
+                );
+
+
+            } catch (
+                olistError
+            ) {
+
+                /*
+                   Não colocamos o pagamento como
+                   processado se o Olist falhar.
+
+                   Assim podemos tentar novamente sem
+                   perder a venda.
+                */
+
+                console.error(
+                    "=========================================="
+                );
+
+                console.error(
+                    "❌ ERRO AO ENVIAR PEDIDO PARA O OLIST"
+                );
+
+                console.error(
+                    "Order NSU:",
+                    orderNsu
+                );
+
+                console.error(
+                    olistError
+                );
+
+                console.error(
+                    "=========================================="
+                );
+
+            }
+
+
+        } catch (
+            error
+        ) {
+
+            console.error(
+                "❌ ERRO NO WEBHOOK DA INFINITEPAY:"
+            );
+
+            console.error(
+                error
+            );
+
+            /*
+               A resposta HTTP já foi enviada no início
+               da função. Portanto não tentamos responder
+               novamente aqui.
+            */
+
+        }
+
+    }
+);
 /* =====================================================
    PÁGINA DE SUCESSO
 ===================================================== */
-
+/
 app.get(
     "/pagamento-sucesso",
     (req, res) => {
