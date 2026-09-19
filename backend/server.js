@@ -23,98 +23,6 @@ const INFINITEPAY_HANDLE =
     "monte-64839705-0z9";
 
 /* =====================================================
-   SUPABASE
-===================================================== */
-
-const SUPABASE_URL =
-    process.env.SUPABASE_URL;
-
-const SUPABASE_SECRET_KEY =
-    process.env.SUPABASE_SECRET_KEY;
-
-
-async function supabaseRequest(
-    table,
-    options = {}
-) {
-
-    if (
-        !SUPABASE_URL ||
-        !SUPABASE_SECRET_KEY
-    ) {
-
-        throw new Error(
-            "Supabase não configurado no ambiente."
-        );
-
-    }
-
-    const response =
-        await fetch(
-            `${SUPABASE_URL}/rest/v1/${table}`,
-            {
-                ...options,
-
-                headers: {
-                    "Content-Type":
-                        "application/json",
-
-                    "apikey":
-                        SUPABASE_SECRET_KEY,
-
-                    "Authorization":
-                        `Bearer ${SUPABASE_SECRET_KEY}`,
-
-                    "Prefer":
-                        "return=representation",
-
-                    ...(options.headers || {})
-                }
-            }
-        );
-
-
-    const text =
-        await response.text();
-
-
-    let data;
-
-    try {
-
-        data =
-            text
-                ? JSON.parse(text)
-                : null;
-
-    } catch {
-
-        data = text;
-
-    }
-
-
-    if (!response.ok) {
-
-        console.error(
-            "❌ Erro Supabase:",
-            response.status,
-            data
-        );
-
-        throw new Error(
-            `Supabase ${response.status}`
-        );
-
-    }
-
-
-    return data;
-
-}
-
-
-/* =====================================================
    MIDDLEWARES
 ===================================================== */
 
@@ -130,7 +38,6 @@ app.options("*", cors());
 
 app.use(express.json());
 
-
 /* =====================================================
    ARQUIVOS DO SITE
 ===================================================== */
@@ -141,13 +48,11 @@ app.use(
     )
 );
 
-
 /* =====================================================
    TESTE DO SERVIDOR
 ===================================================== */
 
 app.get("/", (req, res) => {
-
     res.sendFile(
         path.join(
             __dirname,
@@ -155,121 +60,100 @@ app.get("/", (req, res) => {
             "index.html"
         )
     );
-
 });
-
 
 /* =====================================================
    ROTAS DO OLIST
 ===================================================== */
 
-app.post(
-    "/olist/produtos",
-    (req, res) => {
+app.post("/olist/produtos", (req, res) => {
+    console.log(
+        "📦 Atualização de produto recebida do Olist:"
+    );
 
-        console.log(
-            "📦 Atualização de produto recebida do Olist:"
-        );
+    console.log(req.body);
 
-        console.log(req.body);
+    res.status(200).json({
+        success: true
+    });
+});
 
-        res.status(200).json({
-            success: true
-        });
+app.post("/olist/estoque", (req, res) => {
+    console.log(
+        "📊 Atualização de estoque recebida do Olist:"
+    );
 
-    }
-);
+    console.log(req.body);
 
+    res.status(200).json({
+        success: true
+    });
+});
 
-app.post(
-    "/olist/estoque",
-    (req, res) => {
+app.post("/olist/precos", (req, res) => {
+    console.log(
+        "💰 Atualização de preço recebida do Olist:"
+    );
 
-        console.log(
-            "📊 Atualização de estoque recebida do Olist:"
-        );
+    console.log(req.body);
 
-        console.log(req.body);
+    res.status(200).json({
+        success: true
+    });
+});
 
-        res.status(200).json({
-            success: true
-        });
+app.post("/olist/pedidos/status", (req, res) => {
+    console.log(
+        "🛍️ Atualização de pedido recebida do Olist:"
+    );
 
-    }
-);
+    console.log(req.body);
 
+    res.status(200).json({
+        success: true
+    });
+});
 
-app.post(
-    "/olist/precos",
-    (req, res) => {
+app.post("/olist/rastreio", (req, res) => {
+    console.log(
+        "🚚 Atualização de rastreio recebida do Olist:"
+    );
 
-        console.log(
-            "💰 Atualização de preço recebida do Olist:"
-        );
+    console.log(req.body);
 
-        console.log(req.body);
+    res.status(200).json({
+        success: true
+    });
+});
 
-        res.status(200).json({
-            success: true
-        });
+app.post("/olist/notas", (req, res) => {
+    console.log(
+        "🧾 Atualização de nota fiscal recebida do Olist:"
+    );
 
-    }
-);
+    console.log(req.body);
 
+    res.status(200).json({
+        success: true
+    });
+});
 
-app.post(
-    "/olist/pedidos/status",
-    (req, res) => {
+/* =====================================================
+   OLIST - NOVA VENDA
+===================================================== */
 
-        console.log(
-            "🛍️ Atualização de pedido recebida do Olist:"
-        );
+app.post("/olist/pedidos", (req, res) => {
+    console.log(
+        "🛒 Nova venda recebida do Olist:"
+    );
 
-        console.log(req.body);
+    console.log(req.body);
 
-        res.status(200).json({
-            success: true
-        });
-
-    }
-);
-
-
-app.post(
-    "/olist/rastreio",
-    (req, res) => {
-
-        console.log(
-            "🚚 Atualização de rastreio recebida do Olist:"
-        );
-
-        console.log(req.body);
-
-        res.status(200).json({
-            success: true
-        });
-
-    }
-);
-
-
-app.post(
-    "/olist/notas",
-    (req, res) => {
-
-        console.log(
-            "🧾 Atualização de nota fiscal recebida do Olist:"
-        );
-
-        console.log(req.body);
-
-        res.status(200).json({
-            success: true
-        });
-
-    }
-);
-
+    res.status(200).json({
+        success: true,
+        message: "Pedido recebido pelo MONTÊ"
+    });
+});
 
 /* =====================================================
    INFINITEPAY
@@ -286,12 +170,10 @@ app.post(
                 "🛒 Solicitação de checkout recebida"
             );
 
-
             const {
                 items,
                 customer
             } = req.body || {};
-
 
             /* -----------------------------------------
                VALIDAÇÃO DO CARRINHO
@@ -303,16 +185,12 @@ app.post(
             ) {
 
                 return res.status(400).json({
-
                     success: false,
-
                     message:
                         "Carrinho vazio."
-
                 });
 
             }
-
 
             /* -----------------------------------------
                VALIDAÇÃO DO CLIENTE
@@ -326,16 +204,12 @@ app.post(
             ) {
 
                 return res.status(400).json({
-
                     success: false,
-
                     message:
                         "Dados do cliente incompletos."
-
                 });
 
             }
-
 
             /* -----------------------------------------
                NORMALIZA PRODUTOS
@@ -346,16 +220,14 @@ app.post(
                     .map((item) => {
 
                         const quantity =
-                            Number(
-                                item.quantity
+                         Number(
+                              item.quantity
                             ) || 1;
-
 
                         const price =
                             Number(
                                 item.price
                             );
-
 
                         const description =
                             String(
@@ -363,29 +235,21 @@ app.post(
                                 "Produto MONTÊ"
                             );
 
-
                         if (
                             !Number.isFinite(price) ||
                             price <= 0
                         ) {
-
                             return null;
-
                         }
-
 
                         if (
                             !Number.isFinite(quantity) ||
                             quantity <= 0
                         ) {
-
                             return null;
-
                         }
 
-
                         return {
-
                             quantity:
                                 quantity,
 
@@ -396,12 +260,10 @@ app.post(
 
                             description:
                                 description
-
                         };
 
                     })
                     .filter(Boolean);
-
 
             /* -----------------------------------------
                CONFIRMA PRODUTOS VÁLIDOS
@@ -412,16 +274,12 @@ app.post(
             ) {
 
                 return res.status(400).json({
-
                     success: false,
-
                     message:
                         "Nenhum produto válido foi encontrado."
-
                 });
 
             }
-
 
             /* -----------------------------------------
                ORDER NSU
@@ -429,7 +287,6 @@ app.post(
 
             const orderNsu =
                 `MONTE-${Date.now()}`;
-
 
             /* -----------------------------------------
                PAYLOAD INFINITEPAY
@@ -453,7 +310,6 @@ app.post(
                     infinitePayItems,
 
                 customer: {
-
                     name:
                         String(
                             customer.name
@@ -468,11 +324,9 @@ app.post(
                         String(
                             customer.phone
                         )
-
                 }
 
             };
-
 
             /* -----------------------------------------
                ENDEREÇO
@@ -508,7 +362,6 @@ app.post(
 
             }
 
-
             console.log(
                 "📤 Enviando checkout para InfinitePay..."
             );
@@ -518,7 +371,6 @@ app.post(
                 orderNsu
             );
 
-
             /* -----------------------------------------
                CHAMADA REAL DA INFINITEPAY
             ----------------------------------------- */
@@ -527,27 +379,22 @@ app.post(
                 await fetch(
                     INFINITEPAY_API,
                     {
-
                         method: "POST",
 
                         headers: {
-
                             "Content-Type":
                                 "application/json",
 
                             "Accept":
                                 "application/json"
-
                         },
 
                         body:
                             JSON.stringify(
                                 payload
                             )
-
                     }
                 );
-
 
             /* -----------------------------------------
                LÊ RESPOSTA
@@ -556,9 +403,7 @@ app.post(
             const responseText =
                 await response.text();
 
-
             let data;
-
 
             try {
 
@@ -570,14 +415,11 @@ app.post(
             } catch {
 
                 data = {
-
                     raw:
                         responseText
-
                 };
 
             }
-
 
             /* -----------------------------------------
                ERRO DA INFINITEPAY
@@ -601,7 +443,6 @@ app.post(
                     data
                 );
 
-
                 return res.status(
                     response.status
                 ).json({
@@ -617,7 +458,6 @@ app.post(
                 });
 
             }
-
 
             /* -----------------------------------------
                VERIFICA URL
@@ -636,7 +476,6 @@ app.post(
                     data
                 );
 
-
                 return res.status(502).json({
 
                     success: false,
@@ -651,165 +490,6 @@ app.post(
 
             }
 
-
-            /* -----------------------------------------
-               CALCULA VALORES DO PEDIDO
-            ----------------------------------------- */
-
-            const shippingItem =
-                items.find(
-                    (item) => {
-
-                        const description =
-                            String(
-                                item.description || ""
-                            ).toLowerCase();
-
-                        return (
-                            description.includes("frete")
-                        );
-
-                    }
-                );
-
-
-            const shipping =
-                shippingItem
-                    ? Number(
-                        shippingItem.price
-                    ) *
-                    Number(
-                        shippingItem.quantity || 1
-                    )
-                    : 0;
-
-
-            const total =
-                items.reduce(
-                    (sum, item) => {
-
-                        const price =
-                            Number(
-                                item.price
-                            ) || 0;
-
-                        const quantity =
-                            Number(
-                                item.quantity
-                            ) || 1;
-
-                        return (
-                            sum +
-                            price * quantity
-                        );
-
-                    },
-                    0
-                );
-
-
-            const subtotal =
-                total - shipping;
-
-
-            /* -----------------------------------------
-               SALVA PEDIDO NO SUPABASE
-            ----------------------------------------- */
-
-            try {
-
-                await supabaseRequest(
-                    "orders",
-                    {
-
-                        method: "POST",
-
-                        body:
-                            JSON.stringify({
-
-                                order_nsu:
-                                    orderNsu,
-
-                                customer_name:
-                                    String(
-                                        customer.name
-                                    ),
-
-                                customer_email:
-                                    String(
-                                        customer.email
-                                    ),
-
-                                customer_phone:
-                                    String(
-                                        customer.phone
-                                    ),
-
-                                customer_address:
-                                    customer.address ||
-                                    null,
-
-                                subtotal:
-                                    subtotal,
-
-                                shipping:
-                                    shipping,
-
-                                total:
-                                    total,
-
-                                status:
-                                    "pending",
-
-                                items:
-                                    items,
-
-                                invoice_slug:
-                                    data.invoice_slug ||
-                                    data.slug ||
-                                    null,
-
-                                created_at:
-                                    new Date().toISOString(),
-
-                                updated_at:
-                                    new Date().toISOString()
-
-                            })
-
-                    }
-                );
-
-
-                console.log(
-                    "✅ PEDIDO SALVO NO SUPABASE:",
-                    orderNsu
-                );
-
-
-            } catch (supabaseError) {
-
-                console.error(
-                    "❌ ERRO AO SALVAR PEDIDO NO SUPABASE:"
-                );
-
-                console.error(
-                    supabaseError
-                );
-
-
-                return res.status(500).json({
-
-                    success: false,
-
-                    message:
-                        "Não foi possível registrar o pedido."
-
-                });
-
-            }
-
-
             /* -----------------------------------------
                SUCESSO
             ----------------------------------------- */
@@ -821,7 +501,6 @@ app.post(
             console.log(
                 "URL recebida com sucesso"
             );
-
 
             return res.status(200).json({
 
@@ -835,7 +514,6 @@ app.post(
 
             });
 
-
         } catch (error) {
 
             console.error(
@@ -845,7 +523,6 @@ app.post(
             console.error(
                 error
             );
-
 
             return res.status(500).json({
 
@@ -867,7 +544,6 @@ app.post(
     }
 );
 
-
 /* =====================================================
    PÁGINA DE SUCESSO
 ===================================================== */
@@ -886,310 +562,6 @@ app.get(
 
     }
 );
-
-
-/* =====================================================
-   WEBHOOK INFINITEPAY
-===================================================== */
-
-app.post(
-    "/webhook-infinitepay",
-    async (req, res) => {
-
-        try {
-
-            console.log(
-                "===================================="
-            );
-
-            console.log(
-                "💰 WEBHOOK INFINITEPAY RECEBIDO"
-            );
-
-            console.log(
-                "===================================="
-            );
-
-            console.log(
-                JSON.stringify(
-                    req.body,
-                    null,
-                    2
-                )
-            );
-
-
-            const {
-                invoice_slug,
-                amount,
-                paid_amount,
-                installments,
-                capture_method,
-                transaction_nsu,
-                order_nsu,
-                receipt_url,
-                items
-            } = req.body || {};
-
-
-            /* -----------------------------------------
-               VALIDAÇÃO BÁSICA
-            ----------------------------------------- */
-
-            if (!order_nsu) {
-
-                console.error(
-                    "❌ Webhook sem order_nsu"
-                );
-
-
-                return res.status(400).json({
-
-                    success: false,
-
-                    message:
-                        "order_nsu não informado."
-
-                });
-
-            }
-
-
-            if (!transaction_nsu) {
-
-                console.error(
-                    "❌ Webhook sem transaction_nsu"
-                );
-
-
-                return res.status(400).json({
-
-                    success: false,
-
-                    message:
-                        "transaction_nsu não informado."
-
-                });
-
-            }
-
-
-            /* -----------------------------------------
-               PAGAMENTO CONFIRMADO
-            ----------------------------------------- */
-
-            console.log(
-                "✅ PAGAMENTO APROVADO"
-            );
-
-            console.log(
-                "Pedido:",
-                order_nsu
-            );
-
-            console.log(
-                "Transação:",
-                transaction_nsu
-            );
-
-            console.log(
-                "Valor:",
-                amount
-            );
-
-            console.log(
-                "Valor pago:",
-                paid_amount
-            );
-
-            console.log(
-                "Forma:",
-                capture_method
-            );
-
-            console.log(
-                "Comprovante:",
-                receipt_url
-            );
-
-
-            /* -----------------------------------------
-               ATUALIZA PEDIDO NO SUPABASE
-            ----------------------------------------- */
-
-            try {
-
-                const updatedOrder =
-                    await supabaseRequest(
-                        `orders?order_nsu=eq.${encodeURIComponent(order_nsu)}`,
-                        {
-
-                            method: "PATCH",
-
-                            body:
-                                JSON.stringify({
-
-                                    status:
-                                        "paid",
-
-                                    invoice_slug:
-                                        invoice_slug ||
-                                        null,
-
-                                    transaction_nsu:
-                                        transaction_nsu,
-
-                                    receipt_url:
-                                        receipt_url ||
-                                        null,
-
-                                    amount:
-                                        amount != null
-                                            ? Number(amount)
-                                            : null,
-
-                                    paid_amount:
-                                        paid_amount != null
-                                            ? Number(paid_amount)
-                                            : null,
-
-                                    installments:
-                                        installments != null
-                                            ? Number(installments)
-                                            : null,
-
-                                    capture_method:
-                                        capture_method ||
-                                        null,
-
-                                    paid_at:
-                                        new Date().toISOString(),
-
-                                    updated_at:
-                                        new Date().toISOString()
-
-                                })
-
-                        }
-                    );
-
-
-                if (
-                    !updatedOrder ||
-                    updatedOrder.length === 0
-                ) {
-
-                    console.error(
-                        "❌ Pedido não encontrado no Supabase:",
-                        order_nsu
-                    );
-
-
-                    return res.status(404).json({
-
-                        success: false,
-
-                        message:
-                            "Pedido não encontrado no Supabase."
-
-                    });
-
-                }
-
-
-                console.log(
-                    "✅ PEDIDO ATUALIZADO NO SUPABASE:"
-                );
-
-                console.log(
-                    order_nsu
-                );
-
-                console.log(
-                    "Status: paid"
-                );
-
-
-            } catch (supabaseError) {
-
-                console.error(
-                    "❌ ERRO AO ATUALIZAR PEDIDO NO SUPABASE:"
-                );
-
-                console.error(
-                    supabaseError
-                );
-
-
-                return res.status(500).json({
-
-                    success: false,
-
-                    message:
-                        "Erro ao atualizar pedido no Supabase."
-
-                });
-
-            }
-
-
-            /* -----------------------------------------
-               AQUI ENTRARÁ O OLIST
-            ----------------------------------------- */
-
-            // NÃO vamos integrar o Olist ainda.
-            //
-            // O pedido já está sendo salvo no Supabase.
-            //
-            // Depois vamos usar:
-            //
-            // order_nsu
-            // transaction_nsu
-            // items
-            // valor
-            // cliente
-            //
-            // para integrar com o Olist.
-
-
-            /* -----------------------------------------
-               RESPONDE À INFINITEPAY
-            ----------------------------------------- */
-
-            return res.status(200).json({
-
-                success: true,
-
-                message: null
-
-            });
-
-
-        } catch (error) {
-
-            console.error(
-                "❌ ERRO NO WEBHOOK INFINITEPAY:"
-            );
-
-            console.error(
-                error
-            );
-
-
-            return res.status(400).json({
-
-                success: false,
-
-                message:
-                    "Erro ao processar webhook."
-
-            });
-
-        }
-
-    }
-);
-
 
 /* =====================================================
    INICIAR SERVIDOR
