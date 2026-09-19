@@ -485,9 +485,11 @@ async function findOlistProductBySku(sku) {
         safeString(sku);
 
     if (!cleanSku) {
+
         throw new Error(
             "Produto sem SKU."
         );
+
     }
 
     console.log(
@@ -495,44 +497,92 @@ async function findOlistProductBySku(sku) {
         cleanSku
     );
 
-    /*
-       A consulta é feita pela API V3.
-       O retorno é analisado de forma defensiva,
-       pois a estrutura pode variar conforme a versão
-       da API/permissões da conta.
-    */
-
     const data =
         await olistRequest(
             `/produtos?codigo=${encodeURIComponent(cleanSku)}`
         );
 
+    /*
+       A API V3 retorna a listagem dentro de "itens".
+       O modelo de listagem utiliza "sku".
+    */
+
     const products =
         Array.isArray(data)
             ? data
             : (
-                data?.itens ||
-                data?.items ||
-                data?.produtos ||
-                data?.data ||
-                []
+                Array.isArray(data?.itens)
+                    ? data.itens
+                    : (
+                        Array.isArray(data?.items)
+                            ? data.items
+                            : (
+                                Array.isArray(data?.produtos)
+                                    ? data.produtos
+                                    : (
+                                        Array.isArray(data?.data)
+                                            ? data.data
+                                            : []
+                                    )
+                            )
+                    )
             );
+
+    console.log(
+        "📦 Produtos retornados pelo Olist:",
+        products.length
+    );
+
+    /*
+       A API V3 pode apresentar o identificador
+       do produto como "sku" na listagem.
+       Mantemos "codigo" como fallback.
+    */
 
     const product =
         products.find(
-            item =>
-                safeString(
-                    item?.codigo
-                ).toLowerCase()
-                ===
-                cleanSku.toLowerCase()
+            item => {
+
+                const itemSku =
+                    safeString(
+                        item?.sku ??
+                        item?.codigo ??
+                        item?.codigoSku
+                    );
+
+                return (
+                    itemSku.toLowerCase()
+                    ===
+                    cleanSku.toLowerCase()
+                );
+
+            }
         );
 
     if (!product) {
 
+        console.error(
+            "❌ SKU não encontrado na resposta do Olist:",
+            cleanSku
+        );
+
+        console.error(
+            "📦 Produtos retornados:",
+            products.map(
+                item => ({
+                    id: item?.id,
+                    sku: item?.sku,
+                    codigo: item?.codigo,
+                    descricao: item?.descricao,
+                    nome: item?.nome
+                })
+            )
+        );
+
         throw new Error(
             `Produto com SKU ${cleanSku} não encontrado no Olist.`
         );
+
     }
 
     if (!product.id) {
@@ -540,17 +590,26 @@ async function findOlistProductBySku(sku) {
         throw new Error(
             `Produto ${cleanSku} foi encontrado, mas não possui ID.`
         );
+
     }
 
     console.log(
         "✅ Produto encontrado no Olist:",
-        product.id,
-        cleanSku
+        {
+            id: product.id,
+            sku:
+                product.sku ??
+                product.codigo ??
+                cleanSku,
+            descricao:
+                product.descricao ??
+                product.nome ??
+                ""
+        }
     );
 
     return product;
 }
-
 /* =====================================================
    LOCALIZAR CLIENTE NO OLIST
 ===================================================== */
