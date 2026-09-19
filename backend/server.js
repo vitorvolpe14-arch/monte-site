@@ -2265,8 +2265,7 @@ app.post(
 
     }
 );
-
-/*=====================================================
+/* =====================================================
    INFINITEPAY
    WEBHOOK DE PAGAMENTO
 ===================================================== */
@@ -2286,80 +2285,54 @@ app.post(
                 req.body
             );
 
-
-            /* =================================================
-               RESPONDE IMEDIATAMENTE À INFINITEPAY
-               
-               Isso evita que a InfinitePay considere o
-               webhook como indisponível enquanto o Olist
-               está sendo processado.
-            ================================================= */
-
-            res.status(200).json({
-
-                success:
-                    true
-
-            });
-
-
-            /* =================================================
-               DADOS DO WEBHOOK
-            ================================================= */
-
             const webhook =
                 req.body || {};
-
-
-            /*
-               A InfinitePay utiliza order_nsu para
-               identificar o pedido criado pelo nosso sistema.
-            */
 
             const orderNsu =
                 safeString(
                     webhook.order_nsu
                 );
 
-
             const transactionNsu =
                 safeString(
                     webhook.transaction_nsu
                 );
 
-
-            /* =================================================
-               VERIFICA ORDER NSU
-            ================================================= */
-
-            if (
-                !orderNsu
-            ) {
+            if (!orderNsu) {
 
                 console.error(
                     "❌ Webhook recebido sem order_nsu."
                 );
 
-                return;
+                return res.status(400).json({
+                    success: false,
+                    message: "order_nsu não informado."
+                });
 
             }
 
-
             console.log(
-                "🔑 Order NSU recebido:",
+                "🔑 Order NSU:",
                 orderNsu
             );
-
 
             console.log(
                 "💳 Transaction NSU:",
                 transactionNsu || "não informado"
             );
 
+            /*
+             * Respondemos à InfinitePay somente depois
+             * de validar que recebemos um order_nsu.
+             */
 
-            /* =================================================
-               EVITA PROCESSAMENTO DUPLICADO
-            ================================================= */
+            res.status(200).json({
+                success: true
+            });
+
+            /*
+             * Evita processar o mesmo pagamento duas vezes.
+             */
 
             if (
                 processedPayments.has(
@@ -2373,23 +2346,19 @@ app.post(
                 );
 
                 return;
-
             }
 
-
-            /* =================================================
-               LOCALIZA PEDIDO
-            ================================================= */
+            /*
+             * Recupera o pedido salvo quando o checkout
+             * foi criado.
+             */
 
             const order =
                 getPendingOrder(
                     orderNsu
                 );
 
-
-            if (
-                !order
-            ) {
+            if (!order) {
 
                 console.error(
                     "❌ Pedido não encontrado na memória:"
@@ -2400,20 +2369,11 @@ app.post(
                 );
 
                 return;
-
             }
 
-
-            /* =================================================
-               VERIFICA STATUS DO PAGAMENTO
-            ================================================= */
-
             /*
-               A InfinitePay pode enviar diferentes campos
-               dependendo da versão/evento.
-
-               Por isso verificamos os campos mais comuns.
-            */
+             * Verifica o status enviado pela InfinitePay.
+             */
 
             const status =
                 safeString(
@@ -2423,17 +2383,14 @@ app.post(
                     webhook.transaction_status
                 ).toLowerCase();
 
-
             console.log(
-                "💰 Status recebido da InfinitePay:",
+                "💰 Status recebido:",
                 status || "não informado"
             );
 
-
             /*
-               Se houver status explícito e ele indicar
-               falha/cancelamento, não enviamos ao Olist.
-            */
+             * Status que NÃO devem gerar pedido no Olist.
+             */
 
             const failedStatuses = [
 
@@ -2448,7 +2405,6 @@ app.post(
 
             ];
 
-
             if (
                 failedStatuses.includes(
                     status
@@ -2456,42 +2412,36 @@ app.post(
             ) {
 
                 console.log(
-                    "❌ Pagamento não aprovado. Pedido não será enviado ao Olist."
+                    "❌ Pagamento não aprovado."
+                );
+
+                console.log(
+                    "🚫 Pedido não será enviado ao Olist."
                 );
 
                 return;
-
             }
 
-
-            /* =================================================
-               MARCA PAGAMENTO COMO CONFIRMADO
-            ================================================= */
+            /*
+             * Marca o pedido como pago.
+             */
 
             order.payment_confirmed =
                 true;
 
-
             order.transaction_nsu =
                 transactionNsu;
-
 
             order.payment_data =
                 webhook;
 
-
-            /* =================================================
-               ENVIA PEDIDO PARA O OLIST
-            ================================================= */
-
             console.log(
-                "🚀 Pagamento confirmado."
+                "✅ Pagamento confirmado."
             );
 
             console.log(
                 "📦 Enviando pedido para o Olist..."
             );
-
 
             try {
 
@@ -2500,27 +2450,18 @@ app.post(
                         order
                     );
 
-
-                /* =============================================
-                   MARCA COMO CRIADO
-                ============================================= */
-
                 order.olist_created =
                     true;
-
 
                 order.olist_result =
                     olistResult;
 
-
                 order.olist_created_at =
                     new Date().toISOString();
-
 
                 processedPayments.add(
                     orderNsu
                 );
-
 
                 console.log(
                     "=========================================="
@@ -2541,7 +2482,7 @@ app.post(
                 );
 
                 console.log(
-                    "📦 Resposta Olist:",
+                    "📦 Resposta do Olist:",
                     olistResult
                 );
 
@@ -2549,18 +2490,9 @@ app.post(
                     "=========================================="
                 );
 
-
             } catch (
                 olistError
             ) {
-
-                /*
-                   Não colocamos o pagamento como
-                   processado se o Olist falhar.
-
-                   Assim podemos tentar novamente sem
-                   perder a venda.
-                */
 
                 console.error(
                     "=========================================="
@@ -2585,7 +2517,6 @@ app.post(
 
             }
 
-
         } catch (
             error
         ) {
@@ -2599,10 +2530,22 @@ app.post(
             );
 
             /*
-               A resposta HTTP já foi enviada no início
-               da função. Portanto não tentamos responder
-               novamente aqui.
-            */
+             * Se o erro ocorrer antes da resposta HTTP,
+             * informamos erro ao remetente.
+             */
+
+            if (!res.headersSent) {
+
+                return res.status(500).json({
+
+                    success: false,
+
+                    message:
+                        "Erro interno no webhook."
+
+                });
+
+            }
 
         }
 
