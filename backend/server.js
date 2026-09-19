@@ -1689,6 +1689,86 @@ app.get(
 );
 /* =====================================================
    OLIST
+   DIAGNÓSTICO DE INTEGRAÇÕES / E-COMMERCE
+===================================================== */
+
+app.get(
+    "/olist/diagnostico/integracoes",
+    async (req, res) => {
+
+        const resultados = {};
+
+        /*
+         * Vamos consultar somente endpoints de leitura.
+         * Nenhum pedido será criado ou alterado.
+         */
+
+        const endpoints = [
+            "/ecommerce",
+            "/ecommerces",
+            "/integracoes",
+            "/integracoes/ecommerce"
+        ];
+
+        for (
+            const endpoint
+            of endpoints
+        ) {
+
+            try {
+
+                console.log(
+                    "🔎 Testando endpoint Olist:",
+                    endpoint
+                );
+
+                const data =
+                    await olistRequest(
+                        endpoint
+                    );
+
+                resultados[endpoint] = {
+                    sucesso: true,
+                    resposta: data
+                };
+
+                console.log(
+                    "✅ Endpoint respondeu:",
+                    endpoint
+                );
+
+            } catch (error) {
+
+                resultados[endpoint] = {
+                    sucesso: false,
+                    erro: error.message
+                };
+
+                console.log(
+                    "ℹ️ Endpoint não disponível:",
+                    endpoint,
+                    error.message
+                );
+
+            }
+
+        }
+
+        return res.status(200).json({
+
+            success: true,
+
+            mensagem:
+                "Diagnóstico concluído. Nenhum dado foi alterado.",
+
+            resultados
+
+        });
+
+    }
+);
+/* =====================================================
+   OLIST
    DIAGNÓSTICO DE PEDIDO POR ID
 ===================================================== */
 
