@@ -1625,7 +1625,68 @@ app.get(
     }
 );
 
+/* =====================================================
+   OLIST
+   DIAGNÓSTICO DE PEDIDO
+===================================================== */
 
+app.get(
+    "/olist/diagnostico/pedido/:numero",
+    async (req, res) => {
+
+        try {
+
+            const numero =
+                safeString(
+                    req.params.numero
+                );
+
+            if (!numero) {
+
+                return res.status(400).json({
+                    success: false,
+                    message: "Número do pedido não informado."
+                });
+
+            }
+
+            console.log(
+                "🔎 Diagnóstico Olist - procurando pedido:",
+                numero
+            );
+
+            const data =
+                await olistRequest(
+                    `/pedidos?numeroPedidoEcommerce=${encodeURIComponent(numero)}`
+                );
+
+            console.log(
+                "📦 Resultado da consulta:",
+                data
+            );
+
+            return res.status(200).json({
+                success: true,
+                numero_consultado: numero,
+                resultado: data
+            });
+
+        } catch (error) {
+
+            console.error(
+                "❌ Erro no diagnóstico Olist:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message: error.message
+            });
+
+        }
+
+    }
+);
 /* =====================================================
    ROTAS DO OLIST
    WEBHOOKS
