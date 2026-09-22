@@ -625,7 +625,7 @@ function updateCart() {
     let cartQuantity = 0;
 
 
-    cart.forEach(item => {
+    cart.forEach((item, index) => {
 
         cartTotal +=
             item.price * item.quantity;
@@ -669,10 +669,7 @@ function updateCart() {
                 <div class="cart-quantity">
 
                     <button
-                        onclick="updateItemQuantity(
-                            ${item.id},
-                            -1
-                        )">
+                        onclick="updateItemQuantity(${index}, -1)">
 
                         −
 
@@ -685,10 +682,7 @@ function updateCart() {
 
 
                     <button
-                        onclick="updateItemQuantity(
-                            ${item.id},
-                            1
-                        )">
+                        onclick="updateItemQuantity(${index}, 1)">
 
                         +
 
@@ -701,9 +695,7 @@ function updateCart() {
 
             <button
                 class="cart-item-remove"
-                onclick="removeFromCart(
-                    ${item.id}
-                )">
+                onclick="removeFromCart(${index})">
 
                 REMOVER
 
@@ -737,23 +729,23 @@ function updateCart() {
    QUANTIDADE DO CARRINHO
 ===================================================== */
 
-function updateItemQuantity(
-    productId,
-    amount
-) {
+function updateItemQuantity(index, amount) {
 
-    const item =
-        cart.find(
-            item => item.id === productId
-        );
-
+    const item = cart[index];
 
     if (!item) return;
 
-
     const maxStock = item.variant_id
-        ? Number(products.find(p => p.id === item.id)?.variants?.find(v => v.id === item.variant_id)?.stock || 0)
-        : Number(products.find(p => p.id === item.id)?.stock || 0);
+        ? Number(
+            products
+                .find(p => p.id === item.id)
+                ?.variants
+                ?.find(v => v.id === item.variant_id)
+                ?.stock || 0
+        )
+        : Number(
+            products.find(p => p.id === item.id)?.stock || 0
+        );
 
     item.quantity += amount;
 
@@ -762,13 +754,10 @@ function updateItemQuantity(
     }
 
     if (item.quantity <= 0) {
-        cart = cart.filter(
-            cartItem => cartItem.id !== productId
-        );
+        cart.splice(index, 1);
     }
 
     updateCart();
-
 }
 
 
@@ -776,19 +765,19 @@ function updateItemQuantity(
    REMOVER
 ===================================================== */
 
-function removeFromCart(productId) {
+function removeFromCart(index) {
 
-    cart = cart.filter(
-        item => item.id !== productId
-    );
+    if (index >= 0 && index < cart.length) {
+        cart.splice(index, 1);
+    }
 
     updateCart();
-
 }
 
 
 /* =====================================================
    ABRIR CARRINHO
+
 
 ===================================================== */
 
