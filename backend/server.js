@@ -2135,7 +2135,14 @@ app.post(
                 !customer.name ||
                 !customer.email ||
                 !customer.phone ||
-                !customer.cpf
+                !customer.cpf ||
+                !customer.address ||
+                !customer.address.cep ||
+                !customer.address.street ||
+                !customer.address.number ||
+                !customer.address.neighborhood ||
+                !customer.address.city ||
+                !customer.address.state
             ) {
 
                 return res.status(400).json({
@@ -2143,7 +2150,7 @@ app.post(
                     success: false,
 
                     message:
-                        "Dados do cliente incompletos. Informe também o CPF."
+                        "Preencha todos os dados do cliente e do endereço: CEP, rua, número, bairro, cidade e estado."
 
                 });
 

@@ -745,7 +745,7 @@
     <input
         type="text"
         id="customerStreet"
-        placeholder="Rua"
+        placeholder="Rua / Avenida"
         autocomplete="street-address"
     >
 
@@ -755,13 +755,14 @@
             type="text"
             id="customerNumber"
             placeholder="Número"
-            autocomplete="address-line2"
+            autocomplete="address-line1"
         >
 
         <input
             type="text"
             id="customerComplement"
-            placeholder="Complemento"
+            placeholder="Complemento (apto, bloco, condomínio)"
+            autocomplete="address-line2"
         >
 
     </div>
@@ -783,7 +784,7 @@
     <input
         type="text"
         id="customerState"
-        placeholder="Estado"
+        placeholder="Estado (UF)"
         maxlength="2"
         autocomplete="address-level1"
     >
