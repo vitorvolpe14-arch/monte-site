@@ -2203,6 +2203,18 @@ app.post(
                                 sku:
                                     sku,
 
+                                variant_id:
+                                    item.variant_id ||
+                                    null,
+
+                                variant_color:
+                                    item.variant_color ||
+                                    null,
+
+                                variant_sku:
+                                    item.variant_sku ||
+                                    null,
+
                                 quantity:
                                     quantity,
 
@@ -2917,22 +2929,55 @@ app.post(
              * foi criado.
              */
 
-            const order =
+            let order =
                 getPendingOrder(
                     orderNsu
                 );
 
+            /*
+             * O pedido também é persistido no Supabase antes do pagamento.
+             * Se o Render reiniciar entre o checkout e o webhook, a memória
+             * local pode ser perdida; nesse caso recuperamos o pedido do banco.
+             */
             if (!order) {
-
-                console.error(
-                    "❌ Pedido não encontrado na memória:"
+                const persistedOrders = await supabaseRequest(
+                    `orders?order_nsu=eq.${encodeURIComponent(orderNsu)}&select=*`,
+                    { method: "GET" }
                 );
 
-                console.error(
-                    orderNsu
-                );
+                const persistedOrder = Array.isArray(persistedOrders)
+                    ? persistedOrders[0]
+                    : null;
 
-                return;
+                if (persistedOrder) {
+                    order = {
+                        order_nsu: persistedOrder.order_nsu,
+                        total: Number(persistedOrder.total || 0),
+                        items: persistedOrder.items || [],
+                        customer: {
+                            name: persistedOrder.customer_name || "",
+                            email: persistedOrder.customer_email || "",
+                            phone: persistedOrder.customer_phone || "",
+                            address: persistedOrder.customer_address || null
+                        },
+                        created_at: persistedOrder.created_at
+                            ? new Date(persistedOrder.created_at).getTime()
+                            : Date.now(),
+                        payment_confirmed: false,
+                        olist_created: false
+                    };
+
+                    console.log(
+                        "♻️ Pedido recuperado do Supabase:",
+                        orderNsu
+                    );
+                } else {
+                    console.error(
+                        "❌ Pedido não encontrado no Supabase:",
+                        orderNsu
+                    );
+                    return;
+                }
             }
 
             /*
