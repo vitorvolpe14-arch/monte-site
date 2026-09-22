@@ -47,7 +47,7 @@ async function loadProductsFromDatabase() {
 let cart = [];
 
 let selectedProduct = null;
-
+let selectedVariant = null;
 let selectedQuantity = 1;
 
 let currentSlide = 0;
@@ -295,9 +295,13 @@ function openProductModal(productId) {
         );
 
 
+    selectedVariant = null;
     selectedQuantity = 1;
 
-    if (availableStock <= 0) {
+    const activeVariants = (selectedProduct.variants || []).filter(v => v.active !== false && Number(v.stock || 0) > 0);
+    if (activeVariants.length) {
+        selectedVariant = activeVariants[0];
+    } else if ((selectedProduct.stock || 0) <= 0) {
         showToast("Produto sem estoque.");
         return;
     }
@@ -351,6 +355,32 @@ function openProductModal(productId) {
     document.getElementById("modalPrice")
         .innerHTML = priceHTML;
 
+    const variantSelector = document.getElementById("variantSelector");
+    const variantOptions = document.getElementById("variantOptions");
+    if (variantSelector && variantOptions) {
+        const activeVariants = (selectedProduct.variants || []).filter(v => v.active !== false && Number(v.stock || 0) > 0);
+        if (activeVariants.length) {
+            variantSelector.style.display = "block";
+            variantOptions.innerHTML = "";
+            activeVariants.forEach((variant, index) => {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "variant-option" + (index === 0 ? " active" : "");
+                button.textContent = variant.color;
+                button.addEventListener("click", () => {
+                    selectedVariant = variant;
+                    selectedQuantity = 1;
+                    document.querySelectorAll(".variant-option").forEach(b => b.classList.remove("active"));
+                    button.classList.add("active");
+                    document.getElementById("quantity").textContent = "1";
+                });
+                variantOptions.appendChild(button);
+            });
+        } else {
+            variantSelector.style.display = "none";
+            variantOptions.innerHTML = "";
+        }
+    }
 
     renderGallery();
 
@@ -469,7 +499,7 @@ function closeProductModal() {
 
 function changeQuantity(amount) {
 
-    const maxStock = selectedProduct?.stock || 0;
+    const maxStock = selectedVariant ? Number(selectedVariant.stock || 0) : Number(selectedProduct?.stock || 0);
     selectedQuantity += amount;
 
     if (selectedQuantity > maxStock) selectedQuantity = maxStock;
@@ -498,27 +528,34 @@ document.getElementById(
 
         if (!selectedProduct) return;
 
+        const available = selectedVariant ? Number(selectedVariant.stock || 0) : Number(selectedProduct.stock || 0);
+        if (available <= 0 || selectedQuantity > available) {
+            showToast("Quantidade indisponível em estoque.");
+            return;
+        }
 
+        const variantKey = selectedVariant?.id || "default";
         const existing =
             cart.find(
                 item =>
-                    item.id === selectedProduct.id
+                    item.id === selectedProduct.id && (item.variant_id || "default") === variantKey
             );
 
 
         if (existing) {
 
-            existing.quantity +=
-                selectedQuantity;
+            const maxStock = selectedVariant ? Number(selectedVariant.stock || 0) : Number(selectedProduct.stock || 0);
+            existing.quantity = Math.min(existing.quantity + selectedQuantity, maxStock);
 
         } else {
 
             cart.push({
 
                 ...selectedProduct,
-
-                quantity:
-                    selectedQuantity
+                variant_id: selectedVariant?.id || null,
+                variant_color: selectedVariant?.color || null,
+                variant_sku: selectedVariant?.sku || selectedProduct.sku || null,
+                quantity: selectedQuantity
 
             });
 
@@ -617,7 +654,7 @@ function updateCart() {
             <div>
 
                 <div class="cart-item-name">
-                    ${item.name}
+                    ${item.name}${item.variant_color ? " · " + item.variant_color : ""}
                 </div>
 
                 <div class="cart-item-price">
@@ -712,8 +749,11 @@ function updateItemQuantity(
     if (!item) return;
 
 
+    const maxStock = item.variant_id
+        ? Number(products.find(p => p.id === item.id)?.variants?.find(v => v.id === item.variant_id)?.stock || 0)
+        : Number(products.find(p => p.id === item.id)?.stock || 0);
     item.quantity += amount;
-
+    if (item.quantity > maxStock) item.quantity = maxStock;
 
     if (item.quantity <= 0) {
 
@@ -1002,10 +1042,10 @@ async function checkout() {
                     item.name || "Produto MONTÊ"
                 ),
 
-                sku:
-                    item.sku
-                    ? String(item.sku)
-                    : null
+                sku: item.variant_sku || item.sku ? String(item.variant_sku || item.sku) : null,
+                product_id: item.id || null,
+                variant_id: item.variant_id || null,
+                variant_color: item.variant_color || null
 
             };
 
