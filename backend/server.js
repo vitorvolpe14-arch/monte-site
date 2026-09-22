@@ -3184,6 +3184,64 @@ app.get("/api/pedido-status", async (req, res) => {
 });
 
 /* =====================================================
+   STATUS DO PEDIDO PARA A PÁGINA DE SUCESSO
+===================================================== */
+app.get("/api/pedido-status", async (req, res) => {
+    try {
+        const orderNsu = safeString(req.query.order_nsu);
+        const transactionNsu = safeString(req.query.transaction_nsu);
+
+        if (!orderNsu || !transactionNsu) {
+            return res.status(400).json({
+                success: false,
+                message: "Identificadores do pedido não informados."
+            });
+        }
+
+        const rows = await supabaseRequest(
+            `orders?order_nsu=eq.${encodeURIComponent(orderNsu)}&transaction_nsu=eq.${encodeURIComponent(transactionNsu)}&select=id,order_nsu,status,total,shipping,receipt_url,created_at,paid_at,order_items(product_name,variant_color,sku,quantity,unit_price,total_price)`,
+            { method: "GET" }
+        );
+
+        const order = Array.isArray(rows) ? rows[0] : null;
+
+        if (!order || order.status !== "paid") {
+            return res.status(404).json({
+                success: false,
+                message: "Pedido pago não encontrado."
+            });
+        }
+
+        return res.json({
+            success: true,
+            order: {
+                order_nsu: order.order_nsu,
+                status: order.status,
+                total: Number(order.total || 0),
+                shipping: Number(order.shipping || 0),
+                receipt_url: order.receipt_url || null,
+                created_at: order.created_at,
+                paid_at: order.paid_at,
+                items: (order.order_items || []).map(item => ({
+                    product_name: item.product_name,
+                    variant_color: item.variant_color,
+                    sku: item.sku,
+                    quantity: Number(item.quantity || 0),
+                    unit_price: Number(item.unit_price || 0),
+                    total_price: Number(item.total_price || 0)
+                }))
+            }
+        });
+    } catch (error) {
+        console.error("❌ Erro ao consultar pedido:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Não foi possível consultar o pedido."
+        });
+    }
+});
+
+/* =====================================================
    PÁGINA DE SUCESSO
 ===================================================== */
 app.get(
@@ -3196,30 +3254,6 @@ app.get(
                 "pagamento-sucesso.html"
             )
         );
-    }
-);
-
-
-
-===================================================== */
-app.get(
-    "/pagamento-sucesso",
-    (req, res) => {
-
-        res.sendFile(
-
-            path.join(
-
-                __dirname,
-
-                "..",
-
-                "index.html"
-
-            )
-
-        );
-
     }
 );
 
