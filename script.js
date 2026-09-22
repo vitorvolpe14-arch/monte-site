@@ -297,6 +297,10 @@ function openProductModal(productId) {
 
     selectedQuantity = 1;
 
+    if (availableStock <= 0) {
+        showToast("Produto sem estoque.");
+        return;
+    }
 
     document.getElementById("quantity")
         .textContent = selectedQuantity;
@@ -465,9 +469,10 @@ function closeProductModal() {
 
 function changeQuantity(amount) {
 
+    const maxStock = selectedProduct?.stock || 0;
     selectedQuantity += amount;
 
-
+    if (selectedQuantity > maxStock) selectedQuantity = maxStock;
     if (selectedQuantity < 1) {
 
         selectedQuantity = 1;
