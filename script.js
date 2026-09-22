@@ -991,6 +991,91 @@ function getShippingValue() {
 
 
 /* =====================================================
+   BUSCA DE ENDEREÇO PELO CEP
+   Preenche automaticamente rua, bairro, cidade e estado.
+===================================================== */
+
+let cepLookupController = null;
+
+async function lookupAddressByCep() {
+    const cepInput = document.getElementById("customerCep");
+    const streetInput = document.getElementById("customerStreet");
+    const neighborhoodInput = document.getElementById("customerNeighborhood");
+    const cityInput = document.getElementById("customerCity");
+    const stateInput = document.getElementById("customerState");
+
+    if (!cepInput || !streetInput || !neighborhoodInput || !cityInput || !stateInput) {
+        return;
+    }
+
+    const cep = cepInput.value.replace(/\D/g, "");
+
+    if (cep.length !== 8) {
+        return;
+    }
+
+    if (cepLookupController) {
+        cepLookupController.abort();
+    }
+
+    cepLookupController = new AbortController();
+
+    streetInput.value = "Consultando...";
+    neighborhoodInput.value = "Consultando...";
+    cityInput.value = "Consultando...";
+    stateInput.value = "...";
+
+    try {
+        const response = await fetch(
+            `https://viacep.com.br/ws/${cep}/json/`,
+            {
+                signal: cepLookupController.signal,
+                headers: {
+                    "Accept": "application/json"
+                }
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error("Falha na consulta do CEP.");
+        }
+
+        const data = await response.json();
+
+        if (data.erro) {
+            throw new Error("CEP não encontrado.");
+        }
+
+        streetInput.value = data.logradouro || "";
+        neighborhoodInput.value = data.bairro || "";
+        cityInput.value = data.localidade || "";
+        stateInput.value = (data.uf || "").toUpperCase();
+
+        updateShipping();
+
+        // O número da residência continua sendo informado pela cliente.
+        document.getElementById("customerNumber")?.focus();
+
+    } catch (error) {
+        if (error.name === "AbortError") {
+            return;
+        }
+
+        streetInput.value = "";
+        neighborhoodInput.value = "";
+        cityInput.value = "";
+        stateInput.value = "";
+
+        showToast("Não encontramos esse CEP. Confira o número informado.");
+        updateShipping();
+
+    } finally {
+        cepLookupController = null;
+    }
+}
+
+
+/* =====================================================
    ATUALIZAR FRETE
 ===================================================== */
 
@@ -1752,6 +1837,28 @@ document.addEventListener(
 
 
 document.addEventListener("DOMContentLoaded", () => {
+    const cepInput = document.getElementById("customerCep");
+
+    if (cepInput) {
+        cepInput.addEventListener("input", () => {
+            const digits = cepInput.value.replace(/\D/g, "").slice(0, 8);
+            cepInput.value = digits.length > 5
+                ? `${digits.slice(0, 5)}-${digits.slice(5)}`
+                : digits;
+
+            if (digits.length === 8) {
+                lookupAddressByCep();
+            }
+        });
+
+        cepInput.addEventListener("blur", () => {
+            const digits = cepInput.value.replace(/\D/g, "");
+            if (digits.length === 8) {
+                lookupAddressByCep();
+            }
+        });
+    }
+
     const cpfInput = document.getElementById("customerCpf");
     if (cpfInput) {
         cpfInput.addEventListener("input", () => {
