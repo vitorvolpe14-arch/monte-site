@@ -54,6 +54,11 @@ let selectedQuantity = 1;
 
 let currentSlide = 0;
 
+const COLLECTION_VISIBLE_COUNT = 5;
+const COLLECTION_STEP = 4;
+let collectionProducts = [];
+let currentCollectionIndex = 0;
+
 
 /* =====================================================
    FORMATAÇÃO DE PREÇO
@@ -188,9 +193,6 @@ function createProductCard(product) {
 
 function renderProducts() {
 
-    const allContainer =
-        document.getElementById("allProducts");
-
     const newContainer =
         document.getElementById("newProducts");
 
@@ -198,19 +200,15 @@ function renderProducts() {
         document.getElementById("saleProducts");
 
 
-    allContainer.innerHTML = "";
-
     newContainer.innerHTML = "";
 
     saleContainer.innerHTML = "";
 
 
+    renderCollectionProducts(products);
+
+
     products.forEach(product => {
-
-        allContainer.appendChild(
-            createProductCard(product)
-        );
-
 
         if (product.newProduct) {
 
@@ -234,17 +232,130 @@ function renderProducts() {
 }
 
 
+function renderCollectionProducts(list) {
+
+    collectionProducts = Array.isArray(list)
+        ? list
+        : [];
+
+    currentCollectionIndex = 0;
+
+    renderCollectionPage();
+
+}
+
+
+function renderCollectionPage() {
+
+    const container =
+        document.getElementById("allProducts");
+
+    const previousButton =
+        document.querySelector(".collection-prev");
+
+    const nextButton =
+        document.querySelector(".collection-next");
+
+
+    if (!container) return;
+
+
+    container.innerHTML = "";
+
+
+    if (!collectionProducts.length) {
+
+        if (previousButton) {
+            previousButton.disabled = true;
+        }
+
+        if (nextButton) {
+            nextButton.disabled = true;
+        }
+
+        return;
+
+    }
+
+
+    const total = collectionProducts.length;
+
+    const start = currentCollectionIndex % total;
+
+
+    for (
+        let offset = 0;
+        offset < Math.min(COLLECTION_VISIBLE_COUNT, total);
+        offset++
+    ) {
+
+        const product =
+            collectionProducts[(start + offset) % total];
+
+        container.appendChild(
+            createProductCard(product)
+        );
+
+    }
+
+
+    const hasCarousel =
+        total > COLLECTION_VISIBLE_COUNT;
+
+
+    if (previousButton) {
+        previousButton.disabled = !hasCarousel;
+        previousButton.style.visibility =
+            hasCarousel ? "visible" : "hidden";
+    }
+
+    if (nextButton) {
+        nextButton.disabled = !hasCarousel;
+        nextButton.style.visibility =
+            hasCarousel ? "visible" : "hidden";
+    }
+
+}
+
+
+function nextCollectionPage() {
+
+    if (collectionProducts.length <= COLLECTION_VISIBLE_COUNT) {
+        return;
+    }
+
+
+    currentCollectionIndex =
+        (currentCollectionIndex + COLLECTION_STEP) %
+        collectionProducts.length;
+
+    renderCollectionPage();
+
+}
+
+
+function previousCollectionPage() {
+
+    if (collectionProducts.length <= COLLECTION_VISIBLE_COUNT) {
+        return;
+    }
+
+
+    currentCollectionIndex =
+        (currentCollectionIndex - COLLECTION_STEP +
+            collectionProducts.length) %
+        collectionProducts.length;
+
+    renderCollectionPage();
+
+}
+
+
 /* =====================================================
    FILTRO
 ===================================================== */
 
 function filterProducts(category) {
-
-    const container =
-        document.getElementById("allProducts");
-
-    container.innerHTML = "";
-
 
     document
         .querySelectorAll(".filter-button")
@@ -255,15 +366,18 @@ function filterProducts(category) {
         });
 
 
-    document
-        .querySelector(
+    const activeButton =
+        document.querySelector(
             `[data-filter="${category}"]`
-        )
-        .classList.add("active");
+        );
+
+    if (activeButton) {
+        activeButton.classList.add("active");
+    }
 
 
-    products
-        .filter(product => {
+    const filteredProducts =
+        products.filter(product => {
 
             if (category === "all") {
 
@@ -273,14 +387,10 @@ function filterProducts(category) {
 
             return product.category === category;
 
-        })
-        .forEach(product => {
-
-            container.appendChild(
-                createProductCard(product)
-            );
-
         });
+
+
+    renderCollectionProducts(filteredProducts);
 
 }
 
