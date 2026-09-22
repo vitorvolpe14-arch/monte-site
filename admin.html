@@ -54,7 +54,7 @@
 
     <section id="stockSection" class="section hidden">
       <div class="section-actions"><div><p class="eyebrow">INVENTÁRIO</p><h2>Estoque</h2></div></div>
-      <div id="stockTable" class="panel table-wrap"></div>
+      <div id="stockTable" class="panel table-wrap"></div><div class="panel stock-history-panel"><div class="panel-head"><h2>Histórico de movimentações</h2><button id="refreshStock" class="secondary">ATUALIZAR</button></div><div id="stockMovements" class="table-wrap"></div></div>
     </section>
   </main>
 </div>
@@ -68,7 +68,7 @@
       <label>Categoria<select id="productCategory"><option value="bolsas">Bolsas</option><option value="acessorios">Acessórios</option><option value="cintos">Cintos</option></select></label>
       <label>Preço<input id="productPrice" type="number" step="0.01" min="0" required></label>
       <label>Preço promocional<input id="productSalePrice" type="number" step="0.01" min="0"></label>
-      <label>Imagem principal<input id="productImage" placeholder="assets/exemplo.jpg"></label>
+      <label class="full-width">Galeria de imagens<textarea id="productImages" rows="4" placeholder="Uma imagem por linha&#10;ex.: assets/vienna4.JPG.jpeg&#10;assets/vienna1.JPG.jpeg"></textarea><small class="field-help">A primeira imagem será a capa. As demais permanecem na galeria do produto.</small></label>
     </div>
     <label>Descrição<textarea id="productDescription" rows="4"></textarea></label>
     <div class="checks"><label><input id="productNew" type="checkbox"> Marcar como novidade</label><label><input id="productSale" type="checkbox"> Mostrar em SALE</label><label><input id="productActive" type="checkbox" checked> Produto ativo</label></div>
