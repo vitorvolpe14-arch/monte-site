@@ -25,9 +25,11 @@ async function loadProductsFromDatabase() {
 
     products = (data || []).map(product => ({
         ...product,
-        price: Number(product.price || 0),
-        oldPrice: product.is_sale && product.sale_price
-            ? Number(product.price)
+        price: product.is_sale && product.sale_price != null
+            ? Number(product.sale_price)
+            : Number(product.price || 0),
+        oldPrice: product.is_sale && product.sale_price != null
+            ? Number(product.price || 0)
             : null,
         sale: !!product.is_sale,
         newProduct: !!product.is_new,
@@ -752,19 +754,18 @@ function updateItemQuantity(
     const maxStock = item.variant_id
         ? Number(products.find(p => p.id === item.id)?.variants?.find(v => v.id === item.variant_id)?.stock || 0)
         : Number(products.find(p => p.id === item.id)?.stock || 0);
+
     item.quantity += amount;
-    if (item.quantity > maxStock) item.quantity = maxStock;
 
-    if (item.quantity <= 0) {
-
-        cart =
-            cart.filter(
-                item =>
-                    item.id !== productId
-            );
-
+    if (item.quantity > maxStock) {
+        item.quantity = maxStock;
     }
 
+    if (item.quantity <= 0) {
+        cart = cart.filter(
+            cartItem => cartItem.id !== productId
+        );
+    }
 
     updateCart();
 
@@ -777,12 +778,9 @@ function updateItemQuantity(
 
 function removeFromCart(productId) {
 
-    cart =
-        cart.filter(
-            item =>
-                item.id !== productId
-        );
-
+    cart = cart.filter(
+        item => item.id !== productId
+    );
 
     updateCart();
 
@@ -791,6 +789,7 @@ function removeFromCart(productId) {
 
 /* =====================================================
    ABRIR CARRINHO
+
 ===================================================== */
 
 function openCart() {
