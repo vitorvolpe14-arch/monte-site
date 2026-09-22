@@ -1,3 +1,12 @@
+@font-face {
+    font-family: "Lovelo Black";
+    src: url("https://raw.githubusercontent.com/lorenz/lovelo-fontface/master/fonts/lovelo_black-webfont.woff2") format("woff2"),
+         url("https://raw.githubusercontent.com/lorenz/lovelo-fontface/master/fonts/lovelo_black-webfont.woff") format("woff");
+    font-weight: 900;
+    font-style: normal;
+    font-display: swap;
+}
+
 /* =====================================================
    RESET
 ===================================================== */
@@ -124,11 +133,11 @@ a {
 
 .logo {
 
-    font-family: "Montserrat", sans-serif;
+    font-family: "Lovelo Black", sans-serif;
 
     font-size: 27px;
 
-    font-weight: 800;
+    font-weight: 900;
 
     letter-spacing: 5px;
 
