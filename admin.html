@@ -7,26 +7,30 @@
 <link rel="stylesheet" href="admin.css">
 </head>
 <body>
-<div id="loginView" class="auth-view"><div class="auth-card"><div class="brand">MONTÊ</div><p class="eyebrow">ÁREA RESTRITA</p><h1>Painel de gestão</h1><p>Acesso exclusivo do administrador.</p><form id="loginForm"><label>E-mail<input id="loginEmail" type="email" autocomplete="username" required></label><label>Senha<input id="loginPassword" type="password" autocomplete="current-password" required></label><button type="submit">ENTRAR</button><div id="loginError" class="error"></div></form></div></div>
+<div id="loginView" class="auth-view">
+  <div class="auth-card">
+    <div class="brand">MONTÊ</div><p class="eyebrow">ÁREA RESTRITA</p>
+    <h1>Painel de gestão</h1><p>Acesso exclusivo do administrador.</p>
+    <form id="loginForm">
+      <label>E-mail<input id="loginEmail" type="email" autocomplete="username" required></label>
+      <label>Senha<input id="loginPassword" type="password" autocomplete="current-password" required></label>
+      <button type="submit">ENTRAR</button><div id="loginError" class="error"></div>
+    </form>
+  </div>
+</div>
+
 <div id="appView" class="app hidden">
   <aside class="sidebar">
-    <div class="brand">MONTÊ</div>
-    <p class="sidebar-label">GESTÃO</p>
+    <div class="brand">MONTÊ</div><p class="sidebar-label">GESTÃO</p>
     <button class="nav-button active" data-section="dashboard">Visão geral</button>
     <button class="nav-button" data-section="products">Produtos</button>
     <button class="nav-button" data-section="orders">Pedidos</button>
     <button class="nav-button" data-section="stock">Estoque</button>
-    <div class="sidebar-bottom">
-      <a href="/" target="_blank">Ver site</a>
-      <button id="logoutButton">Sair</button>
-    </div>
+    <div class="sidebar-bottom"><a href="/" target="_blank">Ver site</a><button id="logoutButton">Sair</button></div>
   </aside>
 
   <main class="main">
-    <header class="topbar">
-      <div><p class="eyebrow">MONTÊ</p><h1 id="pageTitle">Visão geral</h1></div>
-      <span id="adminEmail" class="admin-email"></span>
-    </header>
+    <header class="topbar"><div><p class="eyebrow">MONTÊ</p><h1 id="pageTitle">Visão geral</h1></div><span id="adminEmail" class="admin-email"></span></header>
 
     <section id="dashboardSection" class="section">
       <div class="stats">
@@ -35,19 +39,12 @@
         <div class="stat"><span>Pedidos pagos</span><strong id="statPaid">—</strong></div>
         <div class="stat"><span>Estoque baixo</span><strong id="statLowStock">—</strong></div>
       </div>
-      <div class="panel">
-        <div class="panel-head"><h2>Últimos pedidos</h2><button class="text-button" data-go="orders">Ver todos</button></div>
-        <div id="recentOrders" class="table-wrap"></div>
-      </div>
+      <div class="panel"><div class="panel-head"><h2>Últimos pedidos</h2><button class="text-button" data-go="orders">Ver todos</button></div><div id="recentOrders" class="table-wrap"></div></div>
     </section>
 
     <section id="productsSection" class="section hidden">
-      <div class="section-actions">
-        <div><p class="eyebrow">CATÁLOGO</p><h2>Produtos</h2></div>
-        <button id="newProductButton">+ NOVO PRODUTO</button>
-      </div>
-      <div class="toolbar"><input id="productSearch" placeholder="Buscar por nome ou SKU..."></div>
-      <div id="productsGrid" class="product-admin-grid"></div>
+      <div class="section-actions"><div><p class="eyebrow">CATÁLOGO</p><h2>Produtos</h2></div><button id="newProductButton">+ NOVO PRODUTO</button></div>
+      <div class="toolbar"><input id="productSearch" placeholder="Buscar por nome ou SKU..."></div><div id="productsGrid" class="product-admin-grid"></div>
     </section>
 
     <section id="ordersSection" class="section hidden">
@@ -62,28 +59,29 @@
   </main>
 </div>
 
-<div id="productModal" class="modal hidden">
-  <div class="modal-card">
-    <div class="modal-head"><h2 id="modalTitle">Novo produto</h2><button id="closeModal">×</button></div>
-    <form id="productForm">
-      <input id="productId" type="hidden">
-      <div class="form-grid">
-        <label>Nome<input id="productName" required></label>
-        <label>SKU<input id="productSku"></label>
-        <label>Categoria<select id="productCategory"><option value="bolsas">Bolsas</option><option value="acessorios">Acessórios</option><option value="cintos">Cintos</option></select></label>
-        <label>Preço<input id="productPrice" type="number" step="0.01" min="0" required></label>
-        <label>Preço promocional<input id="productSalePrice" type="number" step="0.01" min="0"></label>
-        <label>Imagem principal<input id="productImage" placeholder="assets/exemplo.jpg"></label>
-      </div>
-      <label>Descrição<textarea id="productDescription" rows="4"></textarea></label>
-      <div class="checks"><label><input id="productNew" type="checkbox"> Marcar como novidade</label><label><input id="productSale" type="checkbox"> Mostrar em SALE</label><label><input id="productActive" type="checkbox" checked> Produto ativo</label></div>
-      <div class="variants-head"><h3>Cores, SKU e estoque</h3><button type="button" id="addVariant" class="secondary">+ COR</button></div>
-      <div id="variantsList"></div>
-      <div id="formError" class="error"></div>
-      <div class="modal-actions"><button type="button" id="cancelProduct" class="secondary">CANCELAR</button><button type="submit">SALVAR PRODUTO</button></div>
-    </form>
-  </div>
-</div>
+<div id="productModal" class="modal hidden"><div class="modal-card">
+  <div class="modal-head"><h2 id="modalTitle">Novo produto</h2><button id="closeModal">×</button></div>
+  <form id="productForm">
+    <input id="productId" type="hidden">
+    <div class="form-grid">
+      <label>Nome<input id="productName" required></label><label>SKU<input id="productSku"></label>
+      <label>Categoria<select id="productCategory"><option value="bolsas">Bolsas</option><option value="acessorios">Acessórios</option><option value="cintos">Cintos</option></select></label>
+      <label>Preço<input id="productPrice" type="number" step="0.01" min="0" required></label>
+      <label>Preço promocional<input id="productSalePrice" type="number" step="0.01" min="0"></label>
+      <label>Imagem principal<input id="productImage" placeholder="assets/exemplo.jpg"></label>
+    </div>
+    <label>Descrição<textarea id="productDescription" rows="4"></textarea></label>
+    <div class="checks"><label><input id="productNew" type="checkbox"> Marcar como novidade</label><label><input id="productSale" type="checkbox"> Mostrar em SALE</label><label><input id="productActive" type="checkbox" checked> Produto ativo</label></div>
+    <div class="variants-head"><h3>Cores, SKU e estoque</h3><button type="button" id="addVariant" class="secondary">+ COR</button></div>
+    <div id="variantsList"></div><div id="formError" class="error"></div>
+    <div class="modal-actions"><button type="button" id="cancelProduct" class="secondary">CANCELAR</button><button type="submit">SALVAR PRODUTO</button></div>
+  </form>
+</div></div>
+
+<div id="orderModal" class="modal hidden"><div class="modal-card order-modal-card">
+  <div class="modal-head"><div><p class="eyebrow">PEDIDO</p><h2 id="orderModalTitle">—</h2></div><button id="closeOrderModal">×</button></div>
+  <div id="orderDetails"></div>
+</div></div>
 
 <script src="admin.js"></script>
 </body>
