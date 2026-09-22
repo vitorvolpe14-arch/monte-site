@@ -21,7 +21,7 @@
           href="https://fonts.gstatic.com"
           crossorigin>
 
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Playfair+Display:wght@400;500&display=swap"
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Montserrat:wght@600;700;800&family=Playfair+Display:wght@400;500&display=swap"
           rel="stylesheet">
 </head>
 
@@ -111,7 +111,13 @@
                 class="cart-button"
                 aria-label="Carrinho">
 
-            <span class="icon">□</span>
+            <span class="icon cart-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="img">
+                    <path d="M3 4h2l2.2 10.1a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 1.9-1.4L21 8H6.2"></path>
+                    <circle cx="10" cy="19" r="1.4"></circle>
+                    <circle cx="18" cy="19" r="1.4"></circle>
+                </svg>
+            </span>
 
             <span id="cartCount"
                   class="cart-count">
