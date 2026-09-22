@@ -123,6 +123,8 @@ app.use(
     express.json()
 );
 
+function safeString(value){if(value===undefined||value===null)return "";return String(value).trim()}
+
 /* =====================================================
    MONTÊ ADMIN AUTH — acesso exclusivo do administrador
 ===================================================== */
