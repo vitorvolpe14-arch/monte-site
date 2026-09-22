@@ -1,75 +1,15 @@
-const SUPABASE_URL="https://uvrhougaurupvkxmezwy.supabase.co";
-const SUPABASE_KEY="sb_publishable_oML0grXREF2gHg7WNIxNlA_BYMV9D1V";
-const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
-
 const $=id=>document.getElementById(id);
-const ADMIN_URL="https://monte-site-itjk.onrender.com/admin.html";
+async function api(path,options={}){const r=await fetch(path,{credentials:"same-origin",headers:{"Content-Type":"application/json",...(options.headers||{})},...options});let d=null;try{d=await r.json()}catch{}if(!r.ok){const e=new Error(d?.message||"Não foi possível concluir a operação.");e.status=r.status;throw e}return d}
 let products=[],orders=[],editingProduct=null;
-
 document.addEventListener("DOMContentLoaded",init);
-
-async function init(){
-  const {data:{session}}=await db.auth.getSession();
-  const recovery=window.location.hash.includes("type=recovery");
-  if(session && !recovery) await enterApp(session);
-  if(recovery) showResetPanel();
-  db.auth.onAuthStateChange(async(event,session)=>{
-    if(event==="PASSWORD_RECOVERY"){showResetPanel();return}
-    if(session) await enterApp(session); else showLogin();
-  });
-  $("loginForm").addEventListener("submit",login);$("forgotPassword").addEventListener("click",forgotPassword);
-  $("showSignup").addEventListener("click",showSignup);$("backToLogin").addEventListener("click",showLogin);
-  $("signupForm").addEventListener("submit",signup);$("resetForm").addEventListener("submit",resetPassword);
-  $("logoutButton").addEventListener("click",()=>db.auth.signOut());
-  document.querySelectorAll(".nav-button").forEach(b=>b.onclick=()=>showSection(b.dataset.section));
-  document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>showSection(b.dataset.go));
-  $("newProductButton").onclick=()=>openProduct();$("closeModal").onclick=closeProduct;$("cancelProduct").onclick=closeProduct;
-  $("addVariant").onclick=()=>addVariant();$("productForm").onsubmit=saveProduct;$("productSearch").oninput=renderProducts;$("refreshOrders").onclick=loadOrders;
-}
-
-function showLogin(){$("loginView").classList.remove("hidden");$("appView").classList.add("hidden");$("loginPanel").classList.remove("hidden");$("signupPanel").classList.add("hidden");$("resetPanel").classList.add("hidden")}
-function showSignup(){$("loginPanel").classList.add("hidden");$("signupPanel").classList.remove("hidden");$("resetPanel").classList.add("hidden");$("signupMessage").textContent=""}
-function showResetPanel(){$("loginView").classList.remove("hidden");$("appView").classList.add("hidden");$("loginPanel").classList.add("hidden");$("signupPanel").classList.add("hidden");$("resetPanel").classList.remove("hidden");$("resetMessage").textContent=""}
-async function signup(e){e.preventDefault();$("signupMessage").textContent="";const email=$("signupEmail").value.trim(),password=$("signupPassword").value,confirm=$("signupPasswordConfirm").value;if(password!==confirm){$("signupMessage").textContent="As senhas não conferem.";return}const {data,error}=await db.auth.signUp({email,password});if(error){$("signupMessage").textContent=error.message;return}$("signupMessage").textContent=data.session?"Conta criada. O acesso administrativo ainda precisa ser liberado.":"Conta criada. Verifique seu e-mail para confirmar o cadastro; depois, o acesso administrativo precisa ser liberado."}
-async function resetPassword(e){e.preventDefault();$("resetMessage").textContent="";const password=$("resetPassword").value,confirm=$("resetPasswordConfirm").value;if(password!==confirm){$("resetMessage").textContent="As senhas não conferem.";return}const {error}=await db.auth.updateUser({password});if(error){$("resetMessage").textContent=error.message;return}$("resetMessage").textContent="Senha atualizada. Você já pode entrar novamente.";setTimeout(()=>window.location.href=ADMIN_URL,900)}
-async function login(e){
-  e.preventDefault();$("loginError").textContent="";
-  const {data,error}=await db.auth.signInWithPassword({email:$("loginEmail").value.trim(),password:$("loginPassword").value});
-  if(error){$("loginError").textContent=error.message;return}
-  if(data.session) await enterApp(data.session);
-}
-async function forgotPassword(){
-  const email=$("loginEmail").value.trim();
-  $("loginError").textContent="";
-  if(!email){
-    $("loginError").textContent="Informe seu e-mail para receber o link de recuperação.";
-    $("loginEmail").focus();
-    return;
-  }
-  const {error}=await db.auth.resetPasswordForEmail(email,{redirectTo:ADMIN_URL});
-  if(error){$("loginError").textContent=error.message;return}
-  $("loginError").textContent="Enviamos um link de recuperação para seu e-mail.";
-}
-
-async function enterApp(session){
-  const {data:{user}}=await db.auth.getUser();
-  const role=user?.app_metadata?.role;
-  if(role!=="admin"){await db.auth.signOut();$("loginError").textContent="Esta conta não tem acesso administrativo.";return}
-  $("loginView").classList.add("hidden");$("appView").classList.remove("hidden");$("adminEmail").textContent=user.email;
-  await Promise.all([loadProducts(),loadOrders()]);
-  renderDashboard();
-}
-function showSection(section){
-  document.querySelectorAll(".section").forEach(s=>s.classList.add("hidden"));
-  $(section+"Section").classList.remove("hidden");
-  document.querySelectorAll(".nav-button").forEach(b=>b.classList.toggle("active",b.dataset.section===section));
-  $("pageTitle").textContent={dashboard:"Visão geral",products:"Produtos",orders:"Pedidos",stock:"Estoque"}[section];
-  if(section==="products")renderProducts();
-  if(section==="orders")renderOrders();
-  if(section==="stock")renderStock();
-}
-async function loadProducts(){const {data,error}=await db.from("products").select("*,product_variants(*)").order("created_at",{ascending:false});if(error){alert(error.message);return}products=data||[];renderProducts();renderStock();renderDashboard()}
-async function loadOrders(){const {data,error}=await db.from("orders").select("*,order_items(*)").order("created_at",{ascending:false});if(error){orders=[];$("ordersTable").innerHTML="<p>Não foi possível carregar os pedidos.</p>";return}orders=data||[];renderOrders();renderDashboard()}
+async function init(){$("loginForm").addEventListener("submit",login);$("logoutButton").addEventListener("click",logout);document.querySelectorAll(".nav-button").forEach(b=>b.onclick=()=>showSection(b.dataset.section));document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>showSection(b.dataset.go));$("newProductButton").onclick=()=>openProduct();$("closeModal").onclick=closeProduct;$("cancelProduct").onclick=closeProduct;$("addVariant").onclick=()=>addVariant();$("productForm").onsubmit=saveProduct;$("productSearch").oninput=renderProducts;$("refreshOrders").onclick=loadOrders;try{const s=await api("/api/admin/session");await enterApp(s)}catch{showLogin()}}
+function showLogin(){$("loginView").classList.remove("hidden");$("appView").classList.add("hidden");$("loginEmail").focus()}
+async function login(e){e.preventDefault();$("loginError").textContent="";try{await enterApp(await api("/api/admin/login",{method:"POST",body:JSON.stringify({email:$("loginEmail").value.trim(),password:$("loginPassword").value})}))}catch(e){$("loginError").textContent=e.message}}
+async function logout(){try{await api("/api/admin/logout",{method:"POST"})}catch{}products=[];orders=[];showLogin();$("loginPassword").value=""}
+async function enterApp(s){$("loginView").classList.add("hidden");$("appView").classList.remove("hidden");$("adminEmail").textContent=s.email||"Administrador";try{await Promise.all([loadProducts(),loadOrders()]);renderDashboard()}catch(e){showLogin();$("loginError").textContent=e.message}}
+function showSection(s){document.querySelectorAll(".section").forEach(x=>x.classList.add("hidden"));$(s+"Section").classList.remove("hidden");document.querySelectorAll(".nav-button").forEach(b=>b.classList.toggle("active",b.dataset.section===s));$("pageTitle").textContent={dashboard:"Visão geral",products:"Produtos",orders:"Pedidos",stock:"Estoque"}[s];if(s==="products")renderProducts();if(s==="orders")renderOrders();if(s==="stock")renderStock()}
+async function loadProducts(){const d=await api("/api/admin/products");products=d.products||[];renderProducts();renderStock();renderDashboard()}
+async function loadOrders(){const d=await api("/api/admin/orders");orders=d.orders||[];renderOrders();renderDashboard()}
 function renderDashboard(){$("statProducts").textContent=products.filter(p=>p.active).length;$("statOrders").textContent=orders.length;$("statPaid").textContent=orders.filter(o=>["paid","processing","shipped","delivered"].includes(o.status)).length;$("statLowStock").textContent=products.reduce((n,p)=>n+(p.product_variants||[]).filter(v=>v.stock<=2&&v.active).length,0);$("recentOrders").innerHTML=orderTable(orders.slice(0,5))}
 function renderProducts(){const q=($("productSearch").value||"").toLowerCase();const list=products.filter(p=>(p.name+" "+(p.sku||"")).toLowerCase().includes(q));$("productsGrid").innerHTML=list.map(p=>{const img=Array.isArray(p.images)&&p.images[0]?p.images[0]:"";const stock=(p.product_variants||[]).reduce((n,v)=>n+Number(v.stock||0),0);return `<article class="admin-product"><img src="${esc(img)}" onerror="this.style.visibility='hidden'"><div class="admin-product-body"><h3>${esc(p.name)}</h3><div class="meta">${esc(p.sku||"SEM SKU")} · ${money(p.sale_price||p.price)} · estoque ${stock}</div><div class="admin-product-actions"><button onclick="openProduct('${p.id}')">EDITAR</button><button class="secondary" onclick="toggleProduct('${p.id}',${!p.active})">${p.active?"DESATIVAR":"ATIVAR"}</button></div></div></article>`}).join("")||"<p>Nenhum produto encontrado.</p>"}
 function renderStock(){const rows=[];products.forEach(p=>(p.product_variants||[]).forEach(v=>rows.push([p.name,v.color,v.sku||p.sku||"",v.stock,v.active])));$("stockTable").innerHTML=`<table class="table"><thead><tr><th>PRODUTO</th><th>COR</th><th>SKU</th><th>ESTOQUE</th><th>STATUS</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td>${esc(r[2])}</td><td class="${r[3]<=2?"stock-low":""}">${r[3]}</td><td>${r[4]?"Ativo":"Inativo"}</td></tr>`).join("")||"<tr><td colspan='5'>Nenhuma variação cadastrada.</td></tr>"}</tbody></table>`}
@@ -78,8 +18,8 @@ function renderOrders(){$("ordersTable").innerHTML=orderTable(orders)}
 function openProduct(id=null){editingProduct=id?products.find(p=>p.id===id):null;$("modalTitle").textContent=editingProduct?"Editar produto":"Novo produto";$("productId").value=editingProduct?.id||"";$("productName").value=editingProduct?.name||"";$("productSku").value=editingProduct?.sku||"";$("productCategory").value=editingProduct?.category||"bolsas";$("productPrice").value=editingProduct?.price??"";$("productSalePrice").value=editingProduct?.sale_price??"";$("productImage").value=editingProduct?.images?.[0]||"";$("productDescription").value=editingProduct?.description||"";$("productNew").checked=!!editingProduct?.is_new;$("productSale").checked=!!editingProduct?.is_sale;$("productActive").checked=editingProduct?!!editingProduct.active:true;$("formError").textContent="";$("variantsList").innerHTML="";(editingProduct?.product_variants||[]).forEach(v=>addVariant(v));$("productModal").classList.remove("hidden")}
 function closeProduct(){$("productModal").classList.add("hidden");editingProduct=null}
 function addVariant(v={}){const row=document.createElement("div");row.className="variant-row";row.dataset.id=v.id||"";row.innerHTML=`<input class="v-color" placeholder="Cor" value="${esc(v.color||"")}"><input class="v-sku" placeholder="SKU da cor" value="${esc(v.sku||"")}"><input class="v-stock" type="number" min="0" value="${Number(v.stock||0)}"><button type="button" class="remove-variant">×</button>`;row.querySelector(".remove-variant").onclick=()=>row.remove();$("variantsList").appendChild(row)}
-async function saveProduct(e){e.preventDefault();$("formError").textContent="";const id=$("productId").value;const images=$("productImage").value.trim()?[$("productImage").value.trim()]:[];const payload={name:$("productName").value.trim(),sku:$("productSku").value.trim()||null,category:$("productCategory").value,price:Number($("productPrice").value),sale_price:$("productSalePrice").value?Number($("productSalePrice").value):null,description:$("productDescription").value.trim(),images,is_new:$("productNew").checked,is_sale:$("productSale").checked,active:$("productActive").checked};if(!payload.name){$("formError").textContent="Informe o nome.";return}let productId=id;const result=id?await db.from("products").update(payload).eq("id",id).select().single():await db.from("products").insert(payload).select().single();if(result.error){$("formError").textContent=result.error.message;return}productId=result.data.id;const existing=editingProduct?.product_variants||[];const rows=[...document.querySelectorAll(".variant-row")];for(const old of existing)if(!rows.some(r=>r.dataset.id===old.id))await db.from("product_variants").delete().eq("id",old.id);for(const row of rows){const color=row.querySelector(".v-color").value.trim();if(!color)continue;const sku=row.querySelector(".v-sku").value.trim()||null;const stock=Math.max(0,Number(row.querySelector(".v-stock").value||0));const vid=row.dataset.id;const data={product_id:productId,color,sku,stock,active:true};const q=vid?await db.from("product_variants").update(data).eq("id",vid):await db.from("product_variants").insert(data);if(q.error){$("formError").textContent=q.error.message;return}}closeProduct();await loadProducts()}
-async function toggleProduct(id,active){const {error}=await db.from("products").update({active}).eq("id",id);if(error)alert(error.message);else await loadProducts()}
+async function saveProduct(e){e.preventDefault();$("formError").textContent="";const id=$("productId").value;const payload={name:$("productName").value.trim(),sku:$("productSku").value.trim()||null,category:$("productCategory").value,price:Number($("productPrice").value),sale_price:$("productSalePrice").value?Number($("productSalePrice").value):null,description:$("productDescription").value.trim(),images:$("productImage").value.trim()?[$("productImage").value.trim()]:[],is_new:$("productNew").checked,is_sale:$("productSale").checked,active:$("productActive").checked};if(!payload.name){$("formError").textContent="Informe o nome.";return}try{const d=await api(id?`/api/admin/products/${encodeURIComponent(id)}`:"/api/admin/products",{method:id?"PUT":"POST",body:JSON.stringify(payload)});const pid=d.product.id;const variants=[...document.querySelectorAll(".variant-row")].map(r=>({id:r.dataset.id||null,color:r.querySelector(".v-color").value.trim(),sku:r.querySelector(".v-sku").value.trim()||null,stock:Math.max(0,Number(r.querySelector(".v-stock").value||0)),active:true})).filter(v=>v.color);await api(`/api/admin/products/${encodeURIComponent(pid)}/variants`,{method:"PUT",body:JSON.stringify({variants})});closeProduct();await loadProducts()}catch(e){$("formError").textContent=e.message}}
+async function toggleProduct(id,active){const p=products.find(x=>x.id===id);if(!p)return;try{await api(`/api/admin/products/${encodeURIComponent(id)}`,{method:"PUT",body:JSON.stringify({name:p.name,sku:p.sku,category:p.category,price:p.price,sale_price:p.sale_price,description:p.description,images:p.images,is_new:p.is_new,is_sale:p.is_sale,active})});await loadProducts()}catch(e){alert(e.message)}}
 function money(v){return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(v||0))}
 function date(v){return v?new Date(v).toLocaleString("pt-BR"):"—"}
 function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
