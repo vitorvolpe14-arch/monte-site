@@ -1,352 +1,44 @@
-/* =====================================================
-   PRODUTOS
-===================================================== */
+const SUPABASE_URL = "https://uvrhougaurupvkxmezwy.supabase.co";
+const SUPABASE_KEY = "sb_publishable_oML0grXREF2gHg7WNIxNlA_BYMV9D1V";
+const supabaseClient = window.supabase
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+    : null;
 
-/*
-    AQUI VOCÊ CADASTRA OS PRODUTOS DA MONTÊ.
+let products = [];
 
-    Cada produto pode ter QUANTAS FOTOS você quiser.
-
-    Exemplo:
-
-    images: [
-        "assets/produtos/oslo-1.jpg",
-        "assets/produtos/oslo-2.jpg",
-        "assets/produtos/oslo-3.jpg"
-    ]
-*/
-
-
-const products = [
-
-    {
-        id: "TESTE",
-        name: "PRODUTO TESTE",
-        category: "teste",
-        price: 0.01,
-        description: "Produto temporário para teste de checkout.",
-        images: [
-            "data:image/svg+xml;charset=UTF-8," +
-            encodeURIComponent(`
-                <svg xmlns="http://www.w3.org/2000/svg"
-                     width="600"
-                     height="800"
-                     viewBox="0 0 600 800">
-                    <rect width="600" height="800" fill="#f3f3f1"/>
-                    <text x="300"
-                          y="390"
-                          text-anchor="middle"
-                          font-family="Arial"
-                          font-size="28"
-                          letter-spacing="4"
-                          fill="#222">
-                        TESTE
-                    </text>
-                </svg>
-            `)
-        ],
-        newProduct: true,
-        sale: false,
-        sku: "TESTE001"
-    },
-
-    {
-        id: 1,
-        name: "Bag Oslo",
-        category: "bolsas",
-        price: 699,
-        description: "Bolsa em couro croco legítimo, com design marcante e acabamento premium.",
-        images: [
-            "assets/Oslo1.jpg,jpeg",
-            "assets/Oslo 2.jpg",
-            "assets/Oslo 3.jpg"
-        ],
-        newProduct: true,
-        sale: false,
-        sku: "BGSLO"
-    },
-
-    {
-        id: 2,
-        name: "Bag Vienna",
-        category: "bolsas",
-        price: 499,
-        description: "Bolsa de design sofisticado e acabamento premium.",
-        images: [
-            "assets/Vienna 1.jpg",
-            "assets/Vienna 2.jpg",
-            "assets/Vienna 3.jpg"
-        ],
-        newProduct: true,
-        sale: false,
-        sku: "VIENNA"
-    },
-
-    {
-        id: 3,
-        name: "Bag Milão",
-        category: "bolsas",
-        price: 499,
-        description: "Bolsa inspirada no estilo italiano, com acabamento elegante e contemporâneo.",
-        images: [
-            "assets/Milao 1.jpg",
-            "assets/Milao 2.jpg"
-        ],
-        newProduct: false,
-        sale: false,
-        sku: "BGMILA"
-    },
-
-    {
-        id: 4,
-        name: "Bag Cannes",
-        category: "bolsas",
-        price: 579,
-        description: "Bolsa com design marcante e acabamento premium.",
-        images: [
-            "assets/Cannes7.JPG.jpeg",
-            "assets/Cannes1.JPG.jpeg",
-            "assets/Cannes2.JPG.jpeg",
-            "assets/Cannes3.JPG.jpeg",
-            "assets/Cannes4.JPG.jpeg",
-            "assets/Cannes5.JPG.jpeg",
-            "assets/Cannes6.JPG.jpeg"
-        ],
-        newProduct: false,
-        sale: false,
-        sku: "BAGCNS"
-    },
-
-    {
-        id: 5,
-        name: "Bag Louvre",
-        category: "bolsas",
-        price: 519,
-        description: "Bolsa de linhas sofisticadas e acabamento premium.",
-        images: [
-            "assets/Louvre1.jpg",
-            "assets/Louvre 2.jpg",
-            "assets/Louvre 3.jpg"
-        ],
-        newProduct: false,
-        sale: false,
-        sku: "BAGLVR"
-    },
-
-    {
-        id: 6,
-        name: "Bag Atenas",
-        category: "bolsas",
-        price: 459,
-        description: "Bolsa de design contemporâneo e acabamento premium.",
-        images: [
-            "assets/Atena 1.jpg",
-            "assets/Atena 2.jpg",
-            "assets/Atena 3.jpg"
-        ],
-        newProduct: false,
-        sale: false
-    },
-
-    {
-        id: 7,
-        name: "Cinto MONTÊ",
-        category: "acessorios",
-        price: 229,
-        description: "Cinto MONTÊ com acabamento premium.",
-        images: [
-            "assets/Cinto 1.jpg",
-            "assets/Cinto 2.jpg"
-        ],
-        newProduct: false,
-        sale: false
-    },
-
-    {
-        id: 8,
-        name: "Bag Malta",
-        category: "bolsas",
-        price: 399,
-        oldPrice: 499,
-        description: "Bolsa com design versátil e acabamento premium.",
-        images: [
-            "assets/Malta 1.jpg",
-            "assets/Malta 2.jpg",
-            "assets/Malta 3.jpg"
-        ],
-        newProduct: false,
-        sale: true,
-        sku: "MALTAO"
-    },
-
-    {
-        id: 9,
-        name: "Bag Atenas",
-        category: "bolsas",
-        sku: "IRL01"
-    },
-
-    {
-        id: 10,
-        name: "Bag Austria",
-        category: "bolsas",
-        sku: "ASTRAO"
-    },
-
-    {
-        id: 11,
-        name: "Bag Berlim",
-        category: "bolsas",
-        sku: "BERLIM"
-    },
-
-    {
-        id: 12,
-        name: "Bag Charm",
-        category: "bolsas",
-        sku: "BAGCHR"
-    },
-
-    {
-        id: 13,
-        name: "Bag Coliseu",
-        category: "bolsas",
-        sku: "COLSUM"
-    },
-
-    {
-        id: 14,
-        name: "Bag Croácia",
-        category: "bolsas",
-        sku: "CRTIVA"
-    },
-
-    {
-        id: 15,
-        name: "Bag Holanda",
-        category: "bolsas",
-        sku: "NEDLND"
-    },
-
-    {
-        id: 16,
-        name: "Bag Hungria",
-        category: "bolsas",
-        sku: "BAGHNG"
-    },
-
-    {
-        id: 17,
-        name: "Bag Ibiza",
-        category: "bolsas",
-        sku: "IBIZA"
-    },
-
-    {
-        id: 18,
-        name: "Bag Instambul",
-        category: "bolsas",
-        sku: "INSTAM"
-    },
-
-    {
-        id: 19,
-        name: "Bag Irlanda",
-        category: "bolsas"
-    },
-
-    {
-        id: 20,
-        name: "Bag Londres",
-        category: "bolsas",
-        sku: "LONDON"
-    },
-
-    {
-        id: 21,
-        name: "Bag Louvre Baby",
-        category: "bolsas",
-        sku: "LVRBBY"
-    },
-
-    {
-        id: 22,
-        name: "Bag Oxford",
-        category: "bolsas",
-        sku: "OXFORD"
-    },
-
-    {
-        id: 23,
-        name: "Bag Paris",
-        category: "bolsas",
-        sku: "PARISO"
-    },
-
-    {
-        id: 24,
-        name: "Bag Porto Fino",
-        category: "bolsas",
-        sku: "PORTFIN"
-    },
-
-    {
-        id: 25,
-        name: "Bag Positano",
-        category: "bolsas",
-        sku: "PSTANO"
-    },
-
-    {
-        id: 26,
-        name: "Bag Saint-Tropez",
-        category: "bolsas",
-        sku: "SNTROP"
-    },
-
-    {
-        id: 27,
-        name: "Bag Suecia",
-        category: "bolsas",
-        sku: "SWESLD"
-    },
-
-    {
-        id: 28,
-        name: "Bag Suíça",
-        category: "bolsas",
-        sku: "SWZLND"
-    },
-
-    {
-        id: 29,
-        name: "Bag Valencia",
-        category: "bolsas",
-        sku: "VLNCA10"
-    },
-
-    {
-        id: 30,
-        name: "Bag Versailles",
-        category: "bolsas",
-        sku: "VERSLL"
-    },
-
-    {
-        id: 31,
-        name: "Bag Versailles Soft",
-        category: "bolsas",
-        sku: "VERSFT"
-    },
-
-    {
-        id: 32,
-        name: "Bag Zurique",
-        category: "bolsas",
-        sku: "ZURQUE"
+async function loadProductsFromDatabase() {
+    if (!supabaseClient) {
+        console.error("Supabase não carregado.");
+        return;
     }
 
-];
+    const { data, error } = await supabaseClient
+        .from("products")
+        .select("*, product_variants(*)")
+        .eq("active", true)
+        .order("created_at", { ascending: false });
+
+    if (error) {
+        console.error("Erro ao carregar produtos:", error);
+        return;
+    }
+
+    products = (data || []).map(product => ({
+        ...product,
+        price: Number(product.price || 0),
+        oldPrice: product.is_sale && product.sale_price
+            ? Number(product.price)
+            : null,
+        sale: !!product.is_sale,
+        newProduct: !!product.is_new,
+        images: Array.isArray(product.images) ? product.images : [],
+        variants: product.product_variants || [],
+        stock: (product.product_variants || [])
+            .reduce((total, variant) => total + Number(variant.stock || 0), 0)
+    }));
+
+    renderProducts();
+}
 
 /* =====================================================
    ESTADO
