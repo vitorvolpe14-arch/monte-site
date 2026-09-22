@@ -22,6 +22,37 @@ const INFINITEPAY_HANDLE =
     process.env.INFINITEPAY_HANDLE ||
     "monte-64839705-0z9";
 
+const SUPABASE_URL = process.env.SUPABASE_URL || "https://uvrhougaurupvkxmezwy.supabase.co";
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+async function supabaseRequest(path, options = {}) {
+    if (!SUPABASE_SERVICE_ROLE_KEY) {
+        throw new Error("SUPABASE_SERVICE_ROLE_KEY não configurada no backend.");
+    }
+
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+        ...options,
+        headers: {
+            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            "Content-Type": "application/json",
+            "Prefer": "return=representation",
+            ...(options.headers || {})
+        }
+    });
+
+    const text = await response.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+
+    if (!response.ok) {
+        throw new Error(`Supabase ${response.status}: ${typeof data === "string" ? data : JSON.stringify(data)}`);
+    }
+
+    return data;
+}
+
+
 
 /* =====================================================
    OLIST API V3
@@ -2377,6 +2408,41 @@ app.post(
             };
 
 
+            const subtotal = productItems.reduce(
+                (sum, item) => sum + Number(item.price) * Number(item.quantity), 0
+            );
+
+            const savedOrders = await supabaseRequest("orders", {
+                method: "POST",
+                body: JSON.stringify({
+                    order_nsu: orderNsu,
+                    customer_name: pendingOrder.customer.name,
+                    customer_email: pendingOrder.customer.email,
+                    customer_phone: pendingOrder.customer.phone,
+                    customer_address: pendingOrder.customer.address,
+                    subtotal: Number(subtotal.toFixed(2)),
+                    shipping: Number(shippingValue.toFixed(2)),
+                    total: Number((subtotal + shippingValue).toFixed(2)),
+                    status: "pending",
+                    items: productItems
+                })
+            });
+
+            const savedOrder = Array.isArray(savedOrders) ? savedOrders[0] : savedOrders;
+
+            await supabaseRequest("order_items", {
+                method: "POST",
+                body: JSON.stringify(productItems.map(item => ({
+                    order_id: savedOrder.id,
+                    product_id: item.id || null,
+                    sku: item.sku || null,
+                    product_name: item.name,
+                    quantity: item.quantity,
+                    unit_price: item.price,
+                    total_price: Number((item.price * item.quantity).toFixed(2))
+                })))
+            });
+
             savePendingOrder(
                 pendingOrder
             );
@@ -2897,113 +2963,53 @@ app.post(
                 "✅ Pagamento confirmado."
             );
 
-            console.log(
-                "📦 Enviando pedido para o Olist..."
+            const paidAmount = Number(
+                webhook.paid_amount ??
+                webhook.amount ??
+                order.total ??
+                0
             );
 
-            try {
-
-                const olistResult =
-                    await createOlistOrder(
-                        order
-                    );
-
-                order.olist_created =
-                    true;
-
-                order.olist_result =
-                    olistResult;
-
-                order.olist_created_at =
-                    new Date().toISOString();
-
-                processedPayments.add(
-                    orderNsu
-                );
-
-                console.log(
-                    "=========================================="
-                );
-
-                console.log(
-                    "✅ PEDIDO ENVIADO PARA O OLIST"
-                );
-
-                console.log(
-                    "🔑 Order NSU:",
-                    orderNsu
-                );
-
-                console.log(
-                    "💳 Transaction NSU:",
-                    transactionNsu
-                );
-
-                console.log(
-                    "📦 Resposta do Olist:",
-                    olistResult
-                );
-
-                console.log(
-                    "=========================================="
-                );
-
-            } catch (
-                olistError
-            ) {
-
-                console.error(
-                    "=========================================="
-                );
-
-                console.error(
-                    "❌ ERRO AO ENVIAR PEDIDO PARA O OLIST"
-                );
-
-                console.error(
-                    "Order NSU:",
-                    orderNsu
-                );
-
-                console.error(
-                    olistError
-                );
-
-                console.error(
-                    "=========================================="
-                );
-
-            }
-
-        } catch (
-            error
-        ) {
-
-            console.error(
-                "❌ ERRO NO WEBHOOK DA INFINITEPAY:"
+            const orderRows = await supabaseRequest(
+                `orders?order_nsu=eq.${encodeURIComponent(orderNsu)}`,
+                {
+                    method: "PATCH",
+                    body: JSON.stringify({
+                        status: "paid",
+                        transaction_nsu: transactionNsu || null,
+                        paid_amount: paidAmount,
+                        paid_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    })
+                }
             );
 
-            console.error(
-                error
+            const persisted = await supabaseRequest(
+                `orders?order_nsu=eq.${encodeURIComponent(orderNsu)}&select=id`,
+                { method: "GET" }
             );
 
-            /*
-             * Se o erro ocorrer antes da resposta HTTP,
-             * informamos erro ao remetente.
-             */
-
-            if (!res.headersSent) {
-
-                return res.status(500).json({
-
-                    success: false,
-
-                    message:
-                        "Erro interno no webhook."
-
+            if (Array.isArray(persisted) && persisted[0]?.id && transactionNsu) {
+                await supabaseRequest("payments", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        order_id: persisted[0].id,
+                        order_nsu: orderNsu,
+                        transaction_nsu: transactionNsu,
+                        invoice_slug: webhook.invoice_slug || null,
+                        amount: order.total || paidAmount,
+                        paid_amount: paidAmount,
+                        installments: webhook.installments || null,
+                        capture_method: webhook.capture_method || null,
+                        receipt_url: webhook.receipt_url || null,
+                        status: "paid",
+                        webhook_data: webhook
+                    })
                 });
-
             }
+
+            processedPayments.add(orderNsu);
+            console.log("✅ Pagamento salvo no Supabase. Olist não é acionado.");            }
 
         }
 
