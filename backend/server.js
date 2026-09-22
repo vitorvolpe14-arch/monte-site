@@ -199,3 +199,32 @@ app.use(
         )
     )
 );
+
+/* =====================================================
+   PÁGINA DE SUCESSO
+===================================================== */
+app.get(
+    "/pagamento-sucesso",
+    (req, res) => {
+        res.sendFile(
+            path.join(
+                __dirname,
+                "..",
+                "pagamento-sucesso.html"
+            )
+        );
+    }
+);
+
+/* =====================================================
+   INICIAR SERVIDOR
+===================================================== */
+app.listen(
+    PORT,
+    () => {
+        console.log(`🚀 Backend MONTÊ rodando na porta ${PORT}`);
+        console.log(`💳 InfinitePay configurada para: ${INFINITEPAY_HANDLE}`);
+        console.log(`🔗 Olist API V3: ${OLIST_API_BASE}`);
+        console.log(`🔐 Olist OAuth callback: ${OLIST_REDIRECT_URI}`);
+    }
+);
