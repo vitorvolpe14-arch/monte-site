@@ -165,6 +165,57 @@ app.get("/api/admin/orders",requireAdmin,async(req,res)=>{try{const d=await supa
 
 
 
+
+app.patch("/api/admin/orders/:id/status",requireAdmin,async(req,res)=>{
+    try{
+        const id=encodeURIComponent(req.params.id);
+        const status=safeString(req.body?.status).toLowerCase();
+        const allowed=["pending","paid","processing","shipped","delivered"];
+        if(!allowed.includes(status)) return res.status(400).json({success:false,message:"Status inválido."});
+        const patch={status,updated_at:new Date().toISOString()};
+        if(status==="processing") patch.processing_at=new Date().toISOString();
+        if(status==="shipped"){
+            patch.shipping_carrier=safeString(req.body?.shipping_carrier)||null;
+            patch.tracking_code=safeString(req.body?.tracking_code)||null;
+            patch.tracking_url=safeString(req.body?.tracking_url)||null;
+            if(!patch.tracking_code) return res.status(400).json({success:false,message:"Informe o código de rastreio para marcar como enviado."});
+            patch.shipped_at=new Date().toISOString();
+        }
+        if(status==="delivered") patch.delivered_at=new Date().toISOString();
+        const d=await supabaseRequest(`orders?id=eq.${id}`,{method:"PATCH",body:JSON.stringify(patch)});
+        if(!Array.isArray(d)||!d[0]) return res.status(404).json({success:false,message:"Pedido não encontrado."});
+        return res.json({success:true,order:d[0]});
+    }catch(e){console.error("Admin order status PATCH:",e);return res.status(500).json({success:false,message:"Não foi possível atualizar o pedido."})}
+});
+
+app.get("/api/admin/stock/movements",requireAdmin,async(req,res)=>{
+    try{
+        const d=await supabaseRequest("inventory_movements?select=*,product_variants(id,color,sku,product_id,products(name))&order=created_at.desc&limit=100");
+        return res.json({success:true,movements:d||[]});
+    }catch(e){console.error("Admin stock movements GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar o histórico de estoque."})}
+});
+
+app.post("/api/admin/stock/adjust",requireAdmin,async(req,res)=>{
+    try{
+        const variantId=safeString(req.body?.variant_id);
+        const delta=Number(req.body?.delta);
+        const type=safeString(req.body?.movement_type)||"adjustment";
+        const reason=safeString(req.body?.reason);
+        if(!variantId||!Number.isInteger(delta)||delta===0) return res.status(400).json({success:false,message:"Informe uma variação e uma quantidade inteira diferente de zero."});
+        if(!["restock","adjustment","correction"].includes(type)) return res.status(400).json({success:false,message:"Tipo de movimentação inválido."});
+        const result=await supabaseRequest("rpc/adjust_product_variant_stock",{
+            method:"POST",
+            body:JSON.stringify({p_variant_id:variantId,p_delta:delta,p_movement_type:type,p_reason:reason,p_created_by:req.adminSession.email})
+        });
+        return res.json({success:true,variant:Array.isArray(result)?result[0]:result});
+    }catch(e){
+        console.error("Admin stock adjustment POST:",e);
+        const msg=String(e.message||"");
+        if(msg.includes("Estoque insuficiente")) return res.status(400).json({success:false,message:"Estoque insuficiente para este ajuste."});
+        return res.status(500).json({success:false,message:"Não foi possível ajustar o estoque."});
+    }
+});
+
 /* =====================================================
    ARQUIVOS DO SITE
 ===================================================== */
