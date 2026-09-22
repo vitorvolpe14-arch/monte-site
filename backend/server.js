@@ -9,6 +9,7 @@ const PORT = process.env.PORT || 3000;
 
 /* =====================================================
    CONFIGURAÇÕES
+   Fluxo atual: MONTÊ → InfinitePay → Supabase → painel admin.
 ===================================================== */
 
 const SITE_URL =
