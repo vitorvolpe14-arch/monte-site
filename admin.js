@@ -14,6 +14,7 @@ async function init(){
     if(session) await enterApp(session); else showLogin();
   });
   $("loginForm").addEventListener("submit",login);
+  $("forgotPassword").addEventListener("click",forgotPassword);
   $("logoutButton").addEventListener("click",()=>db.auth.signOut());
   document.querySelectorAll(".nav-button").forEach(b=>b.onclick=()=>showSection(b.dataset.section));
   document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>showSection(b.dataset.go));
@@ -33,6 +34,24 @@ async function login(e){
   if(error){$("loginError").textContent=error.message;return}
   if(data.session) await enterApp(data.session);
 }
+async function forgotPassword(){
+  const email=$("loginEmail").value.trim();
+  $("loginError").textContent="";
+  if(!email){
+    $("loginError").textContent="Informe seu e-mail para receber o link de recuperação.";
+    $("loginEmail").focus();
+    return;
+  }
+  const {error}=await db.auth.resetPasswordForEmail(email,{
+    redirectTo:window.location.origin+"/admin.html"
+  });
+  if(error){
+    $("loginError").textContent=error.message;
+    return;
+  }
+  $("loginError").textContent="Enviamos um link de recuperação para seu e-mail.";
+}
+
 async function enterApp(session){
   const {data:{user}}=await db.auth.getUser();
   const role=user?.app_metadata?.role;
