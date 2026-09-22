@@ -2312,6 +2312,44 @@ app.post(
 
             }
 
+            /* =================================================
+               VALIDA VARIAÇÕES E ESTOQUE NO SUPABASE
+            ================================================= */
+            for (const item of productItems) {
+                if (!item.id || !item.variant_id) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Produto \\"" + item.description + "\\" precisa ter uma variação/cor selecionada."
+                    });
+                }
+
+                const variants = await supabaseRequest(
+                    "product_variants?id=eq." + encodeURIComponent(item.variant_id) +
+                    "&product_id=eq." + encodeURIComponent(item.id) +
+                    "&active=eq.true&select=id,color,sku,stock",
+                    { method: "GET" }
+                );
+
+                const variant = Array.isArray(variants) ? variants[0] : null;
+                if (!variant) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "A variação selecionada não está disponível."
+                    });
+                }
+
+                if (Number(variant.stock || 0) < Number(item.quantity || 0)) {
+                    return res.status(409).json({
+                        success: false,
+                        message: "Estoque insuficiente para " + item.description +
+                            (item.variant_color ? " (" + item.variant_color + ")" : "") + "."
+                    });
+                }
+
+                item.variant_color = variant.color;
+                item.variant_sku = variant.sku || item.sku || null;
+            }
+
 
             /* =================================================
                ORDER NSU
@@ -2435,7 +2473,9 @@ app.post(
                 body: JSON.stringify(productItems.map(item => ({
                     order_id: savedOrder.id,
                     product_id: item.id || null,
-                    sku: item.sku || null,
+                    variant_id: item.variant_id || null,
+                    variant_color: item.variant_color || null,
+                    sku: item.variant_sku || item.sku || null,
                     product_name: item.name,
                     quantity: item.quantity,
                     unit_price: item.price,
@@ -2988,6 +3028,14 @@ app.post(
                 `orders?order_nsu=eq.${encodeURIComponent(orderNsu)}&select=id`,
                 { method: "GET" }
             );
+
+            if (Array.isArray(persisted) && persisted[0]?.id) {
+                const stockResult = await supabaseRequest("rpc/decrement_order_stock", {
+                    method: "POST",
+                    body: JSON.stringify({ p_order_id: persisted[0].id })
+                });
+                console.log("📦 Baixa de estoque:", stockResult);
+            }
 
             if (Array.isArray(persisted) && persisted[0]?.id && transactionNsu) {
                 await supabaseRequest("payments", {
