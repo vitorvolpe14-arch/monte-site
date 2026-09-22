@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compra concluída — MONTÊ</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:#111;font-family:"DM Sans",Arial,sans-serif}
+.page{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:40px 20px}
+.card{width:min(680px,100%);border:1px solid #e8e8e8;padding:44px;background:#fff}
+.logo{font-weight:800;letter-spacing:5px;text-align:center;font-size:25px;margin-bottom:42px}
+.check{width:52px;height:52px;border:1px solid #111;border-radius:50%;display:grid;place-items:center;margin:0 auto 24px;font-size:25px}
+h1{text-align:center;font-size:30px;font-weight:500;margin:0 0 10px}
+.subtitle{text-align:center;color:#666;margin:0 auto 32px;line-height:1.6}
+.order{background:#f7f7f7;padding:22px;margin:24px 0}
+.row{display:flex;justify-content:space-between;gap:20px;padding:9px 0;border-bottom:1px solid #e4e4e4}
+.row:last-child{border-bottom:0}
+.label{color:#666}
+.value{font-weight:600;text-align:right}
+.items{margin:28px 0}
+.item{display:flex;justify-content:space-between;gap:20px;padding:13px 0;border-bottom:1px solid #eee}
+.item-name{font-weight:500}.item-meta{color:#777;font-size:13px;margin-top:4px}
+.total{display:flex;justify-content:space-between;font-size:18px;font-weight:600;padding-top:20px}
+.receipt{display:block;text-align:center;border:1px solid #111;color:#111;text-decoration:none;padding:14px;margin-top:28px}
+.back{display:block;text-align:center;color:#555;text-decoration:none;margin-top:18px}
+.error{text-align:center;color:#555;line-height:1.6}
+@media(max-width:600px){.card{padding:30px 20px}.page{padding:20px 12px}h1{font-size:25px}.row,.item{font-size:14px}}
+</style>
+</head>
+<body>
+<main class="page">
+<section class="card">
+<div class="logo">MONTÊ</div>
+<div id="content">
+<div class="check">✓</div>
+<h1>Compra concluída</h1>
+<p class="subtitle">Seu pagamento foi confirmado. Estamos preparando seu pedido.</p>
+<div id="orderBox" class="order">Carregando pedido...</div>
+<div id="items" class="items"></div>
+<div id="receipt"></div>
+<a class="back" href="/">Voltar para a MONTÊ</a>
+</div>
+</section>
+</main>
+<script>
+const money=v=>new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(v||0));
+const params=new URLSearchParams(location.search);
+const orderNsu=params.get("order_nsu");
+const transactionNsu=params.get("transaction_nsu");
+async function loadOrder(){
+  const content=document.getElementById("content");
+  if(!orderNsu||!transactionNsu){
+    content.innerHTML='<div class="error"><h1>Pagamento recebido</h1><p>Não foi possível localizar os dados do pedido nesta página. Se o pagamento foi concluído, seu pedido continua sendo processado.</p><a class="back" href="/">Voltar para a MONTÊ</a></div>';
+    return;
+  }
+  try{
+    const response=await fetch('/api/pedido-status?order_nsu='+encodeURIComponent(orderNsu)+'&transaction_nsu='+encodeURIComponent(transactionNsu));
+    const data=await response.json();
+    if(!response.ok||!data.success) throw new Error(data.message||'Pedido não encontrado.');
+    const o=data.order;
+    document.getElementById("orderBox").innerHTML='<div class="row"><span class="label">Pedido</span><span class="value">'+o.order_nsu+'</span></div><div class="row"><span class="label">Status</span><span class="value">PAGO</span></div><div class="row"><span class="label">Frete</span><span class="value">'+money(o.shipping)+'</span></div><div class="total"><span>Total</span><span>'+money(o.total)+'</span></div>';
+    document.getElementById("items").innerHTML=(o.items||[]).map(i=>'<div class="item"><div><div class="item-name">'+escapeHtml(i.product_name)+'</div><div class="item-meta">'+(i.variant_color?escapeHtml(i.variant_color)+' · ':'')+'Qtd. '+i.quantity+(i.sku?' · SKU '+escapeHtml(i.sku):'')+'</div></div><strong>'+money(i.total_price)+'</strong></div>').join('');
+    if(o.receipt_url) document.getElementById("receipt").innerHTML='<a class="receipt" href="'+escapeAttr(o.receipt_url)+'" target="_blank" rel="noopener noreferrer">VER COMPROVANTE</a>';
+  }catch(error){
+    document.getElementById("orderBox").innerHTML='<div class="error">Pagamento confirmado, mas ainda estamos carregando os detalhes do pedido. Aguarde alguns segundos e atualize a página.</div>';
+  }
+}
+function escapeHtml(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m]));}
+function escapeAttr(v){return String(v??"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+loadOrder();
+</script>
+</body>
+</html>

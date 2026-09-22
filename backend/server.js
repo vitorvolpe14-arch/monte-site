@@ -2910,281 +2910,297 @@ app.post(
    WEBHOOK DE PAGAMENTO
 ===================================================== */
 
+async function verifyInfinitePayPayment({ orderNsu, transactionNsu, invoiceSlug, expectedAmount }) {
+    const response = await fetch("https://api.checkout.infinitepay.io/payment_check", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        },
+        body: JSON.stringify({
+            handle: INFINITEPAY_HANDLE,
+            order_nsu: orderNsu,
+            transaction_nsu: transactionNsu,
+            slug: invoiceSlug
+        })
+    });
+
+    const responseText = await response.text();
+    let data;
+    try {
+        data = responseText ? JSON.parse(responseText) : {};
+    } catch {
+        data = { raw: responseText };
+    }
+
+    if (!response.ok) {
+        throw new Error(`InfinitePay payment_check ${response.status}: ${JSON.stringify(data)}`);
+    }
+
+    if (data.success !== true || data.paid !== true) {
+        return { verified: false, data };
+    }
+
+    const returnedAmount = Number(data.amount);
+    const expectedCents = Math.round(Number(expectedAmount || 0) * 100);
+
+    if (!Number.isFinite(returnedAmount) || returnedAmount !== expectedCents) {
+        throw new Error(
+            `Valor do pagamento divergente. Esperado: ${expectedCents} centavos; recebido: ${returnedAmount} centavos.`
+        );
+    }
+
+    return { verified: true, data };
+}
+
 app.post(
     "/webhook-infinitepay",
     async (req, res) => {
-
         try {
+            const webhook = req.body || {};
+            const orderNsu = safeString(webhook.order_nsu);
+            const transactionNsu = safeString(webhook.transaction_nsu);
+            const invoiceSlug = safeString(webhook.invoice_slug || webhook.slug);
 
-            console.log(
-                "💳 Webhook da InfinitePay recebido."
-            );
+            console.log("💳 Webhook da InfinitePay recebido:", orderNsu);
 
-            console.log(
-                "📩 Dados recebidos:",
-                req.body
-            );
-
-            const webhook =
-                req.body || {};
-
-            const orderNsu =
-                safeString(
-                    webhook.order_nsu
-                );
-
-            const transactionNsu =
-                safeString(
-                    webhook.transaction_nsu
-                );
-
-            if (!orderNsu) {
-
-                console.error(
-                    "❌ Webhook recebido sem order_nsu."
-                );
-
+            if (!orderNsu || !transactionNsu || !invoiceSlug) {
                 return res.status(400).json({
                     success: false,
-                    message: "order_nsu não informado."
+                    message: "Webhook sem order_nsu, transaction_nsu ou invoice_slug."
                 });
-
             }
 
-            console.log(
-                "🔑 Order NSU:",
-                orderNsu
+            const persistedOrders = await supabaseRequest(
+                `orders?order_nsu=eq.${encodeURIComponent(orderNsu)}&select=*`,
+                { method: "GET" }
             );
+            const order = Array.isArray(persistedOrders) ? persistedOrders[0] : null;
 
-            console.log(
-                "💳 Transaction NSU:",
-                transactionNsu || "não informado"
-            );
+            if (!order) {
+                console.error("❌ Pedido não encontrado:", orderNsu);
+                return res.status(400).json({
+                    success: false,
+                    message: "Pedido não encontrado."
+                });
+            }
 
-            /*
-             * Respondemos à InfinitePay somente depois
-             * de validar que recebemos um order_nsu.
-             */
+            // Webhook repetido do mesmo pagamento: já está conciliado.
+            if (
+                order.status === "paid" &&
+                order.transaction_nsu === transactionNsu &&
+                order.stock_decremented === true
+            ) {
+                processedPayments.add(orderNsu);
+                return res.status(200).json({ success: true, already_processed: true });
+            }
 
-            res.status(200).json({
-                success: true
+            const status = safeString(
+                webhook.status ||
+                webhook.payment_status ||
+                webhook.current_status ||
+                webhook.transaction_status
+            ).toLowerCase();
+
+            const failedStatuses = [
+                "failed", "failure", "cancelled", "canceled",
+                "refused", "rejected", "denied", "expired"
+            ];
+
+            if (failedStatuses.includes(status)) {
+                console.log("ℹ️ Pagamento não aprovado:", orderNsu, status);
+                return res.status(200).json({
+                    success: true,
+                    paid: false,
+                    message: "Pagamento não aprovado."
+                });
+            }
+
+            // A InfinitePay recomenda consultar payment_check para confirmar
+            // que o order_nsu/transaction_nsu/slug correspondem a um pagamento pago.
+            const verification = await verifyInfinitePayPayment({
+                orderNsu,
+                transactionNsu,
+                invoiceSlug,
+                expectedAmount: order.total
             });
 
-            /*
-             * Evita processar o mesmo pagamento duas vezes.
-             */
-
-            if (
-                processedPayments.has(
-                    orderNsu
-                )
-            ) {
-
-                console.log(
-                    "ℹ️ Pagamento já processado:",
-                    orderNsu
-                );
-
-                return;
+            if (!verification.verified) {
+                console.warn("⏳ Pagamento ainda não confirmado:", orderNsu);
+                return res.status(400).json({
+                    success: false,
+                    message: "Pagamento ainda não confirmado pela InfinitePay."
+                });
             }
 
-            /*
-             * Recupera o pedido salvo quando o checkout
-             * foi criado.
-             */
+            const payment = verification.data;
+            const paidAmount = Number(payment.paid_amount ?? webhook.paid_amount ?? 0);
 
-            let order =
-                getPendingOrder(
-                    orderNsu
-                );
+            // Baixa atômica e idempotente. A função bloqueia o pedido e usa
+            // stock_decremented para impedir duas baixas do mesmo pedido.
+            const stockResult = await supabaseRequest("rpc/decrement_order_stock", {
+                method: "POST",
+                body: JSON.stringify({ p_order_id: order.id })
+            });
 
-            /*
-             * O pedido também é persistido no Supabase antes do pagamento.
-             * Se o Render reiniciar entre o checkout e o webhook, a memória
-             * local pode ser perdida; nesse caso recuperamos o pedido do banco.
-             */
-            if (!order) {
-                const persistedOrders = await supabaseRequest(
-                    `orders?order_nsu=eq.${encodeURIComponent(orderNsu)}&select=*`,
-                    { method: "GET" }
-                );
+            console.log("📦 Baixa de estoque:", stockResult);
 
-                const persistedOrder = Array.isArray(persistedOrders)
-                    ? persistedOrders[0]
-                    : null;
+            // Persiste o pagamento. Em caso de webhook simultâneo, a restrição
+            // UNIQUE de transaction_nsu evita duplicidade.
+            const existingPayments = await supabaseRequest(
+                `payments?transaction_nsu=eq.${encodeURIComponent(transactionNsu)}&select=id`,
+                { method: "GET" }
+            );
 
-                if (persistedOrder) {
-                    order = {
-                        order_nsu: persistedOrder.order_nsu,
-                        total: Number(persistedOrder.total || 0),
-                        items: persistedOrder.items || [],
-                        customer: {
-                            name: persistedOrder.customer_name || "",
-                            email: persistedOrder.customer_email || "",
-                            phone: persistedOrder.customer_phone || "",
-                            cpf: persistedOrder.customer_cpf || "",
-                            address: persistedOrder.customer_address || null
-                        },
-                        created_at: persistedOrder.created_at
-                            ? new Date(persistedOrder.created_at).getTime()
-                            : Date.now(),
-                        payment_confirmed: false,
-                        olist_created: false
-                    };
-
-                    console.log(
-                        "♻️ Pedido recuperado do Supabase:",
-                        orderNsu
-                    );
-                } else {
-                    console.error(
-                        "❌ Pedido não encontrado no Supabase:",
-                        orderNsu
-                    );
-                    return;
+            if (!Array.isArray(existingPayments) || !existingPayments[0]?.id) {
+                try {
+                    await supabaseRequest("payments", {
+                        method: "POST",
+                        body: JSON.stringify({
+                            order_id: order.id,
+                            order_nsu: orderNsu,
+                            transaction_nsu: transactionNsu,
+                            invoice_slug: invoiceSlug,
+                            amount: Number(payment.amount || 0) / 100,
+                            paid_amount: Number.isFinite(paidAmount)
+                                ? paidAmount / 100
+                                : null,
+                            installments: payment.installments || webhook.installments || null,
+                            capture_method: payment.capture_method || webhook.capture_method || null,
+                            receipt_url: webhook.receipt_url || null,
+                            status: "paid",
+                            webhook_data: {
+                                webhook,
+                                payment_check: payment
+                            }
+                        })
+                    });
+                } catch (paymentError) {
+                    // Se outro webhook inseriu o mesmo transaction_nsu em paralelo,
+                    // a restrição UNIQUE torna a operação idempotente.
+                    if (!String(paymentError.message || "").includes("409")) {
+                        throw paymentError;
+                    }
                 }
             }
 
-            /*
-             * Verifica o status enviado pela InfinitePay.
-             */
-
-            const status =
-                safeString(
-                    webhook.status ||
-                    webhook.payment_status ||
-                    webhook.current_status ||
-                    webhook.transaction_status
-                ).toLowerCase();
-
-            console.log(
-                "💰 Status recebido:",
-                status || "não informado"
-            );
-
-            /*
-             * Status que NÃO devem gerar pedido no Olist.
-             */
-
-            const failedStatuses = [
-
-                "failed",
-                "failure",
-                "cancelled",
-                "canceled",
-                "refused",
-                "rejected",
-                "denied",
-                "expired"
-
-            ];
-
-            if (
-                failedStatuses.includes(
-                    status
-                )
-            ) {
-
-                console.log(
-                    "❌ Pagamento não aprovado."
-                );
-
-                console.log(
-                    "🚫 Pedido não será enviado ao Olist."
-                );
-
-                return;
-            }
-
-            /*
-             * Marca o pedido como pago.
-             */
-
-            order.payment_confirmed =
-                true;
-
-            order.transaction_nsu =
-                transactionNsu;
-
-            order.payment_data =
-                webhook;
-
-            console.log(
-                "✅ Pagamento confirmado."
-            );
-
-            const paidAmount = Number(
-                webhook.paid_amount ??
-                webhook.amount ??
-                order.total ??
-                0
-            );
-
-            const orderRows = await supabaseRequest(
+            await supabaseRequest(
                 `orders?order_nsu=eq.${encodeURIComponent(orderNsu)}`,
                 {
                     method: "PATCH",
                     body: JSON.stringify({
                         status: "paid",
-                        transaction_nsu: transactionNsu || null,
-                        paid_amount: paidAmount,
+                        invoice_slug: invoiceSlug,
+                        transaction_nsu: transactionNsu,
+                        receipt_url: webhook.receipt_url || null,
+                        installments: payment.installments || webhook.installments || null,
+                        capture_method: payment.capture_method || webhook.capture_method || null,
+                        paid_amount: Number.isFinite(paidAmount)
+                            ? paidAmount / 100
+                            : null,
                         paid_at: new Date().toISOString(),
                         updated_at: new Date().toISOString()
                     })
                 }
             );
 
-            const persisted = await supabaseRequest(
-                `orders?order_nsu=eq.${encodeURIComponent(orderNsu)}&select=id`,
-                { method: "GET" }
-            );
-
-            if (Array.isArray(persisted) && persisted[0]?.id) {
-                const stockResult = await supabaseRequest("rpc/decrement_order_stock", {
-                    method: "POST",
-                    body: JSON.stringify({ p_order_id: persisted[0].id })
-                });
-                console.log("📦 Baixa de estoque:", stockResult);
-            }
-
-            if (Array.isArray(persisted) && persisted[0]?.id && transactionNsu) {
-                await supabaseRequest("payments", {
-                    method: "POST",
-                    body: JSON.stringify({
-                        order_id: persisted[0].id,
-                        order_nsu: orderNsu,
-                        transaction_nsu: transactionNsu,
-                        invoice_slug: webhook.invoice_slug || null,
-                        amount: order.total || paidAmount,
-                        paid_amount: paidAmount,
-                        installments: webhook.installments || null,
-                        capture_method: webhook.capture_method || null,
-                        receipt_url: webhook.receipt_url || null,
-                        status: "paid",
-                        webhook_data: webhook
-                    })
-                });
-            }
-
             processedPayments.add(orderNsu);
-            console.log("✅ Pagamento salvo no Supabase. Olist não é acionado.");
+
+            console.log("✅ Pagamento confirmado, estoque baixado e pedido conciliado:", orderNsu);
+
+            return res.status(200).json({
+                success: true,
+                paid: true,
+                order_nsu: orderNsu
+            });
 
         } catch (error) {
-
             console.error("❌ ERRO NO WEBHOOK DA INFINITEPAY:", error);
 
-            if (!res.headersSent) {
-                return res.status(500).json({
-                    success: false,
-                    message: "Erro interno no webhook."
-                });
-            }
+            return res.status(500).json({
+                success: false,
+                message: "Erro interno no processamento do pagamento."
+            });
         }
-
     }
 );
+
+/* =====================================================
+   STATUS DO PEDIDO PARA A PÁGINA DE SUCESSO
+===================================================== */
+app.get("/api/pedido-status", async (req, res) => {
+    try {
+        const orderNsu = safeString(req.query.order_nsu);
+        const transactionNsu = safeString(req.query.transaction_nsu);
+
+        if (!orderNsu || !transactionNsu) {
+            return res.status(400).json({
+                success: false,
+                message: "Identificadores do pedido não informados."
+            });
+        }
+
+        const rows = await supabaseRequest(
+            `orders?order_nsu=eq.${encodeURIComponent(orderNsu)}&transaction_nsu=eq.${encodeURIComponent(transactionNsu)}&select=id,order_nsu,status,total,shipping,receipt_url,created_at,paid_at,order_items(product_name,variant_color,sku,quantity,unit_price,total_price)`,
+            { method: "GET" }
+        );
+
+        const order = Array.isArray(rows) ? rows[0] : null;
+
+        if (!order || order.status !== "paid") {
+            return res.status(404).json({
+                success: false,
+                message: "Pedido pago não encontrado."
+            });
+        }
+
+        return res.json({
+            success: true,
+            order: {
+                order_nsu: order.order_nsu,
+                status: order.status,
+                total: Number(order.total || 0),
+                shipping: Number(order.shipping || 0),
+                receipt_url: order.receipt_url || null,
+                created_at: order.created_at,
+                paid_at: order.paid_at,
+                items: (order.order_items || []).map(item => ({
+                    product_name: item.product_name,
+                    variant_color: item.variant_color,
+                    sku: item.sku,
+                    quantity: Number(item.quantity || 0),
+                    unit_price: Number(item.unit_price || 0),
+                    total_price: Number(item.total_price || 0)
+                }))
+            }
+        });
+    } catch (error) {
+        console.error("❌ Erro ao consultar pedido:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Não foi possível consultar o pedido."
+        });
+    }
+});
+
 /* =====================================================
    PÁGINA DE SUCESSO
+===================================================== */
+app.get(
+    "/pagamento-sucesso",
+    (req, res) => {
+        res.sendFile(
+            path.join(
+                __dirname,
+                "..",
+                "pagamento-sucesso.html"
+            )
+        );
+    }
+);
+
+
+
 ===================================================== */
 app.get(
     "/pagamento-sucesso",
