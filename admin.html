@@ -14,14 +14,9 @@
     <h1>Painel de gestão</h1>
     <p>Entre para administrar produtos, estoque e pedidos.</p>
     <div id="loginPanel">
-      <form id="loginForm">
-        <label>E-mail<input id="loginEmail" type="email" autocomplete="email" required></label>
-        <label>Senha<input id="loginPassword" type="password" autocomplete="current-password" required></label>
-        <button type="submit">ENTRAR</button>
-        <button type="button" id="forgotPassword" class="text-button">ESQUECI MINHA SENHA</button>
-        <button type="button" id="showSignup" class="text-button">CRIAR CONTA</button>
-        <div id="loginError" class="error"></div>
-      </form>
+      <div id="loginPanel"><form id="loginForm"><label>E-mail<input id="loginEmail" type="email" autocomplete="email" required></label><label>Senha<input id="loginPassword" type="password" autocomplete="current-password" required></label><button type="submit">ENTRAR</button><button type="button" id="forgotPassword" class="text-button">ESQUECI MINHA SENHA</button><button type="button" id="showSignup" class="text-button">CRIAR CONTA</button><div id="loginError" class="error"></div></form></div>
+<div id="signupPanel" class="auth-panel hidden"><p class="eyebrow">NOVO ACESSO</p><h2>Criar conta</h2><p>Crie seu usuário de acesso. Depois, um administrador precisa liberar o acesso ao painel.</p><form id="signupForm"><label>E-mail<input id="signupEmail" type="email" autocomplete="email" required></label><label>Senha<input id="signupPassword" type="password" autocomplete="new-password" minlength="6" required></label><label>Confirmar senha<input id="signupPasswordConfirm" type="password" autocomplete="new-password" minlength="6" required></label><button type="submit">CRIAR CONTA</button><button type="button" id="backToLogin" class="text-button">VOLTAR PARA ENTRAR</button><div id="signupMessage" class="message"></div></form></div>
+<div id="resetPanel" class="auth-panel hidden"><p class="eyebrow">RECUPERAÇÃO DE ACESSO</p><h2>Nova senha</h2><p>Defina uma nova senha para sua conta.</p><form id="resetForm"><label>Nova senha<input id="resetPassword" type="password" autocomplete="new-password" minlength="6" required></label><label>Confirmar nova senha<input id="resetPasswordConfirm" type="password" autocomplete="new-password" minlength="6" required></label><button type="submit">SALVAR NOVA SENHA</button><div id="resetMessage" class="message"></div></form></div>
     </div>
 
     <div id="signupPanel" class="auth-panel hidden">

@@ -10,25 +10,28 @@ document.addEventListener("DOMContentLoaded",init);
 
 async function init(){
   const {data:{session}}=await db.auth.getSession();
-  if(session) await enterApp(session);
-  db.auth.onAuthStateChange(async(_event,session)=>{
+  const recovery=window.location.hash.includes("type=recovery");
+  if(session && !recovery) await enterApp(session);
+  if(recovery) showResetPanel();
+  db.auth.onAuthStateChange(async(event,session)=>{
+    if(event==="PASSWORD_RECOVERY"){showResetPanel();return}
     if(session) await enterApp(session); else showLogin();
   });
-  $("loginForm").addEventListener("submit",login);
-  $("forgotPassword").addEventListener("click",forgotPassword);
+  $("loginForm").addEventListener("submit",login);$("forgotPassword").addEventListener("click",forgotPassword);
+  $("showSignup").addEventListener("click",showSignup);$("backToLogin").addEventListener("click",showLogin);
+  $("signupForm").addEventListener("submit",signup);$("resetForm").addEventListener("submit",resetPassword);
   $("logoutButton").addEventListener("click",()=>db.auth.signOut());
   document.querySelectorAll(".nav-button").forEach(b=>b.onclick=()=>showSection(b.dataset.section));
   document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>showSection(b.dataset.go));
-  $("newProductButton").onclick=()=>openProduct();
-  $("closeModal").onclick=closeProduct;
-  $("cancelProduct").onclick=closeProduct;
-  $("addVariant").onclick=()=>addVariant();
-  $("productForm").onsubmit=saveProduct;
-  $("productSearch").oninput=renderProducts;
-  $("refreshOrders").onclick=loadOrders;
+  $("newProductButton").onclick=()=>openProduct();$("closeModal").onclick=closeProduct;$("cancelProduct").onclick=closeProduct;
+  $("addVariant").onclick=()=>addVariant();$("productForm").onsubmit=saveProduct;$("productSearch").oninput=renderProducts;$("refreshOrders").onclick=loadOrders;
 }
 
-function showLogin(){$("loginView").classList.remove("hidden");$("appView").classList.add("hidden")}
+function showLogin(){$("loginView").classList.remove("hidden");$("appView").classList.add("hidden");$("loginPanel").classList.remove("hidden");$("signupPanel").classList.add("hidden");$("resetPanel").classList.add("hidden")}
+function showSignup(){$("loginPanel").classList.add("hidden");$("signupPanel").classList.remove("hidden");$("resetPanel").classList.add("hidden");$("signupMessage").textContent=""}
+function showResetPanel(){$("loginView").classList.remove("hidden");$("appView").classList.add("hidden");$("loginPanel").classList.add("hidden");$("signupPanel").classList.add("hidden");$("resetPanel").classList.remove("hidden");$("resetMessage").textContent=""}
+async function signup(e){e.preventDefault();$("signupMessage").textContent="";const email=$("signupEmail").value.trim(),password=$("signupPassword").value,confirm=$("signupPasswordConfirm").value;if(password!==confirm){$("signupMessage").textContent="As senhas não conferem.";return}const {data,error}=await db.auth.signUp({email,password});if(error){$("signupMessage").textContent=error.message;return}$("signupMessage").textContent=data.session?"Conta criada. O acesso administrativo ainda precisa ser liberado.":"Conta criada. Verifique seu e-mail para confirmar o cadastro; depois, o acesso administrativo precisa ser liberado."}
+async function resetPassword(e){e.preventDefault();$("resetMessage").textContent="";const password=$("resetPassword").value,confirm=$("resetPasswordConfirm").value;if(password!==confirm){$("resetMessage").textContent="As senhas não conferem.";return}const {error}=await db.auth.updateUser({password});if(error){$("resetMessage").textContent=error.message;return}$("resetMessage").textContent="Senha atualizada. Você já pode entrar novamente.";setTimeout(()=>window.location.href=ADMIN_URL,900)}
 async function login(e){
   e.preventDefault();$("loginError").textContent="";
   const {data,error}=await db.auth.signInWithPassword({email:$("loginEmail").value.trim(),password:$("loginPassword").value});
