@@ -2319,7 +2319,7 @@ app.post(
                 if (!item.id || !item.variant_id) {
                     return res.status(400).json({
                         success: false,
-                        message: "Produto \\"" + item.description + "\\" precisa ter uma variação/cor selecionada."
+                        message: "Produto precisa ter uma variação/cor selecionada."
                     });
                 }
 
