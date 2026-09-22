@@ -1616,9 +1616,11 @@ function loadCart() {
 
 document.addEventListener(
     "DOMContentLoaded",
-    () => {
+    async () => {
 
-        renderProducts();
+        // Carrega primeiro os produtos cadastrados no Supabase.
+        // Isso garante que a vitrine use o estoque/catálogo do painel gerencial.
+        await loadProductsFromDatabase();
 
         loadCart();
 
