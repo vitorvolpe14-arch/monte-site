@@ -3009,8 +3009,18 @@ app.post(
             }
 
             processedPayments.add(orderNsu);
-            console.log("✅ Pagamento salvo no Supabase. Olist não é acionado.");            }
+            console.log("✅ Pagamento salvo no Supabase. Olist não é acionado.");
 
+        } catch (error) {
+
+            console.error("❌ ERRO NO WEBHOOK DA INFINITEPAY:", error);
+
+            if (!res.headersSent) {
+                return res.status(500).json({
+                    success: false,
+                    message: "Erro interno no webhook."
+                });
+            }
         }
 
     }
