@@ -2122,7 +2122,8 @@ app.post(
                 !customer ||
                 !customer.name ||
                 !customer.email ||
-                !customer.phone
+                !customer.phone ||
+                !customer.cpf
             ) {
 
                 return res.status(400).json({
@@ -2130,12 +2131,21 @@ app.post(
                     success: false,
 
                     message:
-                        "Dados do cliente incompletos."
+                        "Dados do cliente incompletos. Informe também o CPF."
 
                 });
 
             }
 
+
+            const customerCpf = String(customer.cpf || "").replace(/\D/g, "");
+
+            if (customerCpf.length !== 11) {
+                return res.status(400).json({
+                    success: false,
+                    message: "CPF inválido. Informe os 11 dígitos."
+                });
+            }
 
             /* =================================================
                NORMALIZA PRODUTOS
@@ -2428,6 +2438,9 @@ app.post(
                             customer.phone
                         ),
 
+                    cpf:
+                        customerCpf,
+
                     address:
                         customer.address
                             ? {
@@ -2500,6 +2513,7 @@ app.post(
                     customer_name: pendingOrder.customer.name,
                     customer_email: pendingOrder.customer.email,
                     customer_phone: pendingOrder.customer.phone,
+                    customer_cpf: pendingOrder.customer.cpf,
                     customer_address: pendingOrder.customer.address,
                     subtotal: Number(subtotal.toFixed(2)),
                     shipping: Number(shippingValue.toFixed(2)),

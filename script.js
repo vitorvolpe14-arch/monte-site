@@ -943,6 +943,9 @@ async function checkout() {
     const phone =
         document.getElementById("customerPhone")?.value.trim();
 
+    const cpf =
+        document.getElementById("customerCpf")?.value.trim();
+
     const cep =
         document.getElementById("customerCep")?.value.trim();
 
@@ -970,6 +973,7 @@ async function checkout() {
         !name ||
         !email ||
         !phone ||
+        !cpf ||
         !cep ||
         !street ||
         !number ||
@@ -979,12 +983,19 @@ async function checkout() {
     ) {
 
         showToast(
-            "Preencha todos os dados de entrega."
+            "Preencha todos os dados do cliente e da entrega."
         );
 
         return;
     }
 
+
+    const cpfDigits = cpf.replace(/\D/g, "");
+
+    if (cpfDigits.length !== 11) {
+        showToast("Informe um CPF válido com 11 dígitos.");
+        return;
+    }
 
     // 4. Calcula frete
     const shipping =
@@ -1117,6 +1128,8 @@ async function checkout() {
                             email: email,
 
                             phone: phone,
+
+                            cpf: cpfDigits,
 
                             address: {
 
@@ -1626,3 +1639,17 @@ document.addEventListener(
 
     }
 );
+
+
+document.addEventListener("DOMContentLoaded", () => {
+    const cpfInput = document.getElementById("customerCpf");
+    if (cpfInput) {
+        cpfInput.addEventListener("input", () => {
+            const digits = cpfInput.value.replace(/\D/g, "").slice(0, 11);
+            cpfInput.value = digits
+                .replace(/(\d{3})(\d)/, "$1.$2")
+                .replace(/(\d{3})(\d)/, "$1.$2")
+                .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+        });
+    }
+});
