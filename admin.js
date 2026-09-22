@@ -105,7 +105,7 @@ function openProduct(id=null){
   $("productModal").classList.remove("hidden");
 }
 function closeProduct(){$("productModal").classList.add("hidden");editingProduct=null}
-function addVariant(v={}){const row=document.createElement("div");row.className="variant-row";row.dataset.id=v.id||"";row.innerHTML=`<input class="v-color" placeholder="Cor" value="${esc(v.color||"")}"><input class="v-stock" type="number" min="0" value="${Number(v.stock||0)}"><button type="button" class="remove-variant">×</button>`;row.querySelector(".remove-variant").onclick=()=>row.remove();$("variantsList").appendChild(row)}
+function addVariant(v={}){const row=document.createElement("div");row.className="variant-row";row.dataset.id=v.id||"";row.innerHTML=`<input class="v-color" placeholder="Cor" value="${esc(v.color||"")}"><input class="v-sku" placeholder="SKU da cor" value="${esc(v.sku||"")}"><input class="v-stock" type="number" min="0" value="${Number(v.stock||0)}"><button type="button" class="remove-variant">×</button>`;row.querySelector(".remove-variant").onclick=()=>row.remove();$("variantsList").appendChild(row)}
 async function saveProduct(e){
   e.preventDefault();$("formError").textContent="";
   const id=$("productId").value;
@@ -121,8 +121,8 @@ async function saveProduct(e){
   for(const old of existing)if(!rows.some(r=>r.dataset.id===old.id))await db.from("product_variants").delete().eq("id",old.id);
   for(const row of rows){
     const color=row.querySelector(".v-color").value.trim();if(!color)continue;
-    const stock=Math.max(0,Number(row.querySelector(".v-stock").value||0));const vid=row.dataset.id;
-    const data={product_id:productId,color,stock,active:true};
+    const sku=row.querySelector(".v-sku").value.trim() || null;const stock=Math.max(0,Number(row.querySelector(".v-stock").value||0));const vid=row.dataset.id;
+    const data={product_id:productId,color,sku,stock,active:true};
     const q=vid?await db.from("product_variants").update(data).eq("id",vid):await db.from("product_variants").insert(data);
     if(q.error){$("formError").textContent=q.error.message;return}
   }
