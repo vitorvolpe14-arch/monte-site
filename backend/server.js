@@ -134,6 +134,18 @@ const adminLoginAttempts = new Map();
 function parseCookies(req){const h=req.headers.cookie||"";const o={};h.split(";").filter(Boolean).forEach(p=>{const i=p.indexOf("=");if(i>=0)o[p.slice(0,i).trim()]=decodeURIComponent(p.slice(i+1).trim())});return o}
 function getAdminSession(req){const t=parseCookies(req).monte_admin_session;if(!t)return null;const s=adminSessions.get(t);if(!s)return null;if(Date.now()>s.expiresAt){adminSessions.delete(t);return null}return {token:t,...s}}
 function requireAdmin(req,res,next){const s=getAdminSession(req);if(!s)return res.status(401).json({success:false,message:"Acesso administrativo não autorizado."});req.adminSession=s;next()}
+function isValidCpf(value){
+    const cpf=String(value||"").replace(/\D/g,"");
+    if(cpf.length!==11||/^([0-9])\1{10}$/.test(cpf)) return false;
+    let sum=0;
+    for(let i=0;i<9;i++) sum+=Number(cpf[i])*(10-i);
+    let digit=(sum*10)%11; if(digit===10) digit=0;
+    if(digit!==Number(cpf[9])) return false;
+    sum=0;
+    for(let i=0;i<10;i++) sum+=Number(cpf[i])*(11-i);
+    digit=(sum*10)%11; if(digit===10) digit=0;
+    return digit===Number(cpf[10]);
+}
 function passwordMatches(password){try{const [salt,storedHex]=ADMIN_PASSWORD_HASH.split(":");if(!salt||!storedHex)return false;const stored=Buffer.from(storedHex,"hex");const derived=crypto.scryptSync(String(password||""),salt,stored.length);return crypto.timingSafeEqual(stored,derived)}catch{return false}}
 function loginKey(req,email){return `${req.ip||"unknown"}:${safeString(email).toLowerCase()}`}
 function loginAllowed(req,email){const r=adminLoginAttempts.get(loginKey(req,email));if(!r)return true;if(r.lockedUntil&&Date.now()<r.lockedUntil)return false;if(r.lockedUntil)adminLoginAttempts.delete(loginKey(req,email));return true}
@@ -2140,7 +2152,7 @@ app.post(
 
             const customerCpf = String(customer.cpf || "").replace(/\D/g, "");
 
-            if (customerCpf.length !== 11) {
+            if (!isValidCpf(customerCpf)) {
                 return res.status(400).json({
                     success: false,
                     message: "CPF inválido. Informe os 11 dígitos."
@@ -3003,6 +3015,7 @@ app.post(
                             name: persistedOrder.customer_name || "",
                             email: persistedOrder.customer_email || "",
                             phone: persistedOrder.customer_phone || "",
+                            cpf: persistedOrder.customer_cpf || "",
                             address: persistedOrder.customer_address || null
                         },
                         created_at: persistedOrder.created_at
