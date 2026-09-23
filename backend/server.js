@@ -575,7 +575,7 @@ app.post(
 
             if (
                 customerName.length < 2 || customerName.length > 120 ||
-                customerEmail.length > 160 || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(customerEmail) ||
+                customerEmail.length > 160 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail) ||
                 customerPhone.length < 8 || customerPhone.length > 30 ||
                 customerCpf.length !== 11 ||
                 safeString(address.cep).length > 12 ||
