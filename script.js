@@ -646,6 +646,16 @@ document.getElementById(
             return;
         }
 
+        // Produtos com uma única variação ativa já ficam automaticamente
+        // associados a essa variação. A cliente não precisa selecionar nada.
+        if (!selectedVariant) {
+            const onlyVariant = (selectedProduct.variants || [])
+                .filter(v => v.active !== false && Number(v.stock || 0) > 0);
+            if (onlyVariant.length === 1) {
+                selectedVariant = onlyVariant[0];
+            }
+        }
+
         const variantKey = selectedVariant?.id || "default";
         const existing =
             cart.find(
