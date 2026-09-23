@@ -948,45 +948,8 @@ function normalizeCity(city) {
 
 
 function getShippingValue() {
-
-    const cityInput =
-        document.getElementById("customerCity");
-
-    const stateInput =
-        document.getElementById("customerState");
-
-    if (!cityInput || !stateInput) {
-        return null;
-    }
-
-    const city =
-        normalizeCity(cityInput.value);
-
-    const state =
-        stateInput.value
-            .trim()
-            .toUpperCase();
-
-    if (
-        city === "FORTALEZA" &&
-        state === "CE"
-    ) {
-
-        return 15;
-
-    }
-
-    if (
-        state === "CE" &&
-        metropolitanCities.includes(city)
-    ) {
-
-        return 20;
-
-    }
-
-    return null;
-
+    // Frete temporariamente desativado.
+    return 0;
 }
 
 
@@ -1090,25 +1053,8 @@ function updateShipping() {
         return;
     }
 
-    const shipping =
-        getShippingValue();
-
-    if (shipping === 15) {
-
-        shippingValueElement.textContent =
-            "R$ 15,00";
-
-    } else if (shipping === 20) {
-
-        shippingValueElement.textContent =
-            "R$ 20,00";
-
-    } else {
-
-        shippingValueElement.textContent =
-            "Informe cidade e estado";
-
-    }
+    shippingValueElement.textContent =
+        "Frete grátis";
 
 }
 
@@ -1192,19 +1138,8 @@ async function checkout() {
         return;
     }
 
-    // 4. Calcula frete
-    const shipping =
-        getShippingValue();
-
-
-    if (shipping === null) {
-
-        showToast(
-            "Informe uma cidade válida de Fortaleza ou região metropolitana."
-        );
-
-        return;
-    }
+    // 4. Frete temporariamente desativado
+    const shipping = 0;
 
 
     // 5. Monta os produtos
@@ -1247,18 +1182,7 @@ async function checkout() {
         .filter(Boolean);
 
 
-    // 6. Adiciona frete
-    items.push({
-
-        quantity: 1,
-
-        price: Number(shipping),
-
-        description: "Frete de entrega",
-
-        sku: "FRETE"
-
-    });
+    // 6. Sem frete: o checkout envia somente os produtos.
 
 
     // Segurança
