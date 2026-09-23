@@ -79,10 +79,30 @@ function localShippingOption(city, state) {
     return null;
 }
 
+const SHIPPING_DEFAULTS = {
+    bolsas: { weight: 0.8, height: 12, width: 25, length: 32 },
+    acessorios: { weight: 0.3, height: 8, width: 20, length: 25 }
+};
+
 function normalizeShippingProduct(row, quantity) {
-    const values = [Number(row.shipping_weight_kg),Number(row.shipping_height_cm),Number(row.shipping_width_cm),Number(row.shipping_length_cm)];
-    if (!values.every(Number.isFinite) || values.some(v=>v<=0)) return null;
-    return { quantity:Math.max(1,Number(quantity||1)), weight:values[0], height:values[1], width:values[2], length:values[3] };
+    const defaults = SHIPPING_DEFAULTS[String(row.category || "bolsas").toLowerCase()] || SHIPPING_DEFAULTS.bolsas;
+    const values = [
+        Number(row.shipping_weight_kg),
+        Number(row.shipping_height_cm),
+        Number(row.shipping_width_cm),
+        Number(row.shipping_length_cm)
+    ];
+    const fallback = [defaults.weight, defaults.height, defaults.width, defaults.length];
+    const resolved = values.map((value, index) => (
+        Number.isFinite(value) && value > 0 ? value : fallback[index]
+    ));
+    return {
+        quantity: Math.max(1, Number(quantity || 1)),
+        weight: resolved[0],
+        height: resolved[1],
+        width: resolved[2],
+        length: resolved[3]
+    };
 }
 
 async function calculateSuperfreteQuotes({toCep,items}) {
@@ -92,7 +112,7 @@ async function calculateSuperfreteQuotes({toCep,items}) {
     for(const item of Array.isArray(items)?items:[]){const id=safeString(item.id||item.product_id);const quantity=Math.max(1,Number(item.quantity||1));if(id) grouped.set(id,(grouped.get(id)||0)+quantity);}
     if(!grouped.size) throw new Error("Nenhum produto válido para calcular o frete.");
     const productRows=await Promise.all([...grouped.entries()].map(async([id,quantity])=>{
-        const rows=await supabaseRequest("products?id=eq."+encodeURIComponent(id)+"&active=eq.true&select=id,name,shipping_weight_kg,shipping_height_cm,shipping_width_cm,shipping_length_cm",{method:"GET"});
+        const rows=await supabaseRequest("products?id=eq."+encodeURIComponent(id)+"&active=eq.true&select=id,name,category,shipping_weight_kg,shipping_height_cm,shipping_width_cm,shipping_length_cm",{method:"GET"});
         const product=Array.isArray(rows)?rows[0]:null;
         if(!product) throw new Error("Produto não encontrado para cálculo de frete.");
         const shippingProduct=normalizeShippingProduct(product,quantity);
