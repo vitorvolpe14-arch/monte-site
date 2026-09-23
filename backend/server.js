@@ -246,7 +246,7 @@ app.use(
     })
 );
 
-app.use(express.json({ limit: "100kb" }));
+app.use(express.json({ limit: "12mb" }));
 
 /* =====================================================
    RATE LIMITING — proteção contra abuso de endpoints
@@ -347,6 +347,43 @@ app.post("/api/admin/login",adminLoginRateLimit,(req,res)=>{const email=safeStri
 app.post("/api/admin/logout",(req,res)=>{const t=parseCookies(req).monte_admin_session;if(t)adminSessions.delete(t);clearAdminCookie(res);return res.json({success:true})});
 app.get("/api/admin/session",(req,res)=>{const s=getAdminSession(req);if(!s)return res.status(401).json({success:false});return res.json({success:true,email:s.email})});
 app.get("/api/admin/products",requireAdmin,async(req,res)=>{try{const data=await supabaseRequest("products?select=*,product_variants(*)&order=created_at.desc");return res.json({success:true,products:data||[]})}catch(e){console.error("Admin products GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar os produtos."})}});
+const PRODUCT_IMAGE_BUCKET = "product-images";
+
+async function uploadProductImage({ productId, fileName, contentType, dataBase64 }) {
+    if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY não configurada no backend.");
+    const allowed = new Set(["image/jpeg", "image/png", "image/webp"]);
+    if (!allowed.has(contentType)) throw new Error("Formato de imagem não permitido. Use JPG, PNG ou WebP.");
+    const raw = String(dataBase64 || "").replace(/^data:[^;]+;base64,/, "");
+    const buffer = Buffer.from(raw, "base64");
+    if (!buffer.length) throw new Error("Arquivo de imagem vazio.");
+    if (buffer.length > 8 * 1024 * 1024) throw new Error("Cada imagem pode ter no máximo 8 MB.");
+    const ext = contentType === "image/png" ? "png" : contentType === "image/webp" ? "webp" : "jpg";
+    const safeName = safeString(fileName).toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/-+/g, "-").replace(/^[-.]+|[-.]+$/g, "") || "imagem." + ext;
+    const objectPath = productId + "/" + Date.now() + "-" + crypto.randomBytes(5).toString("hex") + "-" + safeName;
+    const response = await fetch(SUPABASE_URL + "/storage/v1/object/" + PRODUCT_IMAGE_BUCKET + "/" + encodeURIComponent(objectPath).replace(/%2F/g, "/"), {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY, "apikey": SUPABASE_SERVICE_ROLE_KEY, "Content-Type": contentType, "x-upsert": "false", "cache-control": "31536000" },
+        body: buffer
+    });
+    if (!response.ok) throw new Error("Upload da imagem falhou (" + response.status + ").");
+    return SUPABASE_URL + "/storage/v1/object/public/" + PRODUCT_IMAGE_BUCKET + "/" + objectPath;
+}
+
+app.post("/api/admin/uploads/product-image", requireAdmin, async (req, res) => {
+    try {
+        const productId = safeString(req.body?.product_id);
+        const fileName = safeString(req.body?.file_name);
+        const contentType = safeString(req.body?.content_type).toLowerCase();
+        const dataBase64 = safeString(req.body?.data_base64);
+        if (!/^[0-9a-f-]{36}$/i.test(productId)) return res.status(400).json({ success: false, message: "Produto inválido." });
+        const url = await uploadProductImage({ productId, fileName, contentType, dataBase64 });
+        return res.status(201).json({ success: true, url });
+    } catch (error) {
+        console.error("Admin image upload:", error);
+        return res.status(400).json({ success: false, message: error.message || "Não foi possível enviar a imagem." });
+    }
+});
+
 function sanitizeProductPayload(b={}){return{name:safeString(b.name),sku:safeString(b.sku)||null,category:safeString(b.category)||"bolsas",price:Number(b.price||0),sale_price:b.sale_price===null||b.sale_price===""||b.sale_price===undefined?null:Number(b.sale_price),description:safeString(b.description),images:Array.isArray(b.images)?b.images:[],shipping_weight_kg:b.shipping_weight_kg===null||b.shipping_weight_kg===""||b.shipping_weight_kg===undefined?null:Number(b.shipping_weight_kg),shipping_height_cm:b.shipping_height_cm===null||b.shipping_height_cm===""||b.shipping_height_cm===undefined?null:Number(b.shipping_height_cm),shipping_width_cm:b.shipping_width_cm===null||b.shipping_width_cm===""||b.shipping_width_cm===undefined?null:Number(b.shipping_width_cm),shipping_length_cm:b.shipping_length_cm===null||b.shipping_length_cm===""||b.shipping_length_cm===undefined?null:Number(b.shipping_length_cm),is_new:Boolean(b.is_new),is_sale:Boolean(b.is_sale),active:b.active!==false}}
 app.post("/api/admin/products",requireAdmin,async(req,res)=>{try{const p=sanitizeProductPayload(req.body);if(!p.name)return res.status(400).json({success:false,message:"Informe o nome do produto."});const d=await supabaseRequest("products",{method:"POST",body:JSON.stringify(p)});return res.status(201).json({success:true,product:d?.[0]||d})}catch(e){console.error("Admin products POST:",e);return res.status(500).json({success:false,message:e.message})}});
 app.put("/api/admin/products/:id",requireAdmin,async(req,res)=>{try{const p=sanitizeProductPayload(req.body);if(!p.name)return res.status(400).json({success:false,message:"Informe o nome do produto."});const d=await supabaseRequest(`products?id=eq.${encodeURIComponent(req.params.id)}`,{method:"PATCH",body:JSON.stringify(p)});return res.json({success:true,product:d?.[0]||d})}catch(e){console.error("Admin products PUT:",e);return res.status(500).json({success:false,message:e.message})}});
