@@ -167,10 +167,10 @@ function requireAdmin(req,res,next){const s=getAdminSession(req);if(!s)return re
 function normalizeCity(value) {
     return safeString(value)
         .normalize("NFD")
-        .replace(/[\\u0300-\\u036f]/g, "")
+        .replace(/[\u0300-\u036f]/g, "")
         .toUpperCase()
         .replace(/[^A-Z0-9 ]/g, " ")
-        .replace(/\\s+/g, " ")
+        .replace(/\s+/g, " ")
         .trim();
 }
 
@@ -200,7 +200,99 @@ app.get("/api/admin/products",requireAdmin,async(req,res)=>{try{const data=await
 function sanitizeProductPayload(b={}){return{name:safeString(b.name),sku:safeString(b.sku)||null,category:safeString(b.category)||"bolsas",price:Number(b.price||0),sale_price:b.sale_price===null||b.sale_price===""||b.sale_price===undefined?null:Number(b.sale_price),description:safeString(b.description),images:Array.isArray(b.images)?b.images:[],is_new:Boolean(b.is_new),is_sale:Boolean(b.is_sale),active:b.active!==false}}
 app.post("/api/admin/products",requireAdmin,async(req,res)=>{try{const p=sanitizeProductPayload(req.body);if(!p.name)return res.status(400).json({success:false,message:"Informe o nome do produto."});const d=await supabaseRequest("products",{method:"POST",body:JSON.stringify(p)});return res.status(201).json({success:true,product:d?.[0]||d})}catch(e){console.error("Admin products POST:",e);return res.status(500).json({success:false,message:e.message})}});
 app.put("/api/admin/products/:id",requireAdmin,async(req,res)=>{try{const p=sanitizeProductPayload(req.body);if(!p.name)return res.status(400).json({success:false,message:"Informe o nome do produto."});const d=await supabaseRequest(`products?id=eq.${encodeURIComponent(req.params.id)}`,{method:"PATCH",body:JSON.stringify(p)});return res.json({success:true,product:d?.[0]||d})}catch(e){console.error("Admin products PUT:",e);return res.status(500).json({success:false,message:e.message})}});
-app.put("/api/admin/products/:id/variants",requireAdmin,async(req,res)=>{try{const id=safeString(req.params.id),vs=Array.isArray(req.body?.variants)?req.body.variants:[],ex=await supabaseRequest(`product_variants?product_id=eq.${encodeURIComponent(id)}&select=id`),ids=new Set(vs.map(v=>safeString(v.id)).filter(Boolean));for(const old of(ex||[])){if(!ids.has(old.id))await supabaseRequest(`product_variants?id=eq.${encodeURIComponent(old.id)}`,{method:"DELETE",headers:{"Prefer":"return=minimal"}})}for(const v of vs){const p={product_id:id,color:safeString(v.color),sku:safeString(v.sku)||null,stock:Math.max(0,Number(v.stock||0)),active:v.active!==false};if(!p.color)continue;if(v.id)await supabaseRequest(`product_variants?id=eq.${encodeURIComponent(v.id)}`,{method:"PATCH",body:JSON.stringify(p)});else await supabaseRequest("product_variants",{method:"POST",body:JSON.stringify(p)})}return res.json({success:true})}catch(e){console.error("Admin variants PUT:",e);return res.status(500).json({success:false,message:e.message})}});
+app.put("/api/admin/products/:id/variants",requireAdmin,async(req,res)=>{
+    try{
+        const productId=safeString(req.params.id);
+        const variants=Array.isArray(req.body?.variants)?req.body.variants:[];
+        if(!/^[0-9a-f-]{36}$/i.test(productId)) return res.status(400).json({success:false,message:"Produto inválido."});
+        if(variants.length>50) return res.status(400).json({success:false,message:"Quantidade de variações excede o limite."});
+
+        const existing=await supabaseRequest(
+            `product_variants?product_id=eq.${encodeURIComponent(productId)}&select=id,color,sku,stock,active`
+        );
+        const incomingIds=new Set(variants.map(v=>safeString(v.id)).filter(Boolean));
+
+        for(const old of (existing||[])){
+            if(!incomingIds.has(old.id)){
+                if(Number(old.stock||0)>0){
+                    return res.status(409).json({
+                        success:false,
+                        message:`A variação "${old.color}" possui estoque. Zere o estoque antes de removê-la.`
+                    });
+                }
+                await supabaseRequest(
+                    `product_variants?id=eq.${encodeURIComponent(old.id)}`,
+                    {method:"DELETE",headers:{"Prefer":"return=minimal"}}
+                );
+            }
+        }
+
+        for(const v of variants){
+            const color=safeString(v.color);
+            const sku=safeString(v.sku)||null;
+            const active=v.active!==false;
+            const requestedStock=Number(v.stock);
+
+            if(!color) continue;
+            if(color.length>80 || (sku && sku.length>80) || !Number.isInteger(requestedStock) || requestedStock<0 || requestedStock>100000){
+                return res.status(400).json({success:false,message:"Dados de variação ou estoque inválidos."});
+            }
+
+            if(v.id){
+                const current=(existing||[]).find(x=>x.id===v.id);
+                if(!current) return res.status(404).json({success:false,message:"Variação não encontrada."});
+
+                await supabaseRequest(
+                    `product_variants?id=eq.${encodeURIComponent(v.id)}`,
+                    {
+                        method:"PATCH",
+                        body:JSON.stringify({color,sku,active})
+                    }
+                );
+
+                const currentStock=Number(current.stock||0);
+                const delta=requestedStock-currentStock;
+                if(delta!==0){
+                    await supabaseRequest("rpc/adjust_product_variant_stock",{
+                        method:"POST",
+                        body:JSON.stringify({
+                            p_variant_id:v.id,
+                            p_delta:delta,
+                            p_movement_type:"adjustment",
+                            p_reason:"Atualização de estoque pelo painel administrativo",
+                            p_created_by:req.adminSession.email
+                        })
+                    });
+                }
+            }else{
+                const created=await supabaseRequest("product_variants",{
+                    method:"POST",
+                    body:JSON.stringify({product_id:productId,color,sku,stock:0,active})
+                });
+                const createdVariant=Array.isArray(created)?created[0]:created;
+                if(requestedStock>0){
+                    await supabaseRequest("rpc/adjust_product_variant_stock",{
+                        method:"POST",
+                        body:JSON.stringify({
+                            p_variant_id:createdVariant.id,
+                            p_delta:requestedStock,
+                            p_movement_type:"restock",
+                            p_reason:"Estoque inicial pelo painel administrativo",
+                            p_created_by:req.adminSession.email
+                        })
+                    });
+                }
+            }
+        }
+
+        return res.json({success:true});
+    }catch(e){
+        console.error("Admin variants PUT:",e);
+        const msg=String(e.message||"");
+        if(msg.includes("Estoque insuficiente")) return res.status(400).json({success:false,message:"Estoque insuficiente para este ajuste."});
+        return res.status(500).json({success:false,message:"Não foi possível atualizar as variações."});
+    }
+});
 app.get("/api/admin/orders",requireAdmin,async(req,res)=>{try{const d=await supabaseRequest("orders?select=*,order_items(*),payments(*)&order=created_at.desc");return res.json({success:true,orders:d||[]})}catch(e){console.error("Admin orders GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar os pedidos."})}});
 
 
