@@ -961,8 +961,17 @@ app.post(
                     false,};
 
 
-            const subtotal = productItems.reduce(
+            const subtotal = Number(productItems.reduce(
                 (sum, item) => sum + Number(item.price) * Number(item.quantity), 0
+            ).toFixed(2));
+
+            // Pix: 5% de desconto somente nos produtos. O frete permanece integral.
+            const discountedProductSubtotal = paymentMethod === "pix"
+                ? Number((subtotal * 0.95).toFixed(2))
+                : subtotal;
+
+            const checkoutTotal = Number(
+                (discountedProductSubtotal + shippingValue).toFixed(2)
             );
 
             const savedOrders = await supabaseRequest("orders", {
@@ -976,8 +985,9 @@ app.post(
                     customer_address: pendingOrder.customer.address,
                     subtotal: Number(subtotal.toFixed(2)),
                     shipping: Number(shippingValue.toFixed(2)),
-                    total: Number((subtotal + shippingValue).toFixed(2)),
+                    total: checkoutTotal,
                     status: "pending",
+                    payment_method: paymentMethod === "pix" ? "pix" : "credit_card",
                     items: productItems
                 })
             });
@@ -1009,28 +1019,25 @@ app.post(
             ================================================= */
 
             const infinitePayItems =
-                productItems
-                    .map(
-                        (item) => {
+                productItems.map((item) => {
+                    const checkoutUnitPrice = paymentMethod === "pix"
+                        ? Number((item.price * 0.95).toFixed(2))
+                        : item.price;
 
-                            return {
+                    return {
+                        quantity: item.quantity,
+                        price: Math.round(checkoutUnitPrice * 100),
+                        description: item.description
+                    };
+                });
 
-                                quantity:
-                                    item.quantity,
-
-                                price:
-                                    Math.round(
-                                        item.price *
-                                        100
-                                    ),
-
-                                description:
-                                    item.description
-
-                            };
-
-                        }
-                    );
+            if (shippingValue > 0) {
+                infinitePayItems.push({
+                    quantity: 1,
+                    price: Math.round(shippingValue * 100),
+                    description: "Frete"
+                });
+            }
 
 
             /* =================================================
@@ -1462,7 +1469,7 @@ app.post(
                 orderNsu,
                 transactionNsu,
                 invoiceSlug,
-                expectedAmount: order.subtotal
+                expectedAmount: order.total
             });
 
             if (!verification.verified) {
