@@ -553,56 +553,19 @@ app.post(
 
 
             /* =================================================
-               SEPARA FRETE DOS PRODUTOS
+               FRETE
             ================================================= */
 
-            let productItems =
-                normalizedItems;
-
-            let shippingValue =
-                0;
-
-
-            /*
-               O frontend da MONTÊ envia o frete como
-               um item com SKU = FRETE.
-
-               Esse item é processado apenas pelo fluxo atual.
-            */
-
-            const shippingItem =
-                normalizedItems.find(
+            // Frete temporariamente desativado.
+            // Mesmo que um cliente envie um item FRETE antigo,
+            // ele não será cobrado nem enviado para a InfinitePay.
+            const productItems =
+                normalizedItems.filter(
                     item =>
-                        item.sku
-                            .toUpperCase()
-                            ===
-                        "FRETE"
+                        String(item.sku || "").toUpperCase() !== "FRETE"
                 );
 
-
-            if (
-                shippingItem
-            ) {
-
-                shippingValue =
-                    Number(
-                        shippingItem.price
-                    ) *
-                    Number(
-                        shippingItem.quantity
-                    );
-
-
-                productItems =
-                    normalizedItems.filter(
-                        item =>
-                            item.sku
-                                .toUpperCase()
-                                !==
-                            "FRETE"
-                    );
-
-            }
+            const shippingValue = 0;
 
 
             /* =================================================
@@ -804,7 +767,7 @@ app.post(
             ================================================= */
 
             const infinitePayItems =
-                normalizedItems
+                productItems
                     .map(
                         (item) => {
 
