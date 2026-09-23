@@ -1182,7 +1182,8 @@ async function checkout() {
                 ),
 
                 sku: item.variant_sku || item.sku ? String(item.variant_sku || item.sku) : null,
-                product_id: item.id || null,
+                id: item.id || item.product_id || null,
+                product_id: item.id || item.product_id || null,
                 variant_id: item.variant_id || null,
                 variant_color: item.variant_color || null
 
