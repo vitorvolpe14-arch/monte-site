@@ -1462,7 +1462,7 @@ app.post(
                 orderNsu,
                 transactionNsu,
                 invoiceSlug,
-                expectedAmount: order.total
+                expectedAmount: order.subtotal
             });
 
             if (!verification.verified) {
