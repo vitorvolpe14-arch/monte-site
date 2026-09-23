@@ -113,6 +113,9 @@ function createProductCard(product) {
                 </svg>
               `);
 
+    const productStock = Number(product.stock || 0);
+    const isOutOfStock = productStock <= 0;
+
     let priceHTML = "";
 
     if (product.sale && product.oldPrice) {
@@ -155,6 +158,16 @@ function createProductCard(product) {
                 ?
                 `<span class="product-badge">
                     NOVO
+                </span>`
+                :
+                ""
+            }
+
+            ${
+                isOutOfStock
+                ?
+                `<span class="product-badge product-badge-stock">
+                    ESGOTADO
                 </span>`
                 :
                 ""
@@ -414,11 +427,12 @@ function openProductModal(productId) {
     selectedVariant = null;
     selectedQuantity = 1;
 
-    const activeVariants = (selectedProduct.variants || []).filter(v => v.active !== false && Number(v.stock || 0) > 0);
-    if (activeVariants.length) {
-        selectedVariant = activeVariants[0];
+    const activeVariants = (selectedProduct.variants || []).filter(v => v.active !== false);
+    const availableVariants = activeVariants.filter(v => Number(v.stock || 0) > 0);
+    if (availableVariants.length) {
+        selectedVariant = availableVariants[0];
     } else if ((selectedProduct.stock || 0) <= 0) {
-        showToast("Produto sem estoque.");
+        showToast("Este produto está esgotado no momento.");
         return;
     }
 
@@ -474,16 +488,22 @@ function openProductModal(productId) {
     const variantSelector = document.getElementById("variantSelector");
     const variantOptions = document.getElementById("variantOptions");
     if (variantSelector && variantOptions) {
-        const activeVariants = (selectedProduct.variants || []).filter(v => v.active !== false && Number(v.stock || 0) > 0);
+        const activeVariants = (selectedProduct.variants || []).filter(v => v.active !== false);
         if (activeVariants.length) {
             variantSelector.style.display = "block";
             variantOptions.innerHTML = "";
             activeVariants.forEach((variant, index) => {
                 const button = document.createElement("button");
                 button.type = "button";
-                button.className = "variant-option" + (index === 0 ? " active" : "");
-                button.textContent = variant.color;
+                const variantAvailable = Number(variant.stock || 0) > 0;
+                button.className = "variant-option" + (index === 0 && variantAvailable ? " active" : "") + (variantAvailable ? "" : " unavailable");
+                button.textContent = variantAvailable ? variant.color : variant.color + " — esgotado";
+                button.disabled = !variantAvailable;
                 button.addEventListener("click", () => {
+                    if (!variantAvailable) {
+                        showToast("Esta cor está esgotada.");
+                        return;
+                    }
                     selectedVariant = variant;
                     selectedQuantity = 1;
                     document.querySelectorAll(".variant-option").forEach(b => b.classList.remove("active"));
@@ -646,7 +666,7 @@ document.getElementById(
 
         const available = selectedVariant ? Number(selectedVariant.stock || 0) : Number(selectedProduct.stock || 0);
         if (available <= 0 || selectedQuantity > available) {
-            showToast("Quantidade indisponível em estoque.");
+            showToast("Quantidade indisponível para este produto.");
             return;
         }
 
