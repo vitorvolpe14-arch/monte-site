@@ -591,21 +591,40 @@ app.post(
                VALIDA VARIAÇÕES E ESTOQUE NO SUPABASE
             ================================================= */
             for (const item of productItems) {
-                if (!item.id || !item.variant_id) {
+                if (!item.id) {
                     return res.status(400).json({
                         success: false,
-                        message: "Produto precisa ter uma variação/cor selecionada."
+                        message: "Produto inválido no pedido."
                     });
                 }
 
-                const variants = await supabaseRequest(
-                    "product_variants?id=eq." + encodeURIComponent(item.variant_id) +
-                    "&product_id=eq." + encodeURIComponent(item.id) +
-                    "&active=eq.true&select=id,color,sku,stock",
-                    { method: "GET" }
-                );
+                // Se o produto tiver apenas uma variação ativa em estoque,
+                // ela é selecionada automaticamente. A cliente não precisa
+                // escolher uma cor/variação quando não existe uma escolha real.
+                let variant = null;
 
-                const variant = Array.isArray(variants) ? variants[0] : null;
+                if (item.variant_id) {
+                    const variants = await supabaseRequest(
+                        "product_variants?id=eq." + encodeURIComponent(item.variant_id) +
+                        "&product_id=eq." + encodeURIComponent(item.id) +
+                        "&active=eq.true&select=id,color,sku,stock",
+                        { method: "GET" }
+                    );
+
+                    variant = Array.isArray(variants) ? variants[0] : null;
+                } else {
+                    const variants = await supabaseRequest(
+                        "product_variants?product_id=eq." + encodeURIComponent(item.id) +
+                        "&active=eq.true&stock=gt.0&select=id,color,sku,stock&order=created_at.asc",
+                        { method: "GET" }
+                    );
+
+                    if (Array.isArray(variants) && variants.length === 1) {
+                        variant = variants[0];
+                        item.variant_id = variant.id;
+                    }
+                }
+
                 if (!variant) {
                     return res.status(400).json({
                         success: false,
