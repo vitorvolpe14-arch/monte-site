@@ -48,6 +48,9 @@ async function loadProductsFromDatabase() {
 
 let cart = [];
 let selectedPaymentMethod = "pix";
+let shippingOptions = [];
+let selectedShippingOption = null;
+let shippingRequestId = 0;
 
 let selectedProduct = null;
 let selectedVariant = null;
@@ -843,6 +846,8 @@ function updateCart() {
         JSON.stringify(cart)
     );
 
+    updateShipping();
+
 }
 
 
@@ -990,11 +995,66 @@ function updatePaymentSummary(subtotal = getCartSubtotal()) {
 }
 
 function getShippingValue() {
-    const cityInput = document.getElementById("customerCity");
-    const city = normalizeCity(cityInput?.value || "");
-    return city === "FORTALEZA" ? 15 : 0;
+    return Number(selectedShippingOption?.price || 0);
 }
 
+function renderShippingOptions() {
+    const container = document.getElementById("shippingOptions");
+    if (!container) return;
+    container.innerHTML = "";
+    shippingOptions.forEach(option => {
+        const label = document.createElement("label");
+        label.className = "shipping-option" + (selectedShippingOption?.id === option.id ? " selected" : "");
+        const min = Number(option.delivery_min_days || 0);
+        const max = Number(option.delivery_max_days || 0);
+        const days = min && max && min !== max ? `${min} a ${max} dias úteis` : (max || option.delivery_days) ? `${max || option.delivery_days} dias úteis` : "Prazo informado";
+        label.innerHTML = `<input type="radio" name="shippingMethod" value="${String(option.id).replace(/"/g, "&quot;")}" ${selectedShippingOption?.id === option.id ? "checked" : ""}><span class="shipping-option-info"><strong>${option.name}</strong><small>${days}</small></span><strong class="shipping-option-price">${formatPrice(option.price)}</strong>`;
+        label.addEventListener("click", () => {
+            selectedShippingOption = option;
+            document.querySelectorAll(".shipping-option").forEach(el => el.classList.remove("selected"));
+            label.classList.add("selected");
+            updatePaymentSummary();
+        });
+        container.appendChild(label);
+    });
+}
+
+async function updateShipping() {
+    const shippingValueElement = document.getElementById("shippingValue");
+    const optionsContainer = document.getElementById("shippingOptions");
+    if (!shippingValueElement) return;
+    const cep = document.getElementById("customerCep")?.value.replace(/\D/g, "") || "";
+    const city = normalizeCity(document.getElementById("customerCity")?.value || "");
+    const requestId = ++shippingRequestId;
+    shippingOptions = [];
+    selectedShippingOption = null;
+    renderShippingOptions();
+    updatePaymentSummary();
+    if (cep.length !== 8) { shippingValueElement.textContent = "Informe seu CEP"; return; }
+    const localCity = ["FORTALEZA", ...metropolitanCities].includes(city);
+    if (localCity) {
+        const local = city === "FORTALEZA" ? {id:"monte-fortaleza",name:"Entrega MONTÊ — Fortaleza",price:15,delivery_days:2} : {id:"monte-regiao-metropolitana",name:"Entrega MONTÊ — Região Metropolitana",price:20,delivery_days:3};
+        shippingOptions = [local]; selectedShippingOption = local;
+        shippingValueElement.textContent = formatPrice(local.price);
+        renderShippingOptions(); updatePaymentSummary(); return;
+    }
+    shippingValueElement.textContent = "Calculando...";
+    if (optionsContainer) optionsContainer.innerHTML = '<div class="shipping-loading">Consultando opções de entrega...</div>';
+    try {
+        const response = await fetch("https://monte-site-itjk.onrender.com/api/frete/cotacao",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({to_cep:cep,city,items:cart.map(item=>({id:item.id,quantity:item.quantity}))})});
+        const data = await response.json().catch(() => ({}));
+        if (requestId !== shippingRequestId) return;
+        if (!response.ok || !data.success || !Array.isArray(data.options) || !data.options.length) throw new Error(data.message || "Nenhuma opção de frete disponível.");
+        shippingOptions = data.options; selectedShippingOption = shippingOptions[0];
+        shippingValueElement.textContent = formatPrice(selectedShippingOption.price);
+        renderShippingOptions(); updatePaymentSummary();
+    } catch(error) {
+        if (requestId !== shippingRequestId) return;
+        shippingValueElement.textContent = "Não disponível";
+        if (optionsContainer) optionsContainer.innerHTML = `<div class="shipping-error">${error.message || "Não foi possível calcular o frete."}</div>`;
+        updatePaymentSummary();
+    }
+}
 
 /* =====================================================
    BUSCA DE ENDEREÇO PELO CEP
@@ -1230,8 +1290,12 @@ async function checkout() {
         .filter(Boolean);
 
 
-    // 6. O backend valida o valor do frete novamente antes de criar o checkout.
-
+    // 6. O backend valida novamente a modalidade e o valor do frete.
+    if (!selectedShippingOption) {
+        showToast("Selecione uma opção de frete antes de finalizar a compra.");
+        return;
+    }
+    const shippingServiceId = String(selectedShippingOption.id || "");
 
     // Segurança
     if (items.length === 0) {
@@ -1289,6 +1353,8 @@ async function checkout() {
                         items: items,
 
                         payment_method: getSelectedPaymentMethod(),
+
+                        shipping_service_id: shippingServiceId,
 
                         customer: {
 
@@ -1832,6 +1898,11 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
     }
+
+    ["customerCity", "customerState"].forEach(id => {
+        const input = document.getElementById(id);
+        if (input) input.addEventListener("input", () => updateShipping());
+    });
 
     const cpfInput = document.getElementById("customerCpf");
     if (cpfInput) {
