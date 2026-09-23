@@ -5,6 +5,7 @@ const cors = require("cors");
 require("dotenv").config();
 
 const app = express();
+app.set("trust proxy", 1);
 
 const PORT = process.env.PORT || 3000;
 
@@ -63,29 +64,94 @@ async function supabaseRequest(path, options = {}) {
    MIDDLEWARES
 ===================================================== */
 
+const allowedOrigins = new Set([
+    SITE_URL.replace(/\\/$/, "")
+]);
+
+app.use((req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+    if (req.secure || req.headers["x-forwarded-proto"] === "https") {
+        res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    }
+    if (req.path.startsWith("/api/admin/")) {
+        res.setHeader("Cache-Control", "no-store");
+    }
+    next();
+});
+
 app.use(
     cors({
-        origin: true,
-        methods: [
-            "GET",
-            "POST",
-            "OPTIONS"
-        ],
-        allowedHeaders: [
-            "Content-Type",
-            "Authorization"
-        ]
+        origin: (origin, callback) => {
+            if (!origin || allowedOrigins.has(origin.replace(/\\/$/, ""))) {
+                return callback(null, true);
+            }
+            return callback(new Error("Origem não autorizada."));
+        },
+        methods: ["GET", "POST", "PUT", "PATCH", "OPTIONS"],
+        allowedHeaders: ["Content-Type", "Authorization"],
+        credentials: false
     })
 );
 
-app.options(
-    "*",
-    cors()
-);
+app.use(express.json({ limit: "100kb" }));
 
-app.use(
-    express.json()
-);
+/* =====================================================
+   RATE LIMITING — proteção contra abuso de endpoints
+===================================================== */
+function createRateLimiter({ windowMs, max, keyFn = req => req.ip || "unknown" }) {
+    const buckets = new Map();
+
+    const cleanup = () => {
+        const now = Date.now();
+        for (const [key, bucket] of buckets.entries()) {
+            if (now - bucket.startedAt >= windowMs) buckets.delete(key);
+        }
+    };
+
+    setInterval(cleanup, Math.min(windowMs, 5 * 60 * 1000)).unref();
+
+    return (req, res, next) => {
+        const key = String(keyFn(req) || "unknown");
+        const now = Date.now();
+        let bucket = buckets.get(key);
+
+        if (!bucket || now - bucket.startedAt >= windowMs) {
+            bucket = { startedAt: now, count: 0 };
+            buckets.set(key, bucket);
+        }
+
+        bucket.count += 1;
+
+        if (bucket.count > max) {
+            const retryAfter = Math.max(1, Math.ceil((windowMs - (now - bucket.startedAt)) / 1000));
+            res.setHeader("Retry-After", String(retryAfter));
+            return res.status(429).json({
+                success: false,
+                message: "Muitas solicitações. Aguarde alguns instantes e tente novamente."
+            });
+        }
+
+        next();
+    };
+}
+
+const checkoutRateLimit = createRateLimiter({
+    windowMs: 60 * 1000,
+    max: 12
+});
+
+const adminLoginRateLimit = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 20
+});
+
+const orderStatusRateLimit = createRateLimiter({
+    windowMs: 60 * 1000,
+    max: 30
+});
 
 /* =====================================================
    MONTÊ ADMIN AUTH — acesso exclusivo do administrador
@@ -98,6 +164,16 @@ const adminLoginAttempts = new Map();
 function parseCookies(req){const h=req.headers.cookie||"";const o={};h.split(";").filter(Boolean).forEach(p=>{const i=p.indexOf("=");if(i>=0)o[p.slice(0,i).trim()]=decodeURIComponent(p.slice(i+1).trim())});return o}
 function getAdminSession(req){const t=parseCookies(req).monte_admin_session;if(!t)return null;const s=adminSessions.get(t);if(!s)return null;if(Date.now()>s.expiresAt){adminSessions.delete(t);return null}return {token:t,...s}}
 function requireAdmin(req,res,next){const s=getAdminSession(req);if(!s)return res.status(401).json({success:false,message:"Acesso administrativo não autorizado."});req.adminSession=s;next()}
+function normalizeCity(value) {
+    return safeString(value)
+        .normalize("NFD")
+        .replace(/[\\u0300-\\u036f]/g, "")
+        .toUpperCase()
+        .replace(/[^A-Z0-9 ]/g, " ")
+        .replace(/\\s+/g, " ")
+        .trim();
+}
+
 function isValidCpf(value){
     const cpf=String(value||"").replace(/\D/g,"");
     if(cpf.length!==11||/^([0-9])\1{10}$/.test(cpf)) return false;
@@ -117,7 +193,7 @@ function failedLogin(req,email){const k=loginKey(req,email);const r=adminLoginAt
 function clearLoginFailures(req,email){adminLoginAttempts.delete(loginKey(req,email))}
 function setAdminCookie(res,t){res.setHeader("Set-Cookie",`monte_admin_session=${encodeURIComponent(t)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(ADMIN_SESSION_TTL/1000)}`)}
 function clearAdminCookie(res){res.setHeader("Set-Cookie","monte_admin_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0")}
-app.post("/api/admin/login",(req,res)=>{const email=safeString(req.body?.email).toLowerCase(),password=req.body?.password;if(!ADMIN_EMAIL||!ADMIN_PASSWORD_HASH)return res.status(503).json({success:false,message:"Acesso administrativo não configurado no servidor."});if(!loginAllowed(req,email))return res.status(429).json({success:false,message:"Muitas tentativas. Tente novamente em 15 minutos."});if(email!==ADMIN_EMAIL.toLowerCase()||!passwordMatches(password)){failedLogin(req,email);return res.status(401).json({success:false,message:"E-mail ou senha incorretos."})}clearLoginFailures(req,email);const token=crypto.randomBytes(32).toString("hex");adminSessions.set(token,{email:ADMIN_EMAIL,expiresAt:Date.now()+ADMIN_SESSION_TTL});setAdminCookie(res,token);return res.json({success:true,email:ADMIN_EMAIL})});
+app.post("/api/admin/login",adminLoginRateLimit,(req,res)=>{const email=safeString(req.body?.email).toLowerCase(),password=req.body?.password;if(!ADMIN_EMAIL||!ADMIN_PASSWORD_HASH)return res.status(503).json({success:false,message:"Acesso administrativo não configurado no servidor."});if(!loginAllowed(req,email))return res.status(429).json({success:false,message:"Muitas tentativas. Tente novamente em 15 minutos."});if(email!==ADMIN_EMAIL.toLowerCase()||!passwordMatches(password)){failedLogin(req,email);return res.status(401).json({success:false,message:"E-mail ou senha incorretos."})}clearLoginFailures(req,email);const token=crypto.randomBytes(32).toString("hex");adminSessions.set(token,{email:ADMIN_EMAIL,expiresAt:Date.now()+ADMIN_SESSION_TTL});setAdminCookie(res,token);return res.json({success:true,email:ADMIN_EMAIL})});
 app.post("/api/admin/logout",(req,res)=>{const t=parseCookies(req).monte_admin_session;if(t)adminSessions.delete(t);clearAdminCookie(res);return res.json({success:true})});
 app.get("/api/admin/session",(req,res)=>{const s=getAdminSession(req);if(!s)return res.status(401).json({success:false});return res.json({success:true,email:s.email})});
 app.get("/api/admin/products",requireAdmin,async(req,res)=>{try{const data=await supabaseRequest("products?select=*,product_variants(*)&order=created_at.desc");return res.json({success:true,products:data||[]})}catch(e){console.error("Admin products GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar os produtos."})}});
@@ -331,6 +407,7 @@ setInterval(
 
 app.post(
     "/api/criar-checkout",
+    checkoutRateLimit,
     async (req, res) => {
 
         try {
@@ -398,6 +475,29 @@ app.post(
 
 
             const customerCpf = String(customer.cpf || "").replace(/\D/g, "");
+            const customerEmail = safeString(customer.email).toLowerCase();
+            const customerPhone = safeString(customer.phone);
+            const customerName = safeString(customer.name);
+            const address = customer.address || {};
+
+            if (
+                customerName.length < 2 || customerName.length > 120 ||
+                customerEmail.length > 160 || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(customerEmail) ||
+                customerPhone.length < 8 || customerPhone.length > 30 ||
+                customerCpf.length !== 11 ||
+                safeString(address.cep).length > 12 ||
+                safeString(address.street).length > 160 ||
+                safeString(address.number).length > 30 ||
+                safeString(address.complement).length > 120 ||
+                safeString(address.neighborhood).length > 120 ||
+                safeString(address.city).length > 100 ||
+                safeString(address.state).length > 30
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Confira os dados informados no checkout."
+                });
+            }
 
             if (!isValidCpf(customerCpf)) {
                 return res.status(400).json({
@@ -410,21 +510,33 @@ app.post(
                NORMALIZA PRODUTOS
             ================================================= */
 
+            if (items.length > 20) {
+                return res.status(400).json({
+                    success: false,
+                    message: "O pedido excede o limite de itens permitido."
+                });
+            }
+
             const normalizedItems =
                 items
                     .map(
                         (item) => {
 
                             const quantity =
-                                Number(
-                                    item.quantity
-                                ) || 1;
+                                Number(item.quantity);
+
+                            if (!Number.isInteger(quantity) || quantity < 1 || quantity > 20) {
+                                return null;
+                            }
 
 
                             const price =
-                                Number(
-                                    item.price
-                                );
+                                Number(item.price);
+
+                            const productId = safeString(item.id || item.product_id);
+                            if (!productId || !/^[0-9a-f-]{36}$/i.test(productId)) {
+                                return null;
+                            }
 
 
                             const description =
@@ -490,8 +602,7 @@ app.post(
                             return {
 
                                 id:
-                                    item.id ||
-                                    null,
+                                    productId,
 
                                 name:
                                     item.name ||
@@ -690,19 +801,13 @@ app.post(
                 customer: {
 
                     name:
-                        String(
-                            customer.name
-                        ),
+                        customerName,
 
                     email:
-                        String(
-                            customer.email
-                        ),
+                        customerEmail,
 
                     phone:
-                        String(
-                            customer.phone
-                        ),
+                        customerPhone,
 
                     cpf:
                         customerCpf,
