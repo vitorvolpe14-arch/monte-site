@@ -958,8 +958,9 @@ function normalizeCity(city) {
 
 
 function getShippingValue() {
-    // Frete temporariamente desativado.
-    return 0;
+    const cityInput = document.getElementById("customerCity");
+    const city = normalizeCity(cityInput?.value || "");
+    return city === "FORTALEZA" ? 15 : 0;
 }
 
 
@@ -1063,8 +1064,9 @@ function updateShipping() {
         return;
     }
 
+    const shipping = getShippingValue();
     shippingValueElement.textContent =
-        "Frete grátis";
+        shipping > 0 ? formatPrice(shipping) : "Calcular no checkout";
 
 }
 
@@ -1148,8 +1150,10 @@ async function checkout() {
         return;
     }
 
-    // 4. Frete temporariamente desativado
-    const shipping = 0;
+    // 4. Frete
+    // Fortaleza capital: R$ 15,00.
+    // Outras localidades aguardam cotação de transportadora no backend.
+    const shipping = getShippingValue();
 
 
     // 5. Monta os produtos
@@ -1193,7 +1197,7 @@ async function checkout() {
         .filter(Boolean);
 
 
-    // 6. Sem frete: o checkout envia somente os produtos.
+    // 6. O backend valida o valor do frete novamente antes de criar o checkout.
 
 
     // Segurança
