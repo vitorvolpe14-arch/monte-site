@@ -65,7 +65,7 @@ async function supabaseRequest(path, options = {}) {
 ===================================================== */
 
 const allowedOrigins = new Set([
-    SITE_URL.replace(/\\/$/, "")
+    SITE_URL.replace(/\/$/, "")
 ]);
 
 app.use((req, res, next) => {
@@ -86,7 +86,7 @@ app.use((req, res, next) => {
 app.use(
     cors({
         origin: (origin, callback) => {
-            if (!origin || allowedOrigins.has(origin.replace(/\\/$/, ""))) {
+            if (!origin || allowedOrigins.has(origin.replace(/\/$/, ""))) {
                 return callback(null, true);
             }
             return callback(new Error("Origem não autorizada."));
