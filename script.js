@@ -1025,13 +1025,14 @@ async function updateShipping() {
     if (!shippingValueElement) return;
     const cep = document.getElementById("customerCep")?.value.replace(/\D/g, "") || "";
     const city = normalizeCity(document.getElementById("customerCity")?.value || "");
+    const state = (document.getElementById("customerState")?.value || "").trim().toUpperCase();
     const requestId = ++shippingRequestId;
     shippingOptions = [];
     selectedShippingOption = null;
     renderShippingOptions();
     updatePaymentSummary();
     if (cep.length !== 8) { shippingValueElement.textContent = "Informe seu CEP"; return; }
-    const localCity = ["FORTALEZA", ...metropolitanCities].includes(city);
+    const localCity = state === "CE" && ["FORTALEZA", ...metropolitanCities].includes(city);
     if (localCity) {
         const local = city === "FORTALEZA" ? {id:"monte-fortaleza",name:"Entrega MONTÊ — Fortaleza",price:15,delivery_days:2} : {id:"monte-regiao-metropolitana",name:"Entrega MONTÊ — Região Metropolitana",price:20,delivery_days:3};
         shippingOptions = [local]; selectedShippingOption = local;
@@ -1041,7 +1042,7 @@ async function updateShipping() {
     shippingValueElement.textContent = "Calculando...";
     if (optionsContainer) optionsContainer.innerHTML = '<div class="shipping-loading">Consultando opções de entrega...</div>';
     try {
-        const response = await fetch("https://monte-site-itjk.onrender.com/api/frete/cotacao",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({to_cep:cep,city,items:cart.map(item=>({id:item.id,quantity:item.quantity}))})});
+        const response = await fetch("/api/frete/cotacao",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({to_cep:cep,city,state,items:cart.map(item=>({id:item.id,quantity:item.quantity}))})});
         const data = await response.json().catch(() => ({}));
         if (requestId !== shippingRequestId) return;
         if (!response.ok || !data.success || !Array.isArray(data.options) || !data.options.length) throw new Error(data.message || "Nenhuma opção de frete disponível.");
@@ -1138,29 +1139,6 @@ async function lookupAddressByCep() {
     } finally {
         cepLookupController = null;
     }
-}
-
-
-/* =====================================================
-   ATUALIZAR FRETE
-===================================================== */
-
-function updateShipping() {
-
-    const shippingValueElement =
-        document.getElementById(
-            "shippingValue"
-        );
-
-    if (!shippingValueElement) {
-        return;
-    }
-
-    const shipping = getShippingValue();
-    shippingValueElement.textContent =
-        shipping > 0 ? formatPrice(shipping) : "Calcular no checkout";
-    updatePaymentSummary();
-
 }
 
 
@@ -1333,7 +1311,7 @@ async function checkout() {
         // 8. Envia para o backend do Render
         const response =
             await fetch(
-                "https://monte-site-itjk.onrender.com/api/criar-checkout",
+                "/api/criar-checkout",
                 {
 
                     method: "POST",
