@@ -553,6 +553,41 @@ app.post(
 
 
             /* =================================================
+               RECALCULA PREÇOS NO SERVIDOR
+               Nunca confia no preço salvo no navegador.
+            ================================================= */
+            for (const item of productItems) {
+                const productRows = await supabaseRequest(
+                    "products?id=eq." + encodeURIComponent(item.id) +
+                    "&active=eq.true&select=id,name,price,sale_price,is_sale"
+                );
+                const product = Array.isArray(productRows) ? productRows[0] : null;
+
+                if (!product) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Produto inválido ou indisponível."
+                    });
+                }
+
+                const serverPrice =
+                    product.is_sale && product.sale_price != null
+                        ? Number(product.sale_price)
+                        : Number(product.price);
+
+                if (!Number.isFinite(serverPrice) || serverPrice <= 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Produto sem preço válido."
+                    });
+                }
+
+                item.price = Number(serverPrice.toFixed(2));
+                item.name = product.name || item.name;
+                item.description = product.name || item.description;
+            }
+
+            /* =================================================
                FRETE
             ================================================= */
 
