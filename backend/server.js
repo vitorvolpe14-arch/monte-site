@@ -511,8 +511,18 @@ app.post(
 
             const {
                 items,
-                customer
+                customer,
+                payment_method: requestedPaymentMethod
             } = req.body || {};
+
+            const paymentMethod = String(requestedPaymentMethod || "pix").toLowerCase();
+
+            if (!["pix", "card"].includes(paymentMethod)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Forma de pagamento inválida."
+                });
+            }
 
 
             /* =================================================
