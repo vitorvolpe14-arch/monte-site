@@ -585,6 +585,19 @@ app.post("/api/admin/stock/adjust",requireAdmin,async(req,res)=>{
 });
 
 /* =====================================================
+   ÁREA GERENCIAL
+   Rota explícita para o painel. O Render executa o backend em /backend,
+   enquanto admin.html permanece na raiz do repositório.
+===================================================== */
+app.get("/admin", (req, res) => {
+    res.sendFile(path.join(__dirname, "..", "admin.html"));
+});
+
+app.get("/admin/", (req, res) => {
+    res.sendFile(path.join(__dirname, "..", "admin.html"));
+});
+
+/* =====================================================
    ARQUIVOS DO SITE
 ===================================================== */
 
