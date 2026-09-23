@@ -414,6 +414,14 @@ a {
 
     inset: 0;
 
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    background: #f4f4f2;
+
     opacity: 0;
 
     transition: opacity 1s ease;
@@ -434,7 +442,9 @@ a {
 
     height: 100%;
 
-    object-fit: cover;
+    object-fit: contain;
+
+    object-position: center;
 
 }
 
@@ -800,7 +810,9 @@ a {
 
     height: 100%;
 
-    object-fit: cover;
+    object-fit: contain;
+
+    object-position: center;
 
     transition: transform .6s ease;
 
@@ -1412,7 +1424,9 @@ a {
 
     height: 100%;
 
-    object-fit: cover;
+    object-fit: contain;
+
+    object-position: center;
 
 }
 
@@ -1436,7 +1450,11 @@ a {
 
     height: 90px;
 
-    object-fit: cover;
+    object-fit: contain;
+
+    object-position: center;
+
+    background: #f4f4f2;
 
     cursor: pointer;
 
