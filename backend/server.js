@@ -587,7 +587,8 @@ app.post(
             const {
                 items,
                 customer,
-                payment_method: requestedPaymentMethod
+                payment_method: requestedPaymentMethod,
+                shipping_service_id: requestedShippingServiceId
             } = req.body || {};
 
             const paymentMethod = String(requestedPaymentMethod || "pix").toLowerCase();
@@ -877,7 +878,36 @@ app.post(
                 );
 
             const deliveryCity = normalizeCity(customer.address.city);
-            const shippingValue = deliveryCity === "FORTALEZA" ? 15 : 0;
+            const localShipping = localShippingOption(deliveryCity);
+            let shippingOption = null;
+
+            if (localShipping) {
+                shippingOption = localShipping;
+            } else {
+                const shippingServiceId = safeString(requestedShippingServiceId);
+                if (!shippingServiceId) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Selecione uma modalidade de frete."
+                    });
+                }
+
+                const quotes = await calculateSuperfreteQuotes({
+                    toCep: customer.address.cep,
+                    items: productItems
+                });
+
+                shippingOption = quotes.find(option => option.id === shippingServiceId) || null;
+
+                if (!shippingOption) {
+                    return res.status(409).json({
+                        success: false,
+                        message: "A modalidade de frete selecionada não está mais disponível. Calcule o frete novamente."
+                    });
+                }
+            }
+
+            const shippingValue = Number(shippingOption.price.toFixed(2));
 
 
             /* =================================================
@@ -1031,12 +1061,10 @@ app.post(
                     productItems,
 
                 shipping: {
-
-                    value:
-                        Number(
-                            shippingValue.toFixed(2)
-                        )
-
+                    value: Number(shippingValue.toFixed(2)),
+                    service_id: shippingOption.id,
+                    service_name: shippingOption.name,
+                    delivery_days: shippingOption.delivery_days || shippingOption.delivery_max_days || null
                 },
 
                 created_at:
@@ -1070,6 +1098,9 @@ app.post(
                     customer_address: pendingOrder.customer.address,
                     subtotal: Number(subtotal.toFixed(2)),
                     shipping: Number(shippingValue.toFixed(2)),
+                    shipping_service_id: shippingOption.id,
+                    shipping_service_name: shippingOption.name,
+                    shipping_delivery_days: shippingOption.delivery_days || shippingOption.delivery_max_days || null,
                     total: checkoutTotal,
                     status: "pending",
                     payment_method: paymentMethod === "pix" ? "pix" : "credit_card",
@@ -1120,7 +1151,7 @@ app.post(
                 infinitePayItems.push({
                     quantity: 1,
                     price: Math.round(shippingValue * 100),
-                    description: "Frete"
+                    description: shippingOption.name
                 });
             }
 
