@@ -94,10 +94,21 @@
 
         </a>
 
+        <a href="/minhas-compras.html"
+           onclick="closeMobileMenu()">
+
+            MINHAS COMPRAS
+
+        </a>
+
     </nav>
 
 
     <div class="header-actions">
+
+        <a href="/minhas-compras.html" class="header-purchases-link">
+            MINHAS COMPRAS
+        </a>
 
         <button onclick="openSearch()"
                 aria-label="Pesquisar">
@@ -771,6 +782,11 @@
         autocomplete="tel"
     >
 
+    <label class="whatsapp-optin">
+        <input type="checkbox" id="whatsappUpdates">
+        <span>Quero receber atualizações do meu pedido e rastreio pelo WhatsApp.</span>
+    </label>
+
     <input
         type="text"
         id="customerCpf"
@@ -910,7 +926,7 @@
 
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="script.js?v=20260923-superfrete3"></script>
+<script src="script.js?v=20260923-purchases1"></script>
 
 </body>
 
