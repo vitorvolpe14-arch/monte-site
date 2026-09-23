@@ -63,6 +63,11 @@ const COLLECTION_STEP = 4;
 let collectionProducts = [];
 let currentCollectionIndex = 0;
 
+const SALE_VISIBLE_COUNT = 5;
+const SALE_STEP = 4;
+let saleProducts = [];
+let currentSaleIndex = 0;
+
 
 /* =====================================================
    FORMATAÇÃO DE PREÇO
@@ -213,16 +218,15 @@ function renderProducts() {
     const newContainer =
         document.getElementById("newProducts");
 
-    const saleContainer =
-        document.getElementById("saleProducts");
-
 
     newContainer.innerHTML = "";
 
-    saleContainer.innerHTML = "";
-
 
     renderCollectionProducts(products);
+
+    renderSaleProducts(
+        products.filter(product => product.sale)
+    );
 
 
     products.forEach(product => {
@@ -230,15 +234,6 @@ function renderProducts() {
         if (product.newProduct) {
 
             newContainer.appendChild(
-                createProductCard(product)
-            );
-
-        }
-
-
-        if (product.sale) {
-
-            saleContainer.appendChild(
                 createProductCard(product)
             );
 
@@ -258,6 +253,108 @@ function renderCollectionProducts(list) {
     currentCollectionIndex = 0;
 
     renderCollectionPage();
+
+}
+
+
+function renderSaleProducts(list) {
+
+    saleProducts = Array.isArray(list)
+        ? list
+        : [];
+
+    currentSaleIndex = 0;
+
+    renderSalePage();
+
+}
+
+
+function renderSalePage() {
+
+    const container =
+        document.getElementById("saleProducts");
+
+    const previousButton =
+        document.querySelector(".sale-prev");
+
+    const nextButton =
+        document.querySelector(".sale-next");
+
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    if (!saleProducts.length) {
+        if (previousButton) {
+            previousButton.disabled = true;
+            previousButton.style.visibility = "hidden";
+        }
+        if (nextButton) {
+            nextButton.disabled = true;
+            nextButton.style.visibility = "hidden";
+        }
+        return;
+    }
+
+    const total = saleProducts.length;
+    const start = currentSaleIndex % total;
+
+    for (
+        let offset = 0;
+        offset < Math.min(SALE_VISIBLE_COUNT, total);
+        offset++
+    ) {
+        const product =
+            saleProducts[(start + offset) % total];
+
+        container.appendChild(
+            createProductCard(product)
+        );
+    }
+
+    const hasCarousel =
+        total > SALE_VISIBLE_COUNT;
+
+    if (previousButton) {
+        previousButton.disabled = !hasCarousel;
+        previousButton.style.visibility =
+            hasCarousel ? "visible" : "hidden";
+    }
+
+    if (nextButton) {
+        nextButton.disabled = !hasCarousel;
+        nextButton.style.visibility =
+            hasCarousel ? "visible" : "hidden";
+    }
+
+}
+
+
+function nextSalePage() {
+
+    if (saleProducts.length <= SALE_VISIBLE_COUNT) {
+        return;
+    }
+
+    currentSaleIndex =
+        (currentSaleIndex + SALE_STEP) % saleProducts.length;
+
+    renderSalePage();
+
+}
+
+
+function previousSalePage() {
+
+    if (saleProducts.length <= SALE_VISIBLE_COUNT) {
+        return;
+    }
+
+    currentSaleIndex =
+        (currentSaleIndex - SALE_STEP + saleProducts.length) % saleProducts.length;
+
+    renderSalePage();
 
 }
 
