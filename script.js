@@ -1362,6 +1362,10 @@ async function checkout() {
 
                             phone: phone,
 
+                            whatsapp_updates: Boolean(
+                                document.getElementById("whatsappUpdates")?.checked
+                            ),
+
                             cpf: cpfDigits,
 
                             address: {
