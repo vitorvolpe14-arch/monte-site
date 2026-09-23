@@ -31,6 +31,72 @@ const SUPERFRETE_API_URL = process.env.SUPERFRETE_API_URL || "https://api.superf
 const SUPERFRETE_TOKEN = process.env.SUPERFRETE_TOKEN;
 const SUPERFRETE_ORIGIN_CEP = String(process.env.SUPERFRETE_ORIGIN_CEP || "60183680").replace(/\D/g, "");
 const SUPERFRETE_USER_AGENT = process.env.SUPERFRETE_USER_AGENT || "MONTÊ/1.0 (vitorvolpe14@gmail.com)";
+const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || "v23.0";
+const WHATSAPP_PHONE_NUMBER_ID = safeString(process.env.WHATSAPP_PHONE_NUMBER_ID);
+const WHATSAPP_ACCESS_TOKEN = safeString(process.env.WHATSAPP_ACCESS_TOKEN);
+const WHATSAPP_TEMPLATE_NAME = safeString(process.env.WHATSAPP_TEMPLATE_NAME || "monte_rastreio");
+const WHATSAPP_TEMPLATE_LANGUAGE = safeString(process.env.WHATSAPP_TEMPLATE_LANGUAGE || "pt_BR");
+
+async function sendWhatsAppTrackingNotification(order) {
+    if (!order?.whatsapp_tracking_opt_in) {
+        return { sent: false, status: "opted_out", message_id: null };
+    }
+
+    if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
+        return { sent: false, status: "not_configured", message_id: null };
+    }
+
+    const phone = String(order.customer_phone || "").replace(/\D/g, "");
+    const trackingCode = safeString(order.tracking_code);
+    const trackingUrl = safeString(order.tracking_url);
+    if (phone.length < 10 || !trackingCode) {
+        return { sent: false, status: "invalid_recipient_or_tracking", message_id: null };
+    }
+
+    const firstName = safeString(order.customer_name).split(/\s+/)[0] || "cliente";
+    const orderCode = safeString(order.order_nsu);
+    const apiUrl = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
+
+    const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to: phone,
+            type: "template",
+            template: {
+                name: WHATSAPP_TEMPLATE_NAME,
+                language: { code: WHATSAPP_TEMPLATE_LANGUAGE },
+                components: [
+                    {
+                        type: "body",
+                        parameters: [
+                            { type: "text", text: firstName },
+                            { type: "text", text: orderCode },
+                            { type: "text", text: trackingCode },
+                            { type: "text", text: trackingUrl || "Acompanhe pelo site da MONTÊ." }
+                        ]
+                    }
+                ]
+            }
+        })
+    });
+
+    const responseText = await response.text();
+    let data = {};
+    try { data = responseText ? JSON.parse(responseText) : {}; } catch { data = { raw: responseText }; }
+
+    if (!response.ok) {
+        throw new Error(`WhatsApp API ${response.status}: ${JSON.stringify(data)}`);
+    }
+
+    const messageId = data?.messages?.[0]?.id || null;
+    return { sent: true, status: "sent", message_id: messageId };
+}
 
 async function supabaseRequest(path, options = {}) {
     if (!SUPABASE_SERVICE_ROLE_KEY) {
@@ -400,7 +466,31 @@ app.patch("/api/admin/orders/:id/status",requireAdmin,async(req,res)=>{
         if(status==="delivered") patch.delivered_at=new Date().toISOString();
         const d=await supabaseRequest(`orders?id=eq.${id}`,{method:"PATCH",body:JSON.stringify(patch)});
         if(!Array.isArray(d)||!d[0]) return res.status(404).json({success:false,message:"Pedido não encontrado."});
-        return res.json({success:true,order:d[0]});
+
+        let whatsapp = null;
+        const savedOrder = d[0];
+        if (status === "shipped" && savedOrder.tracking_code && savedOrder.whatsapp_tracking_opt_in && !savedOrder.whatsapp_tracking_sent_at) {
+            try {
+                whatsapp = await sendWhatsAppTrackingNotification(savedOrder);
+                await supabaseRequest(`orders?id=eq.${id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({
+                        whatsapp_tracking_status: whatsapp.status,
+                        whatsapp_tracking_sent_at: whatsapp.sent ? new Date().toISOString() : null,
+                        whatsapp_tracking_message_id: whatsapp.message_id
+                    })
+                });
+            } catch (whatsappError) {
+                console.error("WhatsApp rastreio:", whatsappError);
+                whatsapp = { sent: false, status: "error", message_id: null, error: whatsappError.message };
+                await supabaseRequest(`orders?id=eq.${id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({ whatsapp_tracking_status: "error" })
+                });
+            }
+        }
+
+        return res.json({success:true,order:{...savedOrder, ...(whatsapp ? {whatsapp_tracking_status:whatsapp.status, whatsapp_tracking_message_id:whatsapp.message_id}: {})},whatsapp});
     }catch(e){console.error("Admin order status PATCH:",e);return res.status(500).json({success:false,message:"Não foi possível atualizar o pedido."})}
 });
 
@@ -1041,6 +1131,9 @@ app.post(
                     phone:
                         customerPhone,
 
+                    whatsapp_updates:
+                        customer.whatsapp_updates === true,
+
                     cpf:
                         customerCpf,
 
@@ -1128,6 +1221,8 @@ app.post(
                     total: checkoutTotal,
                     status: "pending",
                     payment_method: paymentMethod === "pix" ? "pix" : "credit_card",
+                    whatsapp_tracking_opt_in: customer.whatsapp_updates === true,
+                    whatsapp_tracking_status: customer.whatsapp_updates === true ? "pending" : "opted_out",
                     items: productItems
                 })
             });
@@ -1711,6 +1806,63 @@ app.post(
         }
     }
 );
+
+/* =====================================================
+   MINHAS COMPRAS — CONSULTA SEGURA POR PEDIDO + E-MAIL
+===================================================== */
+
+app.get("/api/minhas-compras", orderStatusRateLimit, async (req, res) => {
+    try {
+        const orderNsu = safeString(req.query.order_nsu);
+        const email = safeString(req.query.email).toLowerCase();
+
+        if (!orderNsu || !email || orderNsu.length > 80 || email.length > 160) {
+            return res.status(400).json({ success: false, message: "Informe o número do pedido e o e-mail usado na compra." });
+        }
+
+        const rows = await supabaseRequest(
+            `orders?order_nsu=eq.${encodeURIComponent(orderNsu)}&customer_email=eq.${encodeURIComponent(email)}&select=id,order_nsu,customer_name,customer_email,status,total,subtotal,shipping,shipping_carrier,tracking_code,tracking_url,shipping_service_name,created_at,paid_at,processing_at,shipped_at,delivered_at,order_items(product_name,variant_color,sku,quantity,unit_price,total_price)`,
+            { method: "GET" }
+        );
+
+        const order = Array.isArray(rows) ? rows[0] : null;
+        if (!order) {
+            return res.status(404).json({ success: false, message: "Não encontramos um pedido com esses dados." });
+        }
+
+        return res.json({
+            success: true,
+            order: {
+                order_nsu: order.order_nsu,
+                customer_name: order.customer_name,
+                status: order.status,
+                subtotal: Number(order.subtotal || 0),
+                shipping: Number(order.shipping || 0),
+                total: Number(order.total || 0),
+                shipping_carrier: order.shipping_carrier || null,
+                tracking_code: order.tracking_code || null,
+                tracking_url: order.tracking_url || null,
+                shipping_service_name: order.shipping_service_name || null,
+                created_at: order.created_at,
+                paid_at: order.paid_at,
+                processing_at: order.processing_at,
+                shipped_at: order.shipped_at,
+                delivered_at: order.delivered_at,
+                items: (order.order_items || []).map(item => ({
+                    product_name: item.product_name,
+                    variant_color: item.variant_color,
+                    sku: item.sku,
+                    quantity: Number(item.quantity || 0),
+                    unit_price: Number(item.unit_price || 0),
+                    total_price: Number(item.total_price || 0)
+                }))
+            }
+        });
+    } catch (error) {
+        console.error("❌ Minhas compras:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível consultar o pedido." });
+    }
+});
 
 /* =====================================================
    STATUS DO PEDIDO PARA A PÁGINA DE SUCESSO
