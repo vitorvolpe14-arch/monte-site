@@ -27,6 +27,10 @@ const INFINITEPAY_HANDLE =
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://uvrhougaurupvkxmezwy.supabase.co";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPERFRETE_API_URL = process.env.SUPERFRETE_API_URL || "https://api.superfrete.com";
+const SUPERFRETE_TOKEN = process.env.SUPERFRETE_TOKEN;
+const SUPERFRETE_ORIGIN_CEP = String(process.env.SUPERFRETE_ORIGIN_CEP || "60183680").replace(/\D/g, "");
+const SUPERFRETE_USER_AGENT = process.env.SUPERFRETE_USER_AGENT || "MONTÊ/1.0 (vitorvolpe14@gmail.com)";
 
 async function supabaseRequest(path, options = {}) {
     if (!SUPABASE_SERVICE_ROLE_KEY) {
@@ -59,6 +63,63 @@ async function supabaseRequest(path, options = {}) {
 
 /* =====================================================
 
+
+/* =====================================================
+   FRETE — REGRAS LOCAIS + SUPERFRETE
+===================================================== */
+
+const METROPOLITAN_CITIES = new Set(["AQUIRAZ","CAUCAIA","EUSEBIO","GUAIUBA","ITAITINGA","MARACANAU"]);
+
+function localShippingOption(city) {
+    const normalized = normalizeCity(city);
+    if (normalized === "FORTALEZA") return { id:"monte-fortaleza", name:"Entrega MONTÊ — Fortaleza", price:15, delivery_days:2 };
+    if (METROPOLITAN_CITIES.has(normalized)) return { id:"monte-regiao-metropolitana", name:"Entrega MONTÊ — Região Metropolitana", price:20, delivery_days:3 };
+    return null;
+}
+
+function normalizeShippingProduct(row, quantity) {
+    const values = [Number(row.shipping_weight_kg),Number(row.shipping_height_cm),Number(row.shipping_width_cm),Number(row.shipping_length_cm)];
+    if (!values.every(Number.isFinite) || values.some(v=>v<=0)) return null;
+    return { quantity:Math.max(1,Number(quantity||1)), weight:values[0], height:values[1], width:values[2], length:values[3] };
+}
+
+async function calculateSuperfreteQuotes({toCep,items}) {
+    if (!SUPERFRETE_TOKEN) throw new Error("SUPERFRETE_TOKEN não configurado no Render.");
+    if (!SUPERFRETE_ORIGIN_CEP || SUPERFRETE_ORIGIN_CEP.length!==8) throw new Error("SUPERFRETE_ORIGIN_CEP não configurado corretamente.");
+    const grouped=new Map();
+    for(const item of Array.isArray(items)?items:[]){const id=safeString(item.id||item.product_id);const quantity=Math.max(1,Number(item.quantity||1));if(id) grouped.set(id,(grouped.get(id)||0)+quantity);}
+    if(!grouped.size) throw new Error("Nenhum produto válido para calcular o frete.");
+    const productRows=await Promise.all([...grouped.entries()].map(async([id,quantity])=>{
+        const rows=await supabaseRequest("products?id=eq."+encodeURIComponent(id)+"&active=eq.true&select=id,name,shipping_weight_kg,shipping_height_cm,shipping_width_cm,shipping_length_cm",{method:"GET"});
+        const product=Array.isArray(rows)?rows[0]:null;
+        if(!product) throw new Error("Produto não encontrado para cálculo de frete.");
+        const shippingProduct=normalizeShippingProduct(product,quantity);
+        if(!shippingProduct) throw new Error(`O produto "${product.name||"sem nome"}" ainda não possui peso e dimensões cadastrados para o cálculo de frete.`);
+        return shippingProduct;
+    }));
+    const response=await fetch(`${SUPERFRETE_API_URL.replace(/\/$/,"")}/api/v0/calculator`,{
+        method:"POST",
+        headers:{"Authorization":`Bearer ${SUPERFRETE_TOKEN}`,"User-Agent":SUPERFRETE_USER_AGENT,"Accept":"application/json","Content-Type":"application/json"},
+        body:JSON.stringify({from:{postal_code:SUPERFRETE_ORIGIN_CEP},to:{postal_code:String(toCep).replace(/\D/g,"")},services:"1,2,17,3,33",options:{own_hand:false,receipt:false,insurance_value:0,use_insurance_value:false},products:productRows})
+    });
+    const responseText=await response.text();
+    let data={}; try{data=responseText?JSON.parse(responseText):{}}catch{data={raw:responseText};}
+    if(!response.ok){console.error("SuperFrete cotação:",response.status,data);throw new Error("A SuperFrete não conseguiu calcular o frete para este CEP.");}
+    const candidates=Array.isArray(data)?data:(data?.services||data?.data||data?.results||data?.cotation||data?.quotes||[]);
+    const list=Array.isArray(candidates)?candidates:(candidates&&typeof candidates==="object"?Object.values(candidates):[]);
+    const quotes=list.map(service=>{
+        const price=Number(service?.price??service?.custom_price??service?.value??service?.amount);
+        const id=service?.id??service?.service_id??service?.code;
+        const name=service?.name||service?.service||service?.service_name;
+        const range=service?.delivery_range||service?.deliveryRange||{};
+        const min=Number(service?.delivery_min??service?.delivery_time_min??range?.min??service?.delivery_time);
+        const max=Number(service?.delivery_max??service?.delivery_time_max??range?.max??service?.delivery_time);
+        if(!id||!name||!Number.isFinite(price)||price<=0)return null;
+        return {id:String(id),name:String(name),price:Number(price.toFixed(2)),delivery_days:Number.isFinite(max)?Math.max(1,max):null,delivery_min_days:Number.isFinite(min)?Math.max(1,min):null,delivery_max_days:Number.isFinite(max)?Math.max(1,max):null};
+    }).filter(Boolean);
+    const unique=new Map(); for(const quote of quotes) if(!unique.has(quote.id)) unique.set(quote.id,quote);
+    return [...unique.values()];
+}
 
 /* =====================================================
    MIDDLEWARES
@@ -198,7 +259,7 @@ app.post("/api/admin/login",adminLoginRateLimit,(req,res)=>{const email=safeStri
 app.post("/api/admin/logout",(req,res)=>{const t=parseCookies(req).monte_admin_session;if(t)adminSessions.delete(t);clearAdminCookie(res);return res.json({success:true})});
 app.get("/api/admin/session",(req,res)=>{const s=getAdminSession(req);if(!s)return res.status(401).json({success:false});return res.json({success:true,email:s.email})});
 app.get("/api/admin/products",requireAdmin,async(req,res)=>{try{const data=await supabaseRequest("products?select=*,product_variants(*)&order=created_at.desc");return res.json({success:true,products:data||[]})}catch(e){console.error("Admin products GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar os produtos."})}});
-function sanitizeProductPayload(b={}){return{name:safeString(b.name),sku:safeString(b.sku)||null,category:safeString(b.category)||"bolsas",price:Number(b.price||0),sale_price:b.sale_price===null||b.sale_price===""||b.sale_price===undefined?null:Number(b.sale_price),description:safeString(b.description),images:Array.isArray(b.images)?b.images:[],is_new:Boolean(b.is_new),is_sale:Boolean(b.is_sale),active:b.active!==false}}
+function sanitizeProductPayload(b={}){return{name:safeString(b.name),sku:safeString(b.sku)||null,category:safeString(b.category)||"bolsas",price:Number(b.price||0),sale_price:b.sale_price===null||b.sale_price===""||b.sale_price===undefined?null:Number(b.sale_price),description:safeString(b.description),images:Array.isArray(b.images)?b.images:[],shipping_weight_kg:b.shipping_weight_kg===null||b.shipping_weight_kg===""||b.shipping_weight_kg===undefined?null:Number(b.shipping_weight_kg),shipping_height_cm:b.shipping_height_cm===null||b.shipping_height_cm===""||b.shipping_height_cm===undefined?null:Number(b.shipping_height_cm),shipping_width_cm:b.shipping_width_cm===null||b.shipping_width_cm===""||b.shipping_width_cm===undefined?null:Number(b.shipping_width_cm),shipping_length_cm:b.shipping_length_cm===null||b.shipping_length_cm===""||b.shipping_length_cm===undefined?null:Number(b.shipping_length_cm),is_new:Boolean(b.is_new),is_sale:Boolean(b.is_sale),active:b.active!==false}}
 app.post("/api/admin/products",requireAdmin,async(req,res)=>{try{const p=sanitizeProductPayload(req.body);if(!p.name)return res.status(400).json({success:false,message:"Informe o nome do produto."});const d=await supabaseRequest("products",{method:"POST",body:JSON.stringify(p)});return res.status(201).json({success:true,product:d?.[0]||d})}catch(e){console.error("Admin products POST:",e);return res.status(500).json({success:false,message:e.message})}});
 app.put("/api/admin/products/:id",requireAdmin,async(req,res)=>{try{const p=sanitizeProductPayload(req.body);if(!p.name)return res.status(400).json({success:false,message:"Informe o nome do produto."});const d=await supabaseRequest(`products?id=eq.${encodeURIComponent(req.params.id)}`,{method:"PATCH",body:JSON.stringify(p)});return res.json({success:true,product:d?.[0]||d})}catch(e){console.error("Admin products PUT:",e);return res.status(500).json({success:false,message:e.message})}});
 app.put("/api/admin/products/:id/variants",requireAdmin,async(req,res)=>{
@@ -497,6 +558,20 @@ setInterval(
    CRIAR CHECKOUT
    COM PEDIDO SALVO ANTES DO PAGAMENTO
 ===================================================== */
+
+app.post("/api/frete/cotacao", async (req,res)=>{
+    try{
+        const toCep=safeString(req.body?.to_cep||req.body?.cep).replace(/\D/g,"");
+        const items=Array.isArray(req.body?.items)?req.body.items:[];
+        const city=normalizeCity(req.body?.city||"");
+        if(toCep.length!==8)return res.status(400).json({success:false,message:"CEP de destino inválido."});
+        const local=localShippingOption(city);
+        if(local)return res.json({success:true,source:"monte",options:[local]});
+        const options=await calculateSuperfreteQuotes({toCep,items});
+        if(!options.length)return res.status(422).json({success:false,message:"Nenhuma modalidade de frete disponível para este CEP."});
+        return res.json({success:true,source:"superfrete",options});
+    }catch(error){console.error("❌ Erro na cotação SuperFrete:",error);return res.status(502).json({success:false,message:error.message||"Não foi possível calcular o frete."});}
+});
 
 app.post(
     "/api/criar-checkout",
