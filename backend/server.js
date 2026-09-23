@@ -73,6 +73,7 @@ app.use((req, res, next) => {
     res.setHeader("X-Frame-Options", "SAMEORIGIN");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+    res.setHeader("Content-Security-Policy", "object-src 'none'; base-uri 'self'; frame-ancestors 'self'");
     if (req.secure || req.headers["x-forwarded-proto"] === "https") {
         res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     }
@@ -1567,7 +1568,7 @@ app.post(
 /* =====================================================
    STATUS DO PEDIDO PARA A PÁGINA DE SUCESSO
 ===================================================== */
-app.get("/api/pedido-status", async (req, res) => {
+app.get("/api/pedido-status", orderStatusRateLimit, async (req, res) => {
     try {
         const orderNsu = safeString(req.query.order_nsu);
         const transactionNsu = safeString(req.query.transaction_nsu);
