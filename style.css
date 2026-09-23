@@ -2636,3 +2636,304 @@ body.modal-open {
         margin-top: 30px;
     }
 }
+
+
+.header-purchases-link {
+    font-size: 9px;
+    letter-spacing: 1.4px;
+    white-space: nowrap;
+}
+
+.whatsapp-optin {
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    margin: -3px 0 18px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: #555;
+}
+
+.whatsapp-optin input {
+    width: auto;
+    margin-top: 2px;
+    flex: 0 0 auto;
+}
+
+.purchases-page {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 85px 24px 110px;
+}
+
+.purchases-intro {
+    text-align: center;
+    margin-bottom: 45px;
+}
+
+.purchases-intro h1 {
+    font-family: "Playfair Display", serif;
+    font-size: clamp(42px, 7vw, 70px);
+    font-weight: 400;
+    margin-bottom: 12px;
+}
+
+.purchases-intro > p:last-child {
+    color: #666;
+    font-size: 13px;
+}
+
+.purchase-lookup {
+    max-width: 620px;
+    margin: 0 auto 55px;
+    padding: 28px;
+    border: 1px solid var(--border);
+    display: grid;
+    gap: 16px;
+}
+
+.purchase-lookup label {
+    display: grid;
+    gap: 7px;
+    font-size: 9px;
+    letter-spacing: 1.3px;
+}
+
+.purchase-lookup input {
+    width: 100%;
+    border: 1px solid #ccc;
+    padding: 13px 14px;
+    outline: none;
+    font-size: 13px;
+}
+
+.purchase-lookup input:focus {
+    border-color: #111;
+}
+
+.purchase-lookup button,
+.tracking-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: #111;
+    color: #fff;
+    padding: 14px 18px;
+    font-size: 9px;
+    letter-spacing: 1.6px;
+    cursor: pointer;
+}
+
+.purchase-error {
+    min-height: 17px;
+    color: #8a1f2c;
+    font-size: 11px;
+}
+
+.purchase-result {
+    border-top: 1px solid var(--border);
+    padding-top: 45px;
+}
+
+.purchase-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 25px;
+    margin-bottom: 35px;
+}
+
+.purchase-header h2 {
+    font-family: "Playfair Display", serif;
+    font-size: 32px;
+    font-weight: 400;
+}
+
+.purchase-header p:not(.section-label) {
+    color: #777;
+    font-size: 11px;
+    margin-top: 7px;
+}
+
+.purchase-status {
+    padding: 9px 12px;
+    background: #f4f4f2;
+    font-size: 9px;
+    letter-spacing: 1px;
+}
+
+.purchase-timeline {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    margin: 0 0 38px;
+    border-top: 1px solid #ddd;
+}
+
+.purchase-timeline > div {
+    position: relative;
+    padding-top: 16px;
+    color: #aaa;
+    text-align: center;
+}
+
+.purchase-timeline > div::before {
+    content: "";
+    position: absolute;
+    top: -1px;
+    left: 50%;
+    width: 0;
+    height: 2px;
+    background: var(--wine);
+    transition: width .2s ease;
+}
+
+.purchase-timeline > div.done {
+    color: #111;
+}
+
+.purchase-timeline > div.done::before {
+    width: 100%;
+}
+
+.purchase-timeline span {
+    display: inline-flex;
+    width: 25px;
+    height: 25px;
+    border-radius: 50%;
+    align-items: center;
+    justify-content: center;
+    background: #eee;
+    font-size: 9px;
+}
+
+.purchase-timeline .done span {
+    background: var(--wine);
+    color: #fff;
+}
+
+.purchase-timeline small {
+    display: block;
+    margin-top: 7px;
+    font-size: 9px;
+    letter-spacing: .8px;
+}
+
+.purchase-columns {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.purchase-panel,
+.tracking-card {
+    border: 1px solid var(--border);
+    padding: 25px;
+}
+
+.purchase-panel h3 {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    margin-bottom: 20px;
+}
+
+.purchase-panel > p {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 9px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.purchase-total {
+    font-size: 14px !important;
+    border-bottom: none !important;
+    padding-top: 18px !important;
+}
+
+.purchase-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    padding: 13px 0;
+    border-bottom: 1px solid #eee;
+    font-size: 12px;
+}
+
+.purchase-item span {
+    display: block;
+    color: #777;
+    font-size: 10px;
+    margin-top: 5px;
+}
+
+.tracking-card {
+    background: #faf8f7;
+}
+
+.tracking-card h2 {
+    font-family: "Playfair Display", serif;
+    font-weight: 400;
+    font-size: 27px;
+    margin-bottom: 7px;
+}
+
+.tracking-card > p:not(.section-label) {
+    font-size: 11px;
+    color: #666;
+    margin-bottom: 17px;
+}
+
+.tracking-code {
+    font-family: monospace;
+    font-size: 16px;
+    letter-spacing: 1px;
+    padding: 14px;
+    background: #fff;
+    border: 1px solid var(--border);
+    margin-bottom: 16px;
+}
+
+.tracking-button {
+    text-decoration: none;
+}
+
+.tracking-pending {
+    background: #fff;
+}
+
+@media (max-width: 800px) {
+    .header-purchases-link {
+        display: none;
+    }
+
+    .purchase-columns {
+        grid-template-columns: 1fr;
+    }
+
+    .purchase-header {
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 600px) {
+    .purchases-page {
+        padding: 55px 18px 80px;
+    }
+
+    .purchase-lookup {
+        padding: 20px;
+    }
+
+    .purchase-timeline small {
+        font-size: 8px;
+    }
+
+    .purchase-timeline span {
+        width: 22px;
+        height: 22px;
+    }
+}
