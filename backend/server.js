@@ -591,12 +591,14 @@ app.post(
                VALIDA VARIAÇÕES E ESTOQUE NO SUPABASE
             ================================================= */
             for (const item of productItems) {
-                if (!item.id) {
+                const productId = item.id || item.product_id || null;
+                if (!productId) {
                     return res.status(400).json({
                         success: false,
                         message: "Produto inválido no pedido."
                     });
                 }
+                item.id = productId;
 
                 // Se o produto tiver apenas uma variação ativa em estoque,
                 // ela é selecionada automaticamente. A cliente não precisa
