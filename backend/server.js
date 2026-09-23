@@ -70,8 +70,10 @@ async function supabaseRequest(path, options = {}) {
 
 const METROPOLITAN_CITIES = new Set(["AQUIRAZ","CAUCAIA","EUSEBIO","GUAIUBA","ITAITINGA","MARACANAU"]);
 
-function localShippingOption(city) {
+function localShippingOption(city, state) {
     const normalized = normalizeCity(city);
+    const normalizedState = safeString(state).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+    if (normalizedState !== "CE") return null;
     if (normalized === "FORTALEZA") return { id:"monte-fortaleza", name:"Entrega MONTÊ — Fortaleza", price:15, delivery_days:2 };
     if (METROPOLITAN_CITIES.has(normalized)) return { id:"monte-regiao-metropolitana", name:"Entrega MONTÊ — Região Metropolitana", price:20, delivery_days:3 };
     return null;
@@ -564,8 +566,9 @@ app.post("/api/frete/cotacao", async (req,res)=>{
         const toCep=safeString(req.body?.to_cep||req.body?.cep).replace(/\D/g,"");
         const items=Array.isArray(req.body?.items)?req.body.items:[];
         const city=normalizeCity(req.body?.city||"");
+        const state=safeString(req.body?.state||"").toUpperCase();
         if(toCep.length!==8)return res.status(400).json({success:false,message:"CEP de destino inválido."});
-        const local=localShippingOption(city);
+        const local=localShippingOption(city,state);
         if(local)return res.json({success:true,source:"monte",options:[local]});
         const options=await calculateSuperfreteQuotes({toCep,items});
         if(!options.length)return res.status(422).json({success:false,message:"Nenhuma modalidade de frete disponível para este CEP."});
@@ -878,7 +881,8 @@ app.post(
                 );
 
             const deliveryCity = normalizeCity(customer.address.city);
-            const localShipping = localShippingOption(deliveryCity);
+            const deliveryState = safeString(customer.address.state).toUpperCase();
+            const localShipping = localShippingOption(deliveryCity, deliveryState);
             let shippingOption = null;
 
             if (localShipping) {
