@@ -999,6 +999,82 @@ a {
 }
 
 
+.new-products-carousel {
+
+    display: grid;
+
+    grid-template-columns: 42px minmax(0, 1fr) 42px;
+
+    gap: 18px;
+
+    align-items: center;
+
+}
+
+
+.new-products-viewport {
+
+    min-width: 0;
+
+    overflow: hidden;
+
+}
+
+
+.new-products-grid {
+
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+
+}
+
+
+.new-carousel-arrow {
+
+    width: 42px;
+
+    height: 42px;
+
+    border: 1px solid rgba(255,255,255,.7);
+
+    background: transparent;
+
+    color: white;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    font-size: 28px;
+
+    line-height: 1;
+
+    cursor: pointer;
+
+    transition: opacity .2s ease, background .2s ease, color .2s ease;
+
+}
+
+
+.new-carousel-arrow:hover:not(:disabled) {
+
+    background: white;
+
+    color: var(--wine);
+
+}
+
+
+.new-carousel-arrow:disabled {
+
+    opacity: .35;
+
+    cursor: default;
+
+}
+
+
 .sale-products-carousel {
 
     display: grid;
@@ -2123,6 +2199,33 @@ a {
     .sale-section {
 
         padding: 80px 18px;
+
+    }
+
+
+    .new-products-carousel {
+
+        grid-template-columns: 30px minmax(0, 1fr) 30px;
+
+        gap: 6px;
+
+    }
+
+
+    .new-products-grid {
+
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+
+    }
+
+
+    .new-carousel-arrow {
+
+        width: 30px;
+
+        height: 30px;
+
+        font-size: 20px;
 
     }
 
