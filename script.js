@@ -68,6 +68,11 @@ const SALE_STEP = 4;
 let saleProducts = [];
 let currentSaleIndex = 0;
 
+const NEW_VISIBLE_COUNT = 5;
+const NEW_STEP = 4;
+let newProducts = [];
+let currentNewIndex = 0;
+
 
 /* =====================================================
    FORMATAÇÃO DE PREÇO
@@ -228,18 +233,9 @@ function renderProducts() {
         products.filter(product => product.sale)
     );
 
-
-    products.forEach(product => {
-
-        if (product.newProduct) {
-
-            newContainer.appendChild(
-                createProductCard(product)
-            );
-
-        }
-
-    });
+    renderNewProducts(
+        products.filter(product => product.newProduct)
+    );
 
 }
 
@@ -253,6 +249,105 @@ function renderCollectionProducts(list) {
     currentCollectionIndex = 0;
 
     renderCollectionPage();
+
+}
+
+
+function renderNewProducts(list) {
+
+    newProducts = Array.isArray(list)
+        ? list
+        : [];
+
+    currentNewIndex = 0;
+
+    renderNewPage();
+
+}
+
+
+function renderNewPage() {
+
+    const container =
+        document.getElementById("newProducts");
+
+    const previousButton =
+        document.querySelector(".new-prev");
+
+    const nextButton =
+        document.querySelector(".new-next");
+
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    if (!newProducts.length) {
+        if (previousButton) {
+            previousButton.disabled = true;
+            previousButton.style.visibility = "hidden";
+        }
+        if (nextButton) {
+            nextButton.disabled = true;
+            nextButton.style.visibility = "hidden";
+        }
+        return;
+    }
+
+    const total = newProducts.length;
+    const start = currentNewIndex % total;
+
+    for (
+        let offset = 0;
+        offset < Math.min(NEW_VISIBLE_COUNT, total);
+        offset++
+    ) {
+        const product =
+            newProducts[(start + offset) % total];
+
+        container.appendChild(
+            createProductCard(product)
+        );
+    }
+
+    const hasCarousel =
+        total > NEW_VISIBLE_COUNT;
+
+    if (previousButton) {
+        previousButton.disabled = !hasCarousel;
+        previousButton.style.visibility =
+            hasCarousel ? "visible" : "hidden";
+    }
+
+    if (nextButton) {
+        nextButton.disabled = !hasCarousel;
+        nextButton.style.visibility =
+            hasCarousel ? "visible" : "hidden";
+    }
+
+}
+
+
+function nextNewPage() {
+
+    if (newProducts.length <= NEW_VISIBLE_COUNT) return;
+
+    currentNewIndex =
+        (currentNewIndex + NEW_STEP) % newProducts.length;
+
+    renderNewPage();
+
+}
+
+
+function previousNewPage() {
+
+    if (newProducts.length <= NEW_VISIBLE_COUNT) return;
+
+    currentNewIndex =
+        (currentNewIndex - NEW_STEP + newProducts.length) %
+        newProducts.length;
+
+    renderNewPage();
 
 }
 
