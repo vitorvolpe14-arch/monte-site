@@ -794,6 +794,7 @@ app.post(
             const customerCpf = String(customer.cpf || "").replace(/\D/g, "");
             const customerEmail = safeString(customer.email).toLowerCase();
             const customerPhone = safeString(customer.phone);
+            const customerWhatsapp = safeString(customer.whatsapp_phone).replace(/\D/g, "");
             const customerName = safeString(customer.name);
             const address = customer.address || {};
 
@@ -802,6 +803,7 @@ app.post(
                 customerEmail.length > 160 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail) ||
                 customerPhone.length < 8 || customerPhone.length > 30 ||
                 customerCpf.length !== 11 ||
+                customerWhatsapp.length > 30 ||
                 safeString(address.cep).length > 12 ||
                 safeString(address.street).length > 160 ||
                 safeString(address.number).length > 30 ||
@@ -1156,6 +1158,9 @@ app.post(
                     phone:
                         customerPhone,
 
+                    whatsapp_phone:
+                        customerWhatsapp,
+
                     whatsapp_updates:
                         customer.whatsapp_updates === true,
 
@@ -1236,6 +1241,7 @@ app.post(
                     customer_name: pendingOrder.customer.name,
                     customer_email: pendingOrder.customer.email,
                     customer_phone: pendingOrder.customer.phone,
+                    customer_whatsapp: pendingOrder.customer.whatsapp_phone || "",
                     customer_cpf: pendingOrder.customer.cpf,
                     customer_address: pendingOrder.customer.address,
                     subtotal: Number(subtotal.toFixed(2)),
