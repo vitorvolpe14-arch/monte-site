@@ -2564,3 +2564,75 @@ body.modal-open {
     #cartOverlay .payment-option-content strong{font-size:11px}
     #cartOverlay .payment-option-content small{font-size:9px}
 }
+
+
+/* =====================================================
+   PÁGINAS INSTITUCIONAIS
+===================================================== */
+
+.institutional-page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 90px 24px 110px;
+    line-height: 1.75;
+}
+
+.institutional-page h1 {
+    font-family: "Playfair Display", serif;
+    font-size: clamp(38px, 6vw, 64px);
+    font-weight: 400;
+    margin-bottom: 35px;
+}
+
+.institutional-page h2 {
+    font-size: 18px;
+    margin: 38px 0 10px;
+}
+
+.institutional-page p {
+    font-size: 14px;
+    color: #333;
+}
+
+.institutional-note {
+    margin-top: 45px;
+    padding-top: 25px;
+    border-top: 1px solid var(--border);
+    font-size: 12px !important;
+    color: #777 !important;
+}
+
+.institutional-back {
+    display: inline-block;
+    margin-top: 45px;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    border-bottom: 1px solid #111;
+    padding-bottom: 5px;
+}
+
+.product-badge-stock {
+    top: auto;
+    bottom: 14px;
+    background: #111;
+}
+
+.variant-option.unavailable {
+    opacity: .45;
+    text-decoration: line-through;
+    cursor: not-allowed;
+}
+
+.variant-option:disabled {
+    cursor: not-allowed;
+}
+
+@media (max-width: 700px) {
+    .institutional-page {
+        padding: 55px 20px 80px;
+    }
+
+    .institutional-page h2 {
+        margin-top: 30px;
+    }
+}
