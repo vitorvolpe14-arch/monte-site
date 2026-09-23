@@ -639,6 +639,13 @@ a {
 }
 
 
+#novidades .section-heading h2 {
+
+    color: var(--wine);
+
+}
+
+
 .section-heading > a {
 
     font-size: 10px;
@@ -909,7 +916,7 @@ a {
 
     padding: 110px 5%;
 
-    background: var(--wine);
+    background: var(--black);
 
     color: white;
 
