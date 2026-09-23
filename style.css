@@ -639,11 +639,33 @@ a {
 }
 
 
-#novidades .section-heading h2 {
+#novidades {
 
-    color: var(--wine);
+    background: var(--wine);
+
+    color: white;
 
 }
+
+
+#novidades .section-label,
+#novidades .section-heading h2,
+#novidades .section-heading > a,
+#novidades .product-card,
+#novidades .product-name,
+#novidades .product-price {
+
+    color: white;
+
+}
+
+
+#novidades .section-heading > a {
+
+    border-color: white;
+
+}
+
 
 
 .section-heading > a {
