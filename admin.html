@@ -69,6 +69,16 @@
       <label>Preço<input id="productPrice" type="number" step="0.01" min="0" required></label>
       <label>Preço promocional<input id="productSalePrice" type="number" step="0.01" min="0"></label>
       <label class="full-width">Galeria de imagens<textarea id="productImages" rows="4" placeholder="Uma imagem por linha&#10;ex.: assets/vienna4.JPG.jpeg&#10;assets/vienna1.JPG.jpeg"></textarea><small class="field-help">A primeira imagem será a capa. As demais permanecem na galeria do produto.</small></label>
+      <div class="shipping-dimensions full-width">
+        <div class="shipping-dimensions-title">DADOS PARA CÁLCULO DE FRETE</div>
+        <small class="field-help">Informe as medidas aproximadas do produto embalado. Esses dados serão usados para calcular o frete no SuperFrete.</small>
+        <div class="form-grid shipping-dimensions-grid">
+          <label>Peso (kg)<input id="productShippingWeight" type="number" step="0.001" min="0.001" placeholder="Ex.: 0,800"></label>
+          <label>Altura (cm)<input id="productShippingHeight" type="number" step="0.01" min="0.1" placeholder="Ex.: 12"></label>
+          <label>Largura (cm)<input id="productShippingWidth" type="number" step="0.01" min="0.1" placeholder="Ex.: 25"></label>
+          <label>Comprimento (cm)<input id="productShippingLength" type="number" step="0.01" min="0.1" placeholder="Ex.: 32"></label>
+        </div>
+      </div>
     </div>
     <label>Descrição<textarea id="productDescription" rows="4"></textarea></label>
     <div class="checks"><label><input id="productNew" type="checkbox"> Marcar como novidade</label><label><input id="productSale" type="checkbox"> Mostrar em SALE</label><label><input id="productActive" type="checkbox" checked> Produto ativo</label></div>
