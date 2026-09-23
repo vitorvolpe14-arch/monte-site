@@ -10,3 +10,5 @@
 .stock-low{font-weight:700}
 
 .shipping-dimensions{grid-column:1/-1;border-top:1px solid #e5e5e5;padding-top:18px;margin-top:4px}.shipping-dimensions-title{font-size:10px;letter-spacing:1.5px;margin-bottom:6px}.shipping-dimensions-grid{margin-top:12px}.shipping-dimensions-grid label{min-width:0}
+
+.whatsapp-admin-status{margin:14px 0 0;font-size:11px;color:#666}
