@@ -579,16 +579,16 @@ app.post(
                FRETE
             ================================================= */
 
-            // Frete temporariamente desativado.
-            // Mesmo que um cliente envie um item FRETE antigo,
-            // ele não será cobrado nem enviado para a InfinitePay.
+            // Frete: Fortaleza capital R$ 15,00.
+            // O backend calcula novamente para não confiar no navegador.
             const productItems =
                 normalizedItems.filter(
                     item =>
                         String(item.sku || "").toUpperCase() !== "FRETE"
                 );
 
-            const shippingValue = 0;
+            const deliveryCity = normalizeCity(customer.address.city);
+            const shippingValue = deliveryCity === "FORTALEZA" ? 15 : 0;
 
 
             /* =================================================
