@@ -1211,6 +1211,19 @@ async function checkout() {
     const state =
         document.getElementById("customerState")?.value.trim().toUpperCase();
 
+    const whatsappField = document.getElementById("whatsappTrackingField");
+    const whatsappInput = document.getElementById("customerWhatsapp");
+    const whatsappUpdates = document.getElementById("whatsappUpdates");
+    const isOutsideLocalArea =
+        state !== "CE" ||
+        !["FORTALEZA", ...metropolitanCities].includes(normalizeCity(city));
+
+    if (whatsappField) whatsappField.hidden = !isOutsideLocalArea;
+    if (whatsappInput && !isOutsideLocalArea) {
+        whatsappInput.value = "";
+        if (whatsappUpdates) whatsappUpdates.checked = false;
+    }
+
 
     // 3. Validação
     if (
@@ -1235,9 +1248,17 @@ async function checkout() {
 
 
     const cpfDigits = cpf.replace(/\D/g, "");
+    const whatsappNumber = (whatsappInput?.value || "").replace(/\D/g, "");
+    const wantsWhatsappTracking =
+        isOutsideLocalArea && whatsappUpdates?.checked === true;
 
     if (cpfDigits.length !== 11) {
         showToast("Informe um CPF válido com 11 dígitos.");
+        return;
+    }
+
+    if (wantsWhatsappTracking && whatsappNumber.length < 10) {
+        showToast("Informe um número de WhatsApp válido para receber o rastreio.");
         return;
     }
 
@@ -1362,9 +1383,9 @@ async function checkout() {
 
                             phone: phone,
 
-                            whatsapp_updates: Boolean(
-                                document.getElementById("whatsappUpdates")?.checked
-                            ),
+                            whatsapp_phone: wantsWhatsappTracking ? whatsappNumber : "",
+
+                            whatsapp_updates: wantsWhatsappTracking,
 
                             cpf: cpfDigits,
 
