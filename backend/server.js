@@ -494,6 +494,31 @@ app.patch("/api/admin/orders/:id/status",requireAdmin,async(req,res)=>{
     }catch(e){console.error("Admin order status PATCH:",e);return res.status(500).json({success:false,message:"Não foi possível atualizar o pedido."})}
 });
 
+app.post("/api/admin/orders/:id/tracking-whatsapp",requireAdmin,async(req,res)=>{
+    try{
+        const id=encodeURIComponent(req.params.id);
+        const rows=await supabaseRequest(`orders?id=eq.${id}&select=*`,{method:"GET"});
+        const order=Array.isArray(rows)?rows[0]:null;
+        if(!order) return res.status(404).json({success:false,message:"Pedido não encontrado."});
+        if(order.status!=="shipped" || !order.tracking_code) return res.status(400).json({success:false,message:"O pedido precisa estar como enviado e ter código de rastreio."});
+        if(!order.whatsapp_tracking_opt_in) return res.status(400).json({success:false,message:"A cliente não autorizou atualizações por WhatsApp."});
+        const result=await sendWhatsAppTrackingNotification(order);
+        await supabaseRequest(`orders?id=eq.${id}`,{
+            method:"PATCH",
+            body:JSON.stringify({
+                whatsapp_tracking_status: result.status,
+                whatsapp_tracking_sent_at: result.sent ? new Date().toISOString() : null,
+                whatsapp_tracking_message_id: result.message_id
+            })
+        });
+        return res.json({success:true,whatsapp:result});
+    }catch(e){
+        console.error("Admin WhatsApp tracking:",e);
+        await supabaseRequest(`orders?id=eq.${encodeURIComponent(req.params.id)}`,{method:"PATCH",body:JSON.stringify({whatsapp_tracking_status:"error"})}).catch(()=>{});
+        return res.status(500).json({success:false,message:"Não foi possível enviar a atualização pelo WhatsApp.",error:process.env.NODE_ENV==="development"?e.message:undefined});
+    }
+});
+
 app.get("/api/admin/stock/movements",requireAdmin,async(req,res)=>{
     try{
         const d=await supabaseRequest("inventory_movements?select=*,product_variants(id,color,sku,product_id,products(name))&order=created_at.desc&limit=100");
