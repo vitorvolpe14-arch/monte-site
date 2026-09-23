@@ -69,10 +69,15 @@
       <label>Preço<input id="productPrice" type="number" step="0.01" min="0" required></label>
       <label>Preço promocional<input id="productSalePrice" type="number" step="0.01" min="0"></label>
       <div class="full-width image-upload-field">
-        <label>Fotos do produto
+        <label>Fotos do produto</label>
+        <div id="productImageDropzone" class="product-image-dropzone" tabindex="0" role="button" aria-label="Adicionar fotos do produto">
           <input id="productImageFiles" type="file" accept="image/jpeg,image/png,image/webp" multiple>
-        </label>
-        <small class="field-help">Selecione uma ou várias fotos do computador. JPG, PNG ou WebP, até 8 MB por imagem. A primeira foto será a capa.</small>
+          <div class="dropzone-icon">＋</div>
+          <strong>Arraste suas fotos aqui</strong>
+          <span>ou clique para selecionar do computador</span>
+          <small>JPG, PNG ou WebP · até 8 MB por imagem</small>
+        </div>
+        <small id="productImageUploadStatus" class="field-help"></small>
         <div id="productImageManager" class="product-image-manager"></div>
       </div>
       <div class="shipping-dimensions full-width">
