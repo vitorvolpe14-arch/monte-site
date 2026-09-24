@@ -68,13 +68,13 @@ const SALE_STEP = 4;
 let saleProducts = [];
 let currentSaleIndex = 0;
 
-const NEW_VISIBLE_COUNT = 5;
+const NEW_VISIBLE_COUNT = 4;
 const NEW_STEP = 4;
 let newProducts = [];
 let currentNewIndex = 0;
 
 function getCarouselVisibleCount() {
-    return window.matchMedia("(max-width: 650px)").matches ? 4 : 5;
+    return 4;
 }
 
 
