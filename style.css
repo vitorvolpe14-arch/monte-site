@@ -3943,3 +3943,672 @@ img {
         padding-right: 16px;
     }
 }
+
+
+/* =====================================================
+   MONTÊ — MOBILE FINAL / LAYOUT REFINADO
+   Apenas telas <= 650px
+===================================================== */
+
+@media (max-width: 650px) {
+
+    html,
+    body {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
+    }
+
+    body {
+        font-size: 14px;
+        -webkit-text-size-adjust: 100%;
+    }
+
+    /* ---------- TOPO ---------- */
+
+    .shipping-bar {
+        height: 31px;
+        min-height: 31px;
+        padding: 0 10px;
+        gap: 5px;
+        font-size: 7px;
+        letter-spacing: .55px;
+        white-space: nowrap;
+        overflow: hidden;
+    }
+
+    .header {
+        height: 62px;
+        min-height: 62px;
+        padding: 0 15px;
+        grid-template-columns: 38px minmax(0, 1fr) 58px;
+        box-shadow: 0 1px 0 rgba(0,0,0,.05);
+    }
+
+    .logo {
+        font-size: 19px;
+        letter-spacing: 3.2px;
+    }
+
+    .mobile-menu {
+        width: 34px;
+        height: 34px;
+        padding: 0;
+        font-size: 20px;
+        line-height: 1;
+    }
+
+    .header-actions {
+        gap: 6px;
+    }
+
+    .header-actions button {
+        width: 26px;
+        height: 32px;
+        padding: 0;
+    }
+
+    .header-actions .icon {
+        font-size: 19px;
+    }
+
+    .cart-icon,
+    .cart-icon svg {
+        width: 21px;
+        height: 21px;
+    }
+
+    .cart-count {
+        top: -4px;
+        right: -5px;
+        width: 15px;
+        height: 15px;
+        font-size: 8px;
+    }
+
+    .main-navigation {
+        top: 62px;
+        box-shadow: 0 10px 24px rgba(0,0,0,.08);
+    }
+
+    .main-navigation a {
+        padding: 17px 20px;
+        font-size: 10px;
+        letter-spacing: 1.4px;
+    }
+
+    /* ---------- HERO ---------- */
+
+    .hero {
+        height: 61svh;
+        min-height: 350px;
+        max-height: 600px;
+    }
+
+    .slide img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .slide-content {
+        left: 20px;
+        right: 20px;
+        top: auto;
+        bottom: 58px;
+        transform: none;
+        max-width: calc(100% - 40px);
+    }
+
+    .slide-content p {
+        margin-bottom: 9px;
+        font-size: 7px;
+        letter-spacing: 2.8px;
+    }
+
+    .slide-content h1 {
+        font-size: clamp(37px, 11vw, 55px);
+        line-height: .96;
+        margin-bottom: 17px;
+    }
+
+    .hero-button {
+        padding: 12px 18px;
+        font-size: 8px;
+        letter-spacing: 1.4px;
+    }
+
+    .carousel-dots {
+        bottom: 18px;
+        gap: 5px;
+    }
+
+    .carousel-dot {
+        width: 24px;
+        height: 2px;
+    }
+
+    /* ---------- SEÇÕES ---------- */
+
+    .product-section,
+    .sale-section {
+        padding: 52px 16px 58px;
+    }
+
+    .section-heading {
+        margin-bottom: 25px;
+    }
+
+    .section-label {
+        margin-bottom: 7px;
+        font-size: 7px;
+        letter-spacing: 2.8px;
+    }
+
+    .section-heading h2 {
+        font-size: 31px;
+        line-height: 1;
+    }
+
+    /* ---------- FILTROS ---------- */
+
+    .collection-toolbar {
+        margin-bottom: 22px;
+        gap: 7px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 4px;
+        scrollbar-width: none;
+    }
+
+    .collection-toolbar::-webkit-scrollbar {
+        display: none;
+    }
+
+    .filter-button {
+        flex: 0 0 auto;
+        padding: 9px 14px;
+        font-size: 8px;
+        letter-spacing: 1.1px;
+    }
+
+    /* ---------- PRODUTOS ---------- */
+
+    .products-grid,
+    .collection-products-grid,
+    .new-products-grid,
+    .sale-products-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 25px 10px;
+    }
+
+    /*
+       As imagens usam a proporção do arquivo.
+       Não existe moldura artificial nem object-fit: cover.
+    */
+    .product-image {
+        width: 100%;
+        height: auto;
+        aspect-ratio: auto;
+        background: transparent;
+        overflow: hidden;
+    }
+
+    .product-image img {
+        width: 100%;
+        height: auto;
+        max-width: 100%;
+        display: block;
+        object-fit: initial;
+        object-position: center;
+        transform: none !important;
+    }
+
+    .product-info {
+        padding-top: 9px;
+    }
+
+    .product-name {
+        font-size: 10px;
+        line-height: 1.3;
+        margin-bottom: 4px;
+        letter-spacing: .45px;
+    }
+
+    .product-price {
+        font-size: 10px;
+    }
+
+    .product-badge {
+        top: 7px;
+        left: 7px;
+        padding: 5px 7px;
+        font-size: 6.5px;
+    }
+
+    /* ---------- CARROSSÉIS ----------
+       Setas ficam sobre a área da foto para não roubar
+       largura dos produtos.
+    */
+
+    .collection-products-carousel,
+    .new-products-carousel,
+    .sale-products-carousel {
+        display: block;
+        position: relative;
+        width: 100%;
+    }
+
+    .collection-products-viewport,
+    .new-products-viewport,
+    .sale-products-viewport {
+        width: 100%;
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    .collection-carousel-arrow,
+    .new-carousel-arrow,
+    .sale-carousel-arrow {
+        position: absolute;
+        top: 42%;
+        z-index: 5;
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        border: 1px solid rgba(255,255,255,.85);
+        background: rgba(0,0,0,.42);
+        color: #fff;
+        font-size: 19px;
+        line-height: 1;
+        box-shadow: 0 2px 8px rgba(0,0,0,.12);
+    }
+
+    .collection-prev,
+    .new-prev,
+    .sale-prev {
+        left: 6px;
+    }
+
+    .collection-next,
+    .new-next,
+    .sale-next {
+        right: 6px;
+    }
+
+    .collection-carousel-arrow:hover:not(:disabled),
+    .new-carousel-arrow:hover:not(:disabled),
+    .sale-carousel-arrow:hover:not(:disabled) {
+        background: rgba(0,0,0,.58);
+        color: #fff;
+    }
+
+    /* ---------- SALE ---------- */
+
+    .sale-section {
+        padding-top: 58px;
+        padding-bottom: 62px;
+    }
+
+    .sale-heading {
+        margin-bottom: 29px;
+    }
+
+    .sale-heading p {
+        font-size: 7px;
+        letter-spacing: 3px;
+        margin-bottom: 10px;
+    }
+
+    .sale-heading h2 {
+        font-size: 51px;
+        line-height: .95;
+    }
+
+    .sale-heading span {
+        font-size: 8px;
+        letter-spacing: 1.4px;
+    }
+
+    /* ---------- NEWSLETTER ---------- */
+
+    .newsletter {
+        display: block;
+        padding: 58px 16px 62px;
+    }
+
+    .newsletter h2 {
+        font-size: 28px;
+        line-height: 1.08;
+        margin-bottom: 13px;
+    }
+
+    .newsletter p {
+        font-size: 12px;
+        line-height: 1.65;
+    }
+
+    .newsletter form {
+        margin-top: 30px;
+        width: 100%;
+    }
+
+    .newsletter input {
+        min-width: 0;
+        padding: 13px 0;
+        font-size: 12px;
+    }
+
+    .newsletter button {
+        font-size: 8px;
+        letter-spacing: 1.2px;
+        padding-left: 10px;
+    }
+
+    /* ---------- RODAPÉ ---------- */
+
+    .footer {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 28px 18px;
+        padding: 48px 16px 22px;
+    }
+
+    .footer-brand {
+        grid-column: 1 / -1;
+        margin-bottom: 4px;
+    }
+
+    .footer-logo {
+        font-size: 26px;
+        letter-spacing: 5px;
+    }
+
+    .footer-brand p {
+        font-size: 10px;
+        margin-top: 10px;
+    }
+
+    .footer-column {
+        gap: 10px;
+    }
+
+    .footer-column h3 {
+        font-size: 8px;
+        margin-bottom: 5px;
+    }
+
+    .footer-column a {
+        font-size: 10px;
+    }
+
+    .footer-bottom {
+        margin-top: 8px;
+        padding-top: 18px;
+        font-size: 8px;
+        line-height: 1.5;
+    }
+
+    /* ---------- PRODUTO ABERTO ---------- */
+
+    .modal {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100dvh;
+        max-height: 100dvh;
+        padding: 0;
+        display: none;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-y;
+    }
+
+    .modal.active {
+        display: block;
+    }
+
+    .modal-content {
+        width: 100%;
+        min-height: 100%;
+        padding: 8px 16px 42px;
+        overflow: visible;
+    }
+
+    .modal-close {
+        top: 9px;
+        right: 11px;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: rgba(255,255,255,.92);
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        font-size: 25px;
+    }
+
+    .product-detail {
+        display: block;
+        width: 100%;
+    }
+
+    .product-gallery {
+        width: 100%;
+        min-width: 0;
+    }
+
+    /*
+       A foto não recebe altura fixa.
+       O navegador reduz proporcionalmente a imagem,
+       sem compressão, corte ou barras laterais criadas pelo CSS.
+    */
+    .gallery-main {
+        width: 100%;
+        height: auto;
+        max-height: 62svh;
+        aspect-ratio: auto;
+        background: transparent;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .gallery-main img {
+        width: auto;
+        height: auto;
+        max-width: 100%;
+        max-height: 62svh;
+        object-fit: initial;
+        object-position: center;
+        display: block;
+    }
+
+    .gallery-thumbnails {
+        width: 100%;
+        margin-top: 10px;
+        gap: 6px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding-bottom: 2px;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-x;
+    }
+
+    .gallery-thumbnails::-webkit-scrollbar {
+        display: none;
+    }
+
+    .gallery-thumbnail {
+        flex: 0 0 58px;
+        width: 58px;
+        height: 70px;
+        background: #f4f4f2;
+        object-fit: contain;
+    }
+
+    .product-information {
+        width: 100%;
+        padding: 27px 5px 5px;
+    }
+
+    .product-category {
+        font-size: 7px;
+        letter-spacing: 2.2px;
+        margin-bottom: 10px;
+    }
+
+    .product-information h2 {
+        font-size: 32px;
+        line-height: 1.02;
+        margin-bottom: 10px;
+    }
+
+    .modal-price {
+        font-size: 14px;
+        margin-bottom: 18px;
+    }
+
+    .modal-description {
+        max-width: 540px;
+        font-size: 11px;
+        line-height: 1.65;
+    }
+
+    .product-divider {
+        margin: 21px 0;
+    }
+
+    .quantity-title {
+        font-size: 8px;
+        letter-spacing: 1.7px;
+        margin-bottom: 9px;
+    }
+
+    .quantity-selector {
+        margin-bottom: 18px;
+    }
+
+    .add-cart-large {
+        min-height: 52px;
+        padding: 15px 12px;
+        font-size: 9px;
+        letter-spacing: 1.7px;
+    }
+
+    .product-shipping {
+        margin-top: 20px;
+        font-size: 9px;
+    }
+
+    /* ---------- CARRINHO / CHECKOUT ---------- */
+
+    .cart {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .cart-header {
+        padding: 18px 16px;
+    }
+
+    .cart-items {
+        padding: 16px;
+    }
+
+    .cart-item {
+        grid-template-columns: 62px minmax(0, 1fr) auto;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+
+    .cart-item img {
+        width: 62px;
+        height: auto;
+        max-height: 78px;
+    }
+
+    .cart-footer {
+        padding: 18px 16px;
+    }
+
+    .checkout-form {
+        margin-top: 20px;
+        padding-top: 18px;
+    }
+
+    .checkout-form input {
+        padding: 12px;
+        font-size: 12px;
+        margin-bottom: 9px;
+    }
+
+    .checkout-row {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+
+    .shipping-result {
+        display: block;
+        padding: 13px 0;
+    }
+
+    .shipping-result-head {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+    }
+
+    .payment-option {
+        min-width: 0;
+    }
+
+    .checkout-button {
+        min-height: 52px;
+    }
+}
+
+@media (max-width: 380px) {
+
+    .shipping-bar {
+        font-size: 6.7px;
+    }
+
+    .header {
+        padding-left: 11px;
+        padding-right: 11px;
+        grid-template-columns: 34px minmax(0,1fr) 52px;
+    }
+
+    .logo {
+        font-size: 17px;
+        letter-spacing: 2.8px;
+    }
+
+    .product-section,
+    .sale-section {
+        padding-left: 13px;
+        padding-right: 13px;
+    }
+
+    .products-grid,
+    .collection-products-grid,
+    .new-products-grid,
+    .sale-products-grid {
+        gap: 22px 8px;
+    }
+
+    .gallery-main {
+        max-height: 57svh;
+    }
+
+    .gallery-main img {
+        max-height: 57svh;
+    }
+
+    .product-information h2 {
+        font-size: 29px;
+    }
+}
