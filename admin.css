@@ -639,8 +639,3 @@
         font-size: 18px;
     }
 }
-
-/* Seleção de foto de capa */
-.image-cover-button{position:absolute;left:6px;bottom:6px;z-index:3;background:#fff;color:#191919;border:1px solid #ddd;padding:6px 8px;font-size:9px;letter-spacing:.7px;cursor:pointer}
-.image-cover-button:hover{background:#191919;color:#fff;border-color:#191919}
-.image-cover-badge{position:absolute;left:6px;bottom:6px;z-index:3;background:#191919;color:#fff;padding:6px 8px;font-size:9px;letter-spacing:.8px}
