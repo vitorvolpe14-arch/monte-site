@@ -46,6 +46,11 @@ const form = document.getElementById("purchaseLookup");
 const result = document.getElementById("purchaseResult");
 const errorBox = document.getElementById("purchaseError");
 
+const orderFromEmail = new URLSearchParams(window.location.search).get("order_nsu");
+if (orderFromEmail) {
+    document.getElementById("purchaseOrder").value = orderFromEmail;
+}
+
 function money(v) {
     return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(v || 0));
 }
