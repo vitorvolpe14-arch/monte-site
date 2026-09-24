@@ -310,10 +310,29 @@ const orderStatusRateLimit = createRateLimiter({
 const ADMIN_EMAIL = safeString(process.env.ADMIN_EMAIL);
 const ADMIN_PASSWORD_HASH = safeString(process.env.ADMIN_PASSWORD_HASH);
 const ADMIN_SESSION_TTL = 1000 * 60 * 60 * 8;
-const adminSessions = new Map();
+const ADMIN_SESSION_SECRET = crypto.createHash("sha256").update(ADMIN_PASSWORD_HASH || ADMIN_EMAIL || "monte-admin-session").digest();
 const adminLoginAttempts = new Map();
-function parseCookies(req){const h=req.headers.cookie||"";const o={};h.split(";").filter(Boolean).forEach(p=>{const i=p.indexOf("=");if(i>=0)o[p.slice(0,i).trim()]=decodeURIComponent(p.slice(i+1).trim())});return o}
-function getAdminSession(req){const t=parseCookies(req).monte_admin_session;if(!t)return null;const s=adminSessions.get(t);if(!s)return null;if(Date.now()>s.expiresAt){adminSessions.delete(t);return null}return {token:t,...s}}
+function parseCookies(req){const h=req.headers.cookie||"";const o={};h.split(";").filter(Boolean).forEach(p=>{const i=p.indexOf("=");if(i>=0){try{o[p.slice(0,i).trim()]=decodeURIComponent(p.slice(i+1).trim())}catch{}}});return o}
+function createAdminSessionToken(email){
+    const payload=Buffer.from(JSON.stringify({email,exp:Date.now()+ADMIN_SESSION_TTL})).toString("base64url");
+    const signature=crypto.createHmac("sha256",ADMIN_SESSION_SECRET).update(payload).digest("base64url");
+    return payload+"."+signature;
+}
+function getAdminSession(req){
+    const t=parseCookies(req).monte_admin_session;
+    if(!t)return null;
+    const [payload,signature]=String(t).split(".");
+    if(!payload||!signature)return null;
+    try{
+        const expected=crypto.createHmac("sha256",ADMIN_SESSION_SECRET).update(payload).digest("base64url");
+        const a=Buffer.from(signature),b=Buffer.from(expected);
+        if(a.length!==b.length||!crypto.timingSafeEqual(a,b))return null;
+        const data=JSON.parse(Buffer.from(payload,"base64url").toString("utf8"));
+        if(!data?.email||Date.now()>Number(data.exp))return null;
+        if(String(data.email).toLowerCase()!==ADMIN_EMAIL.toLowerCase())return null;
+        return {token:t,email:ADMIN_EMAIL,expiresAt:Number(data.exp)};
+    }catch{return null}
+}
 function requireAdmin(req,res,next){const s=getAdminSession(req);if(!s)return res.status(401).json({success:false,message:"Acesso administrativo não autorizado."});req.adminSession=s;next()}
 function normalizeCity(value) {
     return safeString(value)
@@ -344,8 +363,8 @@ function failedLogin(req,email){const k=loginKey(req,email);const r=adminLoginAt
 function clearLoginFailures(req,email){adminLoginAttempts.delete(loginKey(req,email))}
 function setAdminCookie(res,t){res.setHeader("Set-Cookie",`monte_admin_session=${encodeURIComponent(t)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(ADMIN_SESSION_TTL/1000)}`)}
 function clearAdminCookie(res){res.setHeader("Set-Cookie","monte_admin_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0")}
-app.post("/api/admin/login",adminLoginRateLimit,(req,res)=>{const email=safeString(req.body?.email).toLowerCase(),password=req.body?.password;if(!ADMIN_EMAIL||!ADMIN_PASSWORD_HASH)return res.status(503).json({success:false,message:"Acesso administrativo não configurado no servidor."});if(!loginAllowed(req,email))return res.status(429).json({success:false,message:"Muitas tentativas. Tente novamente em 15 minutos."});if(email!==ADMIN_EMAIL.toLowerCase()||!passwordMatches(password)){failedLogin(req,email);return res.status(401).json({success:false,message:"E-mail ou senha incorretos."})}clearLoginFailures(req,email);const token=crypto.randomBytes(32).toString("hex");adminSessions.set(token,{email:ADMIN_EMAIL,expiresAt:Date.now()+ADMIN_SESSION_TTL});setAdminCookie(res,token);return res.json({success:true,email:ADMIN_EMAIL})});
-app.post("/api/admin/logout",(req,res)=>{const t=parseCookies(req).monte_admin_session;if(t)adminSessions.delete(t);clearAdminCookie(res);return res.json({success:true})});
+app.post("/api/admin/login",adminLoginRateLimit,(req,res)=>{const email=safeString(req.body?.email).toLowerCase(),password=req.body?.password;if(!ADMIN_EMAIL||!ADMIN_PASSWORD_HASH)return res.status(503).json({success:false,message:"Acesso administrativo não configurado no servidor."});if(!loginAllowed(req,email))return res.status(429).json({success:false,message:"Muitas tentativas. Tente novamente em 15 minutos."});if(email!==ADMIN_EMAIL.toLowerCase()||!passwordMatches(password)){failedLogin(req,email);return res.status(401).json({success:false,message:"E-mail ou senha incorretos."})}clearLoginFailures(req,email);const token=createAdminSessionToken(ADMIN_EMAIL);setAdminCookie(res,token);return res.json({success:true,email:ADMIN_EMAIL})});
+app.post("/api/admin/logout",(req,res)=>{clearAdminCookie(res);return res.json({success:true})});
 app.get("/api/admin/session",(req,res)=>{const s=getAdminSession(req);if(!s)return res.status(401).json({success:false});return res.json({success:true,email:s.email})});
 app.get("/api/admin/products",requireAdmin,async(req,res)=>{try{const data=await supabaseRequest("products?select=*,product_variants(*)&order=created_at.desc");return res.json({success:true,products:data||[]})}catch(e){console.error("Admin products GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar os produtos."})}});
 
