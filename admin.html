@@ -26,6 +26,7 @@
     <button class="nav-button" data-section="products">Produtos</button>
     <button class="nav-button" data-section="orders">Pedidos</button>
     <button class="nav-button" data-section="stock">Estoque</button>
+    <button class="nav-button" data-section="analytics">Analytics</button>
     <div class="sidebar-bottom"><a href="/" target="_blank">Ver site</a><button id="logoutButton">Sair</button></div>
   </aside>
 
@@ -52,6 +53,14 @@
       <div id="ordersTable" class="panel table-wrap"></div>
     </section>
 
+<section id="analyticsSection" class="section hidden">
+<div class="section-actions"><div><p class="eyebrow">INTELIGÊNCIA DO SITE</p><h2>Analytics & Financeiro</h2></div><div class="analytics-toolbar"><select id="analyticsDays"><option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option></select><button id="refreshAnalytics" class="secondary">ATUALIZAR</button></div></div>
+<div id="analyticsError" class="error"></div><div id="analyticsKpis" class="analytics-kpis"></div>
+<div class="analytics-grid"><div class="panel"><div class="panel-head"><h2>Visitas e faturamento</h2></div><div id="analyticsChart" class="analytics-chart"></div></div><div class="panel"><div class="panel-head"><h2>Funil de compra</h2></div><div id="analyticsFunnel" class="analytics-funnel"></div></div></div>
+<div class="analytics-grid"><div class="panel"><div class="panel-head"><h2>Abandono de carrinho</h2></div><div id="analyticsCarts"></div></div><div class="panel"><div class="panel-head"><h2>Formas de pagamento</h2></div><div id="analyticsPayments"></div></div></div>
+<div class="analytics-grid"><div class="panel"><div class="panel-head"><h2>Produtos mais vendidos</h2></div><div id="analyticsTopProducts"></div></div><div class="panel"><div class="panel-head"><h2>Pedidos do período</h2></div><div id="analyticsOrders"></div></div></div>
+<div class="panel"><div class="panel-head"><h2>Carrinhos recentes</h2></div><div id="analyticsRecentCarts"></div></div>
+</section>
     <section id="stockSection" class="section hidden">
       <div class="section-actions"><div><p class="eyebrow">INVENTÁRIO</p><h2>Estoque</h2></div></div>
       <div id="stockTable" class="panel table-wrap"></div><div class="panel stock-history-panel"><div class="panel-head"><h2>Histórico de movimentações</h2><button id="refreshStock" class="secondary">ATUALIZAR</button></div><div id="stockMovements" class="table-wrap"></div></div>
