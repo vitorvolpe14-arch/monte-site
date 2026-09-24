@@ -246,7 +246,7 @@ app.use(
     })
 );
 
-app.use(express.json({ limit: "12mb" }));
+app.use(express.json({ limit: "30mb" }));
 
 /* =====================================================
    RATE LIMITING — proteção contra abuso de endpoints
@@ -423,7 +423,7 @@ async function uploadProductImage({ productId, fileName, contentType, dataBase64
     const raw = String(dataBase64 || "").replace(/^data:[^;]+;base64,/, "");
     const buffer = Buffer.from(raw, "base64");
     if (!buffer.length) throw new Error("Arquivo de imagem vazio.");
-    if (buffer.length > 8 * 1024 * 1024) throw new Error("Cada imagem pode ter no máximo 8 MB.");
+    if (buffer.length > 20 * 1024 * 1024) throw new Error("Cada imagem pode ter no máximo 8 MB.");
     const ext = contentType === "image/png" ? "png" : contentType === "image/webp" ? "webp" : "jpg";
     const safeName = safeString(fileName).toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/-+/g, "-").replace(/^[-.]+|[-.]+$/g, "") || "imagem." + ext;
     const objectPath = productId + "/" + Date.now() + "-" + crypto.randomBytes(5).toString("hex") + "-" + safeName;
