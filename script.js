@@ -105,14 +105,10 @@ function createProductCard(product) {
 
     card.className = "product-card";
 
-    const originalImage =
+    const image =
         product.images && product.images.length
             ? product.images[0]
-            : null;
-
-    const image = originalImage
-        ? "/api/product-image-normalized?url=" + encodeURIComponent(originalImage)
-        : "data:image/svg+xml;charset=UTF-8," +
+            : "data:image/svg+xml;charset=UTF-8,"
               encodeURIComponent(`
                 <svg xmlns="http://www.w3.org/2000/svg"
                      width="600"
