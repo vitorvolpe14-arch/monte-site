@@ -783,6 +783,8 @@ a {
 
 .product-image {
 
+    width: 100%;
+
     aspect-ratio: 3 / 4;
 
     background: #f3f3f1;
@@ -800,7 +802,15 @@ a {
 
     height: 100%;
 
+    max-width: 100%;
+
+    max-height: 100%;
+
     object-fit: contain;
+
+    object-position: center;
+
+    display: block;
 
     transition: transform .6s ease;
 
@@ -1440,7 +1450,11 @@ a {
 
     height: 90px;
 
-    object-fit: cover;
+    object-fit: contain;
+
+    object-position: center;
+
+    background: #f4f4f2;
 
     cursor: pointer;
 
