@@ -209,6 +209,26 @@ function createProductCard(product) {
 
     `;
 
+    const productImageFrame = card.querySelector(".product-image");
+    const productImageElement = card.querySelector(".product-image img");
+
+    if (productImageFrame && productImageElement) {
+        const applyProductBackground = () => {
+            if (productImageElement.currentSrc || productImageElement.src) {
+                productImageFrame.style.setProperty(
+                    "--product-bg",
+                    'url("' + (productImageElement.currentSrc || productImageElement.src).replace(/"/g, '%22') + '")'
+                );
+            }
+        };
+
+        if (productImageElement.complete) {
+            applyProductBackground();
+        } else {
+            productImageElement.addEventListener("load", applyProductBackground, { once: true });
+        }
+    }
+
     card.addEventListener(
         "click",
         () => openProductModal(product.id)
