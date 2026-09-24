@@ -639,3 +639,59 @@
         font-size: 18px;
     }
 }
+
+
+/* =====================================================
+   GALERIA — ARRASTAR PARA REORDENAR
+===================================================== */
+.product-image-manager .product-image-item {
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    transition: transform .15s ease, border-color .15s ease, opacity .15s ease, box-shadow .15s ease;
+}
+.product-image-manager .product-image-item:active {
+    cursor: grabbing;
+}
+.product-image-manager .product-image-item.is-dragging {
+    opacity: .55;
+    transform: scale(.98);
+    border-color: #191919;
+    box-shadow: 0 8px 22px rgba(0,0,0,.12);
+}
+.product-image-manager .product-image-item.drag-over {
+    border: 2px solid #191919;
+    transform: translateY(-2px);
+}
+.image-drag-handle {
+    position: absolute;
+    left: 5px;
+    top: 5px;
+    z-index: 3;
+    width: 27px;
+    height: 27px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,.94);
+    color: #191919;
+    border: 1px solid #ddd;
+    border-radius: 50%;
+    font-size: 16px;
+    line-height: 1;
+    cursor: grab;
+}
+.product-image-item.pending .image-drag-handle {
+    color: #555;
+}
+@media (max-width: 800px) {
+    .product-image-manager .product-image-item {
+        min-height: 0;
+        aspect-ratio: 1 / 1;
+    }
+    .image-drag-handle {
+        width: 32px;
+        height: 32px;
+        font-size: 18px;
+    }
+}
