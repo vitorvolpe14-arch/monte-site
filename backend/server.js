@@ -347,6 +347,73 @@ app.post("/api/admin/login",adminLoginRateLimit,(req,res)=>{const email=safeStri
 app.post("/api/admin/logout",(req,res)=>{const t=parseCookies(req).monte_admin_session;if(t)adminSessions.delete(t);clearAdminCookie(res);return res.json({success:true})});
 app.get("/api/admin/session",(req,res)=>{const s=getAdminSession(req);if(!s)return res.status(401).json({success:false});return res.json({success:true,email:s.email})});
 app.get("/api/admin/products",requireAdmin,async(req,res)=>{try{const data=await supabaseRequest("products?select=*,product_variants(*)&order=created_at.desc");return res.json({success:true,products:data||[]})}catch(e){console.error("Admin products GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar os produtos."})}});
+
+function analyticsClientInfo(req){
+  const ua=String(req.headers["user-agent"]||"");
+  return {
+    device_type:/mobile|android|iphone|ipad|ipod/i.test(ua)?"mobile":"desktop",
+    browser:/edg/i.test(ua)?"Edge":/chrome/i.test(ua)?"Chrome":/safari/i.test(ua)&&!/chrome/i.test(ua)?"Safari":/firefox/i.test(ua)?"Firefox":"Outro",
+    os:/windows/i.test(ua)?"Windows":/mac os|macintosh/i.test(ua)?"macOS":/android/i.test(ua)?"Android":/iphone|ipad|ipod/i.test(ua)?"iOS":/linux/i.test(ua)?"Linux":"Outro"
+  };
+}
+app.post("/api/analytics/event",checkoutRateLimit,async(req,res)=>{
+  try{
+    const b=req.body||{}, allowed=["page_view","view_product","add_to_cart","remove_from_cart","begin_checkout","checkout_started","checkout_completed","purchase"];
+    const event_name=safeString(b.event_name);
+    const visitor_id=safeString(b.visitor_id).slice(0,120), session_key=safeString(b.session_id).slice(0,120);
+    if(!allowed.includes(event_name)||!visitor_id||!session_key) return res.status(400).json({success:false,message:"Evento inválido."});
+    const now=new Date().toISOString(), info=analyticsClientInfo(req);
+    let rows=await supabaseRequest("site_sessions?session_id=eq."+encodeURIComponent(session_key)+"&select=id",{method:"GET"});
+    let session=Array.isArray(rows)?rows[0]:null;
+    if(!session){
+      const created=await supabaseRequest("site_sessions",{method:"POST",body:JSON.stringify({visitor_id,session_id:session_key,first_seen_at:now,last_seen_at:now,landing_path:safeString(b.path).slice(0,500),referrer:safeString(b.referrer).slice(0,500)||null,utm_source:safeString(b.utm_source).slice(0,100)||null,utm_medium:safeString(b.utm_medium).slice(0,100)||null,utm_campaign:safeString(b.utm_campaign).slice(0,150)||null,...info})});
+      session=Array.isArray(created)?created[0]:created;
+    }else{
+      await supabaseRequest("site_sessions?id=eq."+encodeURIComponent(session.id),{method:"PATCH",body:JSON.stringify({last_seen_at:now,...info})});
+    }
+    await supabaseRequest("site_events",{method:"POST",body:JSON.stringify({
+      session_id:session.id,visitor_id,event_name,path:safeString(b.path).slice(0,500),product_id:safeString(b.product_id)||null,
+      product_name:safeString(b.product_name).slice(0,160)||null,variant_id:safeString(b.variant_id)||null,
+      quantity:Number.isFinite(Number(b.quantity))?Math.max(1,Math.min(100,Number(b.quantity))):null,
+      value:Number.isFinite(Number(b.value))?Number(b.value):null,metadata:b.metadata&&typeof b.metadata==="object"?b.metadata:{}
+    })});
+    res.status(201).json({success:true});
+  }catch(e){console.error("Analytics:",e);res.status(400).json({success:false,message:"Não foi possível registrar o evento."})}
+});
+app.post("/api/analytics/cart",checkoutRateLimit,async(req,res)=>{
+  try{
+    const b=req.body||{}, visitor_id=safeString(b.visitor_id).slice(0,120), session_key=safeString(b.session_id).slice(0,120);
+    if(!visitor_id||!session_key) return res.status(400).json({success:false,message:"Identificadores ausentes."});
+    const ses=await supabaseRequest("site_sessions?session_id=eq."+encodeURIComponent(session_key)+"&select=id",{method:"GET"});
+    const session_id=Array.isArray(ses)?ses[0]?.id:null;
+    const subtotal=Math.max(0,Number(b.subtotal||0)),shipping=Math.max(0,Number(b.shipping||0)),total=Math.max(0,Number(b.total||subtotal+shipping));
+    const row={visitor_id,session_id,cart_key:session_key,customer_name:safeString(b.customer_name).slice(0,160)||null,customer_email:safeString(b.customer_email).slice(0,160)||null,customer_phone:safeString(b.customer_phone).slice(0,60)||null,items:Array.isArray(b.items)?b.items.slice(0,50):[],subtotal,shipping,total,status:"active",last_activity_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+    const updated=await supabaseRequest("cart_snapshots?cart_key=eq."+encodeURIComponent(session_key),{method:"PATCH",body:JSON.stringify(row)});
+    if(!Array.isArray(updated)||!updated.length) await supabaseRequest("cart_snapshots",{method:"POST",body:JSON.stringify(row)});
+    res.status(201).json({success:true});
+  }catch(e){console.error("Analytics cart:",e);res.status(400).json({success:false,message:"Não foi possível salvar o carrinho."})}
+});
+app.get("/api/admin/analytics",requireAdmin,async(req,res)=>{
+  try{
+    const days=Math.min(90,Math.max(1,Number(req.query.days||30))),since=new Date(Date.now()-days*86400000).toISOString();
+    const [events,sessions,carts,orders,items]=await Promise.all([
+      supabaseRequest("site_events?created_at=gte."+encodeURIComponent(since)+"&select=*&order=created_at.desc&limit=10000",{method:"GET"}),
+      supabaseRequest("site_sessions?last_seen_at=gte."+encodeURIComponent(since)+"&select=*&order=last_seen_at.desc&limit=5000",{method:"GET"}),
+      supabaseRequest("cart_snapshots?last_activity_at=gte."+encodeURIComponent(since)+"&select=*&order=last_activity_at.desc&limit=5000",{method:"GET"}),
+      supabaseRequest("orders?created_at=gte."+encodeURIComponent(since)+"&select=id,order_nsu,customer_name,customer_email,subtotal,shipping,total,status,payment_method,created_at,paid_at,paid_amount",{method:"GET"}),
+      supabaseRequest("order_items?created_at=gte."+encodeURIComponent(since)+"&select=order_id,product_id,product_name,sku,quantity,total_price,created_at&order=created_at.desc&limit=10000",{method:"GET"})
+    ]);
+    const good=["paid","processing","shipped","delivered"],paid=orders.filter(o=>good.includes(o.status)),paidIds=new Set(paid.map(o=>String(o.id)));
+    const revenue=paid.reduce((s,o)=>s+Number(o.total||0),0), visitors=new Set(sessions.map(s=>s.visitor_id)).size, pageViews=events.filter(e=>e.event_name==="page_view").length;
+    const addToCart=events.filter(e=>e.event_name==="add_to_cart").length,checkoutStarted=events.filter(e=>["begin_checkout","checkout_started"].includes(e.event_name)).length;
+    const active=carts.filter(c=>c.status==="active"), converted=carts.filter(c=>c.status==="converted");
+    const productMap={}, unitsSold={}; items.filter(i=>paidIds.has(String(i.order_id))).forEach(i=>{const key=i.product_name||i.product_id||"—";productMap[key]=(productMap[key]||0)+Number(i.total_price||0);unitsSold[key]=(unitsSold[key]||0)+Number(i.quantity||0)});
+    const methods={};paid.forEach(o=>{const key=o.payment_method||"não informado";methods[key]=(methods[key]||0)+Number(o.total||0)});
+    const series=[];for(let i=days-1;i>=0;i--){const d=new Date(Date.now()-i*86400000).toISOString().slice(0,10),dayEvents=events.filter(e=>String(e.created_at).slice(0,10)===d),daySessions=sessions.filter(s=>String(s.last_seen_at).slice(0,10)===d),dayOrders=paid.filter(o=>String(o.paid_at||o.created_at).slice(0,10)===d);series.push({date:d,visitors:new Set(daySessions.map(s=>s.visitor_id)).size,pageViews:dayEvents.filter(e=>e.event_name==="page_view").length,purchases:dayOrders.length,revenue:dayOrders.reduce((s,o)=>s+Number(o.total||0),0)});}
+    res.json({success:true,summary:{visitors, pageViews, sessions:sessions.length, addToCart, checkoutStarted, orders:orders.length, paidOrders:paid.length, grossRevenue:revenue, ticketAverage:paid.length?revenue/paid.length:0, conversionRate:visitors?paid.length/visitors*100:0, activeCarts:active.length, abandonedValue:active.reduce((s,c)=>s+Number(c.total||0),0), abandonmentRate:(active.length+converted.length)?active.length/(active.length+converted.length)*100:0, convertedCarts:converted.length},series,topProducts:Object.keys(productMap).map(k=>({key:k,revenue:productMap[k],units:unitsSold[k]})).sort((a,b)=>b.revenue-a.revenue).slice(0,10),paymentMethods:methods,recentOrders:orders.slice(0,12),recentCarts:carts.slice(0,20),generatedAt:new Date().toISOString()});
+  }catch(e){console.error("Admin analytics:",e);res.status(500).json({success:false,message:"Não foi possível carregar o Dashboard."})}
+});
+
 const PRODUCT_IMAGE_BUCKET = "product-images";
 
 async function uploadProductImage({ productId, fileName, contentType, dataBase64 }) {
