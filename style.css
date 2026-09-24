@@ -4959,3 +4959,49 @@ img {
     object-fit: contain !important;
     object-position: center center !important;
 }
+
+
+/* =====================================================
+   CARDS MAIORES — MELHOR VISUALIZAÇÃO DOS PRODUTOS
+   Mantém o frame vertical 3:4, aumentando a área visual
+   das bolsas sem alterar a qualidade das imagens.
+===================================================== */
+@media (min-width: 651px) {
+    .products-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        gap: 28px !important;
+    }
+
+    .collection-products-grid,
+    .new-products-grid,
+    .sale-products-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        gap: 20px !important;
+    }
+}
+
+@media (max-width: 650px) {
+    .products-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 28px 12px !important;
+    }
+
+    .collection-products-grid,
+    .new-products-grid,
+    .sale-products-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        gap: 8px !important;
+    }
+}
+
+@media (max-width: 380px) {
+    .products-grid {
+        gap: 24px 10px !important;
+    }
+
+    .collection-products-grid,
+    .new-products-grid,
+    .sale-products-grid {
+        gap: 6px !important;
+    }
+}
