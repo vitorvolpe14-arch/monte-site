@@ -4803,3 +4803,38 @@ img {
         font-size: 6px !important;
     }
 }
+
+
+/* =====================================================
+   PADRÃO DEFINITIVO — FOTOS DOS CARDS
+   Todos os cards usam exatamente o mesmo frame quadrado.
+===================================================== */
+.product-card .product-image,
+.products-grid .product-image,
+.collection-products-grid .product-image,
+.new-products-grid .product-image,
+.sale-products-grid .product-image {
+    width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 1 / 1 !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: hidden !important;
+    position: relative !important;
+    display: block !important;
+}
+
+.product-card .product-image img,
+.products-grid .product-image img,
+.collection-products-grid .product-image img,
+.new-products-grid .product-image img,
+.sale-products-grid .product-image img {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    display: block !important;
+    object-fit: cover !important;
+    object-position: center center !important;
+}
+
