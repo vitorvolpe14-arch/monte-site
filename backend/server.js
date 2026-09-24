@@ -724,6 +724,105 @@ app.post("/api/admin/stock/adjust",requireAdmin,async(req,res)=>{
     }
 });
 
+
+/* =====================================================
+   INSTAGRAM — FEED PROXY
+   O frontend consulta este endpoint do próprio domínio.
+   A credencial do Instagram permanece somente no Render.
+===================================================== */
+const INSTAGRAM_GRAPH_API_VERSION = safeString(process.env.INSTAGRAM_GRAPH_API_VERSION || "v23.0");
+const INSTAGRAM_ACCESS_TOKEN = safeString(process.env.INSTAGRAM_ACCESS_TOKEN);
+const INSTAGRAM_USER_ID = safeString(process.env.INSTAGRAM_USER_ID);
+const INSTAGRAM_CACHE_TTL_MS = 10 * 60 * 1000;
+let instagramFeedCache = { expiresAt: 0, data: null };
+
+app.get("/api/instagram/feed", async (req, res) => {
+    res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=600");
+    try {
+        const now = Date.now();
+        if (instagramFeedCache.data && instagramFeedCache.expiresAt > now) {
+            return res.json(instagramFeedCache.data);
+        }
+
+        if (!INSTAGRAM_ACCESS_TOKEN || !INSTAGRAM_USER_ID) {
+            return res.status(503).json({
+                success: false,
+                configured: false,
+                message: "Instagram não configurado no Render."
+            });
+        }
+
+        const fields = [
+            "id",
+            "caption",
+            "media_type",
+            "media_url",
+            "thumbnail_url",
+            "permalink",
+            "timestamp"
+        ].join(",");
+
+        const graphUrl = new URL(
+            `https://graph.facebook.com/${INSTAGRAM_GRAPH_API_VERSION}/${encodeURIComponent(INSTAGRAM_USER_ID)}/media`
+        );
+        graphUrl.searchParams.set("fields", fields);
+        graphUrl.searchParams.set("limit", "12");
+        graphUrl.searchParams.set("access_token", INSTAGRAM_ACCESS_TOKEN);
+
+        const response = await fetch(graphUrl, {
+            headers: { "Accept": "application/json" }
+        });
+
+        const responseText = await response.text();
+        let data = {};
+        try { data = responseText ? JSON.parse(responseText) : {}; }
+        catch { data = { raw: responseText }; }
+
+        if (!response.ok) {
+            console.error("Instagram Graph API:", response.status, data);
+            return res.status(502).json({
+                success: false,
+                configured: true,
+                message: "Não foi possível consultar o Instagram agora."
+            });
+        }
+
+        const items = Array.isArray(data?.data)
+            ? data.data
+                .filter(item => item && (item.media_url || item.thumbnail_url))
+                .map(item => ({
+                    id: String(item.id || ""),
+                    media_type: String(item.media_type || ""),
+                    image_url: String(item.media_url || item.thumbnail_url || ""),
+                    permalink: String(item.permalink || "https://www.instagram.com/oficialmonte_/"),
+                    caption: String(item.caption || ""),
+                    timestamp: item.timestamp || null
+                }))
+            : [];
+
+        const payload = {
+            success: true,
+            configured: true,
+            items
+        };
+
+        instagramFeedCache = {
+            expiresAt: now + INSTAGRAM_CACHE_TTL_MS,
+            data: payload
+        };
+
+        return res.json(payload);
+    } catch (error) {
+        console.error("Instagram feed:", error);
+        return res.status(500).json({
+            success: false,
+            configured: Boolean(INSTAGRAM_ACCESS_TOKEN && INSTAGRAM_USER_ID),
+            message: "Erro ao carregar o Instagram."
+        });
+    }
+});
+
+
 /* =====================================================
    ÁREA GERENCIAL
    Rota explícita para o painel. O Render executa o backend em /backend,
