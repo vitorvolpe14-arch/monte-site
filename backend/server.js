@@ -38,6 +38,10 @@ const WHATSAPP_ACCESS_TOKEN = safeString(process.env.WHATSAPP_ACCESS_TOKEN);
 const WHATSAPP_TEMPLATE_NAME = safeString(process.env.WHATSAPP_TEMPLATE_NAME || "monte_rastreio");
 const WHATSAPP_TEMPLATE_LANGUAGE = safeString(process.env.WHATSAPP_TEMPLATE_LANGUAGE || "pt_BR");
 
+const RESEND_API_KEY = safeString(process.env.RESEND_API_KEY);
+const RESEND_FROM_EMAIL = safeString(process.env.RESEND_FROM_EMAIL);
+const RESEND_FROM_NAME = safeString(process.env.RESEND_FROM_NAME || "MONTÊ");
+
 async function sendWhatsAppTrackingNotification(order) {
     if (!order?.whatsapp_tracking_opt_in) {
         return { sent: false, status: "opted_out", message_id: null };
@@ -101,6 +105,67 @@ async function sendWhatsAppTrackingNotification(order) {
     return { sent: true, status: "sent", message_id: messageId };
 }
 
+function escapeEmailHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(new RegExp(String.fromCharCode(39), "g"), "&#039;");
+}
+
+async function sendOrderConfirmationEmail(order) {
+    if (!order?.customer_email || !order?.order_nsu) return { sent: false, status: "invalid_recipient" };
+    if (!RESEND_API_KEY || !RESEND_FROM_EMAIL) return { sent: false, status: "not_configured" };
+    const email = safeString(order.customer_email).toLowerCase();
+    const orderCode = safeString(order.order_nsu);
+    const customerName = safeString(order.customer_name).split(/\s+/)[0] || "cliente";
+    const total = Number(order.total || 0);
+    const purchasesUrl = SITE_URL.replace(/\/$/, "") + "/minhas-compras.html?order_nsu=" + encodeURIComponent(orderCode);
+    const html = "<html><body style=\"margin:0;background:#f7f5f2;font-family:Arial,Helvetica,sans-serif;color:#171717;\">" +
+      "<div style=\"max-width:620px;margin:0 auto;padding:40px 20px;\">" +
+      "<div style=\"background:#111;color:#fff;text-align:center;padding:24px 20px;letter-spacing:6px;font-size:24px;\">MONTÊ</div>" +
+      "<div style=\"background:#fff;padding:38px 30px;\">" +
+      "<p style=\"margin:0 0 12px;font-size:12px;letter-spacing:2px;color:#777;\">COMPRA CONFIRMADA</p>" +
+      "<h1 style=\"margin:0 0 18px;font-size:28px;font-weight:500;\">Obrigada pela sua compra, " + escapeEmailHtml(customerName) + ".</h1>" +
+      "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Seu pagamento foi confirmado e seu pedido já está registrado na MONTÊ.</p>" +
+      "<div style=\"margin:28px 0;padding:20px;background:#f7f5f2;\"><p style=\"margin:0 0 8px;font-size:11px;letter-spacing:1.5px;color:#777;\">NÚMERO DO PEDIDO</p><strong style=\"font-size:20px;\">" + escapeEmailHtml(orderCode) + "</strong><p style=\"margin:14px 0 0;font-size:14px;color:#555;\">Total: <strong>R$ " + total.toFixed(2).replace(".", ",") + "</strong></p></div>" +
+      "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Acompanhe o status do seu pedido, o código de rastreio e o link de entrega pela área <strong>Minhas Compras</strong>.</p>" +
+      "<div style=\"text-align:center;margin:30px 0;\"><a href=\"" + purchasesUrl + "\" style=\"display:inline-block;background:#111;color:#fff;text-decoration:none;padding:15px 26px;font-size:13px;letter-spacing:1.5px;\">ACESSAR MINHAS COMPRAS</a></div>" +
+      "<p style=\"font-size:13px;line-height:1.6;color:#777;\">Você também pode acessar o site da MONTÊ e entrar em <strong>Minhas Compras</strong> usando o número do pedido e o e-mail utilizado na compra.</p></div>" +
+      "<p style=\"text-align:center;font-size:11px;color:#999;margin:20px 0;\">MONTÊ — Bolsas e acessórios</p></div></body></html>";
+    const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({
+            from: RESEND_FROM_NAME ? RESEND_FROM_NAME + " <" + RESEND_FROM_EMAIL + ">" : RESEND_FROM_EMAIL,
+            to: [email],
+            subject: "MONTÊ — Pedido " + orderCode + " confirmado",
+            html
+        })
+    });
+    const responseText = await response.text();
+    let data = {};
+    try { data = responseText ? JSON.parse(responseText) : {}; } catch { data = { raw: responseText }; }
+    if (!response.ok) throw new Error("Resend API " + response.status + ": " + JSON.stringify(data));
+    return { sent: true, status: "sent", message_id: data?.id || null };
+}
+
+async function ensureOrderConfirmationEmail(order) {
+    if (!order || order.order_confirmation_email_sent_at) return { sent: false, status: "already_sent" };
+    try {
+        const result = await sendOrderConfirmationEmail(order);
+        await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
+            method: "PATCH",
+            body: JSON.stringify({ order_confirmation_email_status: result.status, order_confirmation_email_sent_at: result.sent ? new Date().toISOString() : null })
+        });
+        return result;
+    } catch (error) {
+        console.error("E-mail de confirmação do pedido:", error);
+        await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), { method: "PATCH", body: JSON.stringify({ order_confirmation_email_status: "error" }) }).catch(() => {});
+        return { sent: false, status: "error", error: error.message };
+    }
+}
 async function supabaseRequest(path, options = {}) {
     if (!SUPABASE_SERVICE_ROLE_KEY) {
         throw new Error("SUPABASE_SERVICE_ROLE_KEY não configurada no backend.");
@@ -1996,7 +2061,12 @@ app.post(
                 order.stock_decremented === true
             ) {
                 processedPayments.add(orderNsu);
-                return res.status(200).json({ success: true, already_processed: true });
+                const confirmationEmail = await ensureOrderConfirmationEmail(order);
+                return res.status(200).json({
+                    success: true,
+                    already_processed: true,
+                    confirmation_email: confirmationEmail.status
+                });
             }
 
             const status = safeString(
@@ -2108,6 +2178,16 @@ app.post(
                 }
             );
 
+            const confirmationEmail = await ensureOrderConfirmationEmail({
+                ...order,
+                id: order.id,
+                order_nsu: orderNsu,
+                customer_name: order.customer_name,
+                customer_email: order.customer_email,
+                total: order.total,
+                order_confirmation_email_sent_at: null
+            });
+
             processedPayments.add(orderNsu);
 
             console.log("✅ Pagamento confirmado, estoque baixado e pedido conciliado:", orderNsu);
@@ -2115,7 +2195,8 @@ app.post(
             return res.status(200).json({
                 success: true,
                 paid: true,
-                order_nsu: orderNsu
+                order_nsu: orderNsu,
+                confirmation_email: confirmationEmail.status
             });
 
         } catch (error) {
