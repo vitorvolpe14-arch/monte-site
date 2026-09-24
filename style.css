@@ -5005,3 +5005,32 @@ img {
         gap: 6px !important;
     }
 }
+
+
+/* =====================================================
+   SEÇÕES — 4 PRODUTOS POR VEZ
+   Coleção, Novidades e Sale exibem 4 cards em cada avanço.
+===================================================== */
+.collection-products-grid,
+.new-products-grid,
+.sale-products-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+
+@media (max-width: 650px) {
+    .collection-products-grid,
+    .new-products-grid,
+    .sale-products-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        gap: 7px !important;
+    }
+}
+
+@media (max-width: 380px) {
+    .collection-products-grid,
+    .new-products-grid,
+    .sale-products-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        gap: 5px !important;
+    }
+}
