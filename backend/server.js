@@ -47,7 +47,9 @@ async function sendWhatsAppTrackingNotification(order) {
         return { sent: false, status: "not_configured", message_id: null };
     }
 
-    const phone = String(order.customer_phone || "").replace(/\D/g, "");
+    let phone = String(order.customer_whatsapp || order.customer_phone || "").replace(/\D/g, "");
+    // Meta expects the country code. Accept both 5585... and local 85... formats.
+    if (phone.length === 10 || phone.length === 11) phone = "55" + phone;
     const trackingCode = safeString(order.tracking_code);
     const trackingUrl = safeString(order.tracking_url);
     if (phone.length < 10 || !trackingCode) {
