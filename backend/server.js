@@ -43,10 +43,6 @@ const RESEND_FROM_EMAIL = safeString(process.env.RESEND_FROM_EMAIL);
 const RESEND_FROM_NAME = safeString(process.env.RESEND_FROM_NAME || "MONTÊ");
 
 async function sendWhatsAppTrackingNotification(order) {
-    if (!order?.whatsapp_tracking_opt_in) {
-        return { sent: false, status: "opted_out", message_id: null };
-    }
-
     if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
         return { sent: false, status: "not_configured", message_id: null };
     }
@@ -786,7 +782,7 @@ app.patch("/api/admin/orders/:id/status",requireAdmin,async(req,res)=>{
 
         let whatsapp = null;
         const savedOrder = d[0];
-        if (status === "shipped" && savedOrder.tracking_code && savedOrder.whatsapp_tracking_opt_in && !savedOrder.whatsapp_tracking_sent_at) {
+        if (status === "shipped" && savedOrder.tracking_code && !savedOrder.whatsapp_tracking_sent_at) {
             try {
                 whatsapp = await sendWhatsAppTrackingNotification(savedOrder);
                 await supabaseRequest(`orders?id=eq.${id}`, {
@@ -818,7 +814,7 @@ app.post("/api/admin/orders/:id/tracking-whatsapp",requireAdmin,async(req,res)=>
         const order=Array.isArray(rows)?rows[0]:null;
         if(!order) return res.status(404).json({success:false,message:"Pedido não encontrado."});
         if(order.status!=="shipped" || !order.tracking_code) return res.status(400).json({success:false,message:"O pedido precisa estar como enviado e ter código de rastreio."});
-        if(!order.whatsapp_tracking_opt_in) return res.status(400).json({success:false,message:"A cliente não autorizou atualizações por WhatsApp."});
+        if(!order.customer_whatsapp && !order.customer_phone) return res.status(400).json({success:false,message:"O pedido não possui telefone para WhatsApp."});
         const result=await sendWhatsAppTrackingNotification(order);
         await supabaseRequest(`orders?id=eq.${id}`,{
             method:"PATCH",
