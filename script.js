@@ -2130,3 +2130,18 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 });
+
+(function(){
+ const VK="monte_analytics_visitor",SK="monte_analytics_session",TK="monte_analytics_session_started";
+ const uid=()=>crypto.randomUUID();
+ const visitor_id=localStorage.getItem(VK)||uid();localStorage.setItem(VK,visitor_id);
+ let session_id=sessionStorage.getItem(SK),started=Number(sessionStorage.getItem(TK)||0);
+ if(!session_id||!started||Date.now()-started>1800000){session_id=uid();sessionStorage.setItem(SK,session_id);sessionStorage.setItem(TK,String(Date.now()));}
+ async function post(path,data){try{await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},keepalive:true,body:JSON.stringify(data)})}catch{}}
+ function track(name,extra){post("/api/analytics/event",{visitor_id,session_id,event_name:name,path:location.pathname+location.search,referrer:document.referrer,...extra})}
+ function saveCart(){const items=Array.isArray(window.cart)?window.cart:[];if(!items.length)return;const subtotal=items.reduce((s,i)=>s+Number(i.price||0)*Number(i.quantity||1),0);post("/api/analytics/cart",{visitor_id,session_id,items:items.map(i=>({id:i.id,product_id:i.id,product_name:i.name,sku:i.sku,variant_id:i.variant_id||null,variant_color:i.variant_color||i.color||null,quantity:i.quantity,unit_price:i.price,total_price:Number(i.price||0)*Number(i.quantity||1)})),subtotal,shipping:Number(window.selectedShippingOption?.price||0),total:subtotal+Number(window.selectedShippingOption?.price||0),customer_name:document.getElementById("customerName")?.value||"",customer_email:document.getElementById("customerEmail")?.value||"",customer_phone:document.getElementById("customerPhone")?.value||""})}
+ window.monteAnalytics={track,saveCart};
+ window.addEventListener("load",()=>track("page_view"));
+ setInterval(saveCart,30000);
+ document.addEventListener("click",e=>{const el=e.target.closest?.("[data-product-id]");if(el)track("view_product",{product_id:el.dataset.productId,product_name:el.dataset.productName||null})});
+})();
