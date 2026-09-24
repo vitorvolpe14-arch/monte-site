@@ -4873,3 +4873,54 @@ img {
     object-position: center center !important;
 }
 
+
+
+/* =====================================================
+   PREENCHIMENTO INTELIGENTE DOS FRAMES
+   A foto original permanece inteira. O espaço restante
+   usa uma cópia ampliada/desfocada do próprio fundo.
+===================================================== */
+.product-card .product-image,
+.products-grid .product-image,
+.collection-products-grid .product-image,
+.new-products-grid .product-image,
+.sale-products-grid .product-image {
+    background: transparent !important;
+    isolation: isolate;
+}
+
+.product-card .product-image::before,
+.products-grid .product-image::before,
+.collection-products-grid .product-image::before,
+.new-products-grid .product-image::before,
+.sale-products-grid .product-image::before {
+    content: "";
+    position: absolute;
+    inset: -18px;
+    z-index: 0;
+    background-image: var(--product-bg);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    filter: blur(18px);
+    transform: scale(1.06);
+    opacity: 1;
+}
+
+.product-card .product-image img,
+.products-grid .product-image img,
+.collection-products-grid .product-image img,
+.new-products-grid .product-image img,
+.sale-products-grid .product-image img {
+    position: relative;
+    z-index: 1;
+}
+
+.product-card .product-badge,
+.products-grid .product-badge,
+.collection-products-grid .product-badge,
+.new-products-grid .product-badge,
+.sale-products-grid .product-badge {
+    z-index: 3;
+}
+
