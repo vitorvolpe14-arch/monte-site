@@ -5034,3 +5034,134 @@ img {
         gap: 5px !important;
     }
 }
+
+
+/* =====================================================
+   INSTAGRAM — ANTES DO RODAPÉ
+===================================================== */
+
+.instagram-section {
+    padding: 90px 5% 70px;
+    background: #fff;
+    text-align: center;
+}
+
+.instagram-heading {
+    margin-bottom: 32px;
+}
+
+.instagram-heading .section-label {
+    margin-bottom: 9px;
+}
+
+.instagram-heading h2 {
+    font-family: "Playfair Display", serif;
+    font-size: 42px;
+    font-weight: 400;
+    margin-bottom: 9px;
+}
+
+.instagram-heading a {
+    font-size: 11px;
+    letter-spacing: 1.2px;
+    color: var(--wine);
+}
+
+.instagram-carousel {
+    position: relative;
+    width: min(100%, 1200px);
+    height: 420px;
+    margin: 0 auto;
+    overflow: hidden;
+    background: #f5f5f3;
+}
+
+.instagram-slide {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity .8s ease;
+    display: block;
+}
+
+.instagram-slide.active {
+    opacity: 1;
+}
+
+.instagram-slide img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    object-position: center;
+}
+
+.instagram-prev,
+.instagram-next {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 5;
+    width: 42px;
+    height: 42px;
+    border: 1px solid rgba(255,255,255,.8);
+    background: rgba(0,0,0,.25);
+    color: #fff;
+    font-size: 27px;
+    line-height: 1;
+}
+
+.instagram-prev { left: 20px; }
+.instagram-next { right: 20px; }
+
+.instagram-dots {
+    position: absolute;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 7px;
+    z-index: 5;
+}
+
+.instagram-dot {
+    width: 28px;
+    height: 2px;
+    border: none;
+    background: rgba(255,255,255,.5);
+    padding: 0;
+}
+
+.instagram-dot.active {
+    background: #fff;
+}
+
+@media (max-width: 650px) {
+    .instagram-section {
+        padding: 60px 16px 48px;
+    }
+
+    .instagram-heading {
+        margin-bottom: 24px;
+    }
+
+    .instagram-heading h2 {
+        font-size: 31px;
+    }
+
+    .instagram-carousel {
+        height: 62vw;
+        min-height: 240px;
+        max-height: 420px;
+    }
+
+    .instagram-prev,
+    .instagram-next {
+        width: 34px;
+        height: 34px;
+        font-size: 23px;
+    }
+
+    .instagram-prev { left: 10px; }
+    .instagram-next { right: 10px; }
+}
