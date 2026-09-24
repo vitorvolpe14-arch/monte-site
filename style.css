@@ -4612,3 +4612,125 @@ img {
         font-size: 29px;
     }
 }
+
+
+/* =====================================================
+   CARROSSÉIS MOBILE — 4 PRODUTOS POR VEZ
+===================================================== */
+
+@media (max-width: 650px) {
+
+    .collection-products-grid,
+    .new-products-grid,
+    .sale-products-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 7px;
+        width: 100%;
+    }
+
+    .collection-products-carousel,
+    .new-products-carousel,
+    .sale-products-carousel {
+        display: block;
+        position: relative;
+        width: 100%;
+    }
+
+    .collection-products-viewport,
+    .new-products-viewport,
+    .sale-products-viewport {
+        width: 100%;
+        overflow: hidden;
+    }
+
+    .collection-carousel-arrow,
+    .new-carousel-arrow,
+    .sale-carousel-arrow {
+        display: flex !important;
+        position: absolute;
+        top: 38%;
+        width: 27px;
+        height: 27px;
+        z-index: 10;
+        padding: 0;
+        align-items: center;
+        justify-content: center;
+        font-size: 17px;
+        border: 1px solid rgba(255,255,255,.9);
+        background: rgba(0,0,0,.48);
+        color: #fff;
+        box-shadow: 0 2px 7px rgba(0,0,0,.14);
+    }
+
+    .collection-prev,
+    .new-prev,
+    .sale-prev {
+        left: 4px;
+    }
+
+    .collection-next,
+    .new-next,
+    .sale-next {
+        right: 4px;
+    }
+
+    .collection-carousel-arrow:disabled,
+    .new-carousel-arrow:disabled,
+    .sale-carousel-arrow:disabled {
+        opacity: .3;
+    }
+
+    .collection-products-grid .product-image,
+    .new-products-grid .product-image,
+    .sale-products-grid .product-image {
+        width: 100%;
+    }
+
+    .collection-products-grid .product-info,
+    .new-products-grid .product-info,
+    .sale-products-grid .product-info {
+        padding-top: 6px;
+    }
+
+    .collection-products-grid .product-name,
+    .new-products-grid .product-name,
+    .sale-products-grid .product-name {
+        font-size: 8px;
+        line-height: 1.2;
+        letter-spacing: .2px;
+        margin-bottom: 3px;
+    }
+
+    .collection-products-grid .product-price,
+    .new-products-grid .product-price,
+    .sale-products-grid .product-price {
+        font-size: 8px;
+    }
+
+    .collection-products-grid .product-badge,
+    .new-products-grid .product-badge,
+    .sale-products-grid .product-badge {
+        top: 4px;
+        left: 4px;
+        padding: 3px 4px;
+        font-size: 5px;
+    }
+}
+
+@media (max-width: 380px) {
+
+    .collection-products-grid,
+    .new-products-grid,
+    .sale-products-grid {
+        gap: 5px;
+    }
+
+    .collection-carousel-arrow,
+    .new-carousel-arrow,
+    .sale-carousel-arrow {
+        width: 25px;
+        height: 25px;
+        font-size: 16px;
+    }
+}
