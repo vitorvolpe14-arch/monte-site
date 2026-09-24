@@ -2183,62 +2183,116 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 /* =====================================================
-   INSTAGRAM — CARROSSEL AUTOMÁTICO
-   Troca a foto a cada 10 segundos.
+   INSTAGRAM — FEED REAL DA CONTA
+   Atualiza via /api/instagram/feed e troca a foto a cada 10s.
 ===================================================== */
-
-const instagramSlides = document.querySelectorAll(".instagram-slide");
-const instagramDotsContainer = document.getElementById("instagramDots");
+let instagramSlides = [];
 let currentInstagramSlide = 0;
+let instagramTimer = null;
 
-if (instagramSlides.length && instagramDotsContainer) {
+function renderInstagramSlides(items) {
+    const container = document.getElementById("instagramSlides");
+    const dots = document.getElementById("instagramDots");
+    if (!container || !dots) return;
 
-    instagramSlides.forEach((_, index) => {
+    container.innerHTML = "";
+    dots.innerHTML = "";
+
+    instagramSlides = Array.isArray(items) ? items.filter(item => item?.image_url) : [];
+    currentInstagramSlide = 0;
+
+    if (!instagramSlides.length) {
+        container.innerHTML = '<div class="instagram-error">Não foi possível carregar as publicações agora.</div>';
+        return;
+    }
+
+    instagramSlides.forEach((item, index) => {
+        const link = document.createElement("a");
+        link.className = "instagram-slide" + (index === 0 ? " active" : "");
+        link.href = item.permalink || "https://www.instagram.com/oficialmonte_/";
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+
+        const img = document.createElement("img");
+        img.src = item.image_url;
+        img.alt = item.caption ? item.caption.slice(0, 120) : "MONTÊ no Instagram";
+        img.loading = index === 0 ? "eager" : "lazy";
+        img.decoding = "async";
+        img.referrerPolicy = "no-referrer";
+
+        img.addEventListener("error", () => {
+            link.remove();
+            instagramSlides = instagramSlides.filter((_, i) => i !== index);
+        }, { once: true });
+
+        link.appendChild(img);
+        container.appendChild(link);
+
         const dot = document.createElement("button");
         dot.type = "button";
-        dot.className = "instagram-dot";
-        if (index === 0) dot.classList.add("active");
-
+        dot.className = "instagram-dot" + (index === 0 ? " active" : "");
+        dot.setAttribute("aria-label", `Ir para a publicação ${index + 1}`);
         dot.addEventListener("click", () => {
             currentInstagramSlide = index;
             showInstagramSlide(currentInstagramSlide);
             restartInstagramTimer();
         });
-
-        instagramDotsContainer.appendChild(dot);
+        dots.appendChild(dot);
     });
 
-    function showInstagramSlide(index) {
-        instagramSlides.forEach(slide => slide.classList.remove("active"));
-        instagramDotsContainer
-            .querySelectorAll(".instagram-dot")
-            .forEach(dot => dot.classList.remove("active"));
-
-        instagramSlides[index]?.classList.add("active");
-        instagramDotsContainer
-            .querySelectorAll(".instagram-dot")[index]?.classList.add("active");
-    }
-
-    function nextInstagramSlide() {
-        currentInstagramSlide =
-            (currentInstagramSlide + 1) % instagramSlides.length;
-        showInstagramSlide(currentInstagramSlide);
-    }
-
-    function previousInstagramSlide() {
-        currentInstagramSlide =
-            (currentInstagramSlide - 1 + instagramSlides.length) %
-            instagramSlides.length;
-        showInstagramSlide(currentInstagramSlide);
-    }
-
-    let instagramTimer = setInterval(nextInstagramSlide, 10000);
-
-    function restartInstagramTimer() {
-        clearInterval(instagramTimer);
-        instagramTimer = setInterval(nextInstagramSlide, 10000);
-    }
-
-    window.nextInstagramSlide = nextInstagramSlide;
-    window.previousInstagramSlide = previousInstagramSlide;
+    restartInstagramTimer();
 }
+
+function showInstagramSlide(index) {
+    const slides = document.querySelectorAll(".instagram-slide");
+    const dots = document.querySelectorAll(".instagram-dot");
+    if (!slides.length) return;
+
+    currentInstagramSlide = (index + slides.length) % slides.length;
+
+    slides.forEach((slide, i) => slide.classList.toggle("active", i === currentInstagramSlide));
+    dots.forEach((dot, i) => dot.classList.toggle("active", i === currentInstagramSlide));
+}
+
+function nextInstagramSlide() {
+    showInstagramSlide(currentInstagramSlide + 1);
+}
+
+function previousInstagramSlide() {
+    showInstagramSlide(currentInstagramSlide - 1);
+}
+
+function restartInstagramTimer() {
+    if (instagramTimer) clearInterval(instagramTimer);
+    const count = document.querySelectorAll(".instagram-slide").length;
+    if (count > 1) instagramTimer = setInterval(nextInstagramSlide, 10000);
+}
+
+async function loadInstagramFeed() {
+    const container = document.getElementById("instagramSlides");
+    if (!container) return;
+
+    try {
+        const response = await fetch("/api/instagram/feed", {
+            method: "GET",
+            headers: { "Accept": "application/json" },
+            cache: "no-store"
+        });
+
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok || !data?.success) {
+            throw new Error(data?.message || `Instagram indisponível (${response.status})`);
+        }
+
+        renderInstagramSlides(data.items || []);
+    } catch (error) {
+        console.error("Instagram:", error);
+        container.innerHTML = '<div class="instagram-error">Instagram temporariamente indisponível.</div>';
+    }
+}
+
+window.nextInstagramSlide = nextInstagramSlide;
+window.previousInstagramSlide = previousInstagramSlide;
+
+document.addEventListener("DOMContentLoaded", loadInstagramFeed);
