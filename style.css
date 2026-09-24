@@ -800,7 +800,7 @@ a {
 
     height: 100%;
 
-    object-fit: cover;
+    object-fit: contain;
 
     transition: transform .6s ease;
 
@@ -1412,7 +1412,11 @@ a {
 
     height: 100%;
 
-    object-fit: cover;
+    object-fit: contain;
+
+    object-position: center;
+
+    display: block;
 
 }
 
@@ -1751,7 +1755,11 @@ a {
 
     height: 100px;
 
-    object-fit: cover;
+    object-fit: contain;
+
+    object-position: center;
+
+    display: block;
 
 }
 
