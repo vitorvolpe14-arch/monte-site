@@ -2,6 +2,7 @@ const express = require("express");
 const crypto = require("crypto");
 const path = require("path");
 const cors = require("cors");
+const sharp = require("sharp");
 require("dotenv").config();
 
 const app = express();
@@ -415,6 +416,78 @@ app.get("/api/admin/analytics",requireAdmin,async(req,res)=>{
 });
 
 const PRODUCT_IMAGE_BUCKET = "product-images";
+
+const normalizedProductImageCache = new Map();
+
+function isAllowedProductImageUrl(value) {
+    try {
+        const parsed = new URL(String(value || ""));
+        const supabaseHost = new URL(SUPABASE_URL).host;
+        return parsed.protocol === "https:" &&
+            parsed.host === supabaseHost &&
+            parsed.pathname.startsWith("/storage/v1/object/public/" + PRODUCT_IMAGE_BUCKET + "/");
+    } catch {
+        return false;
+    }
+}
+
+app.get("/api/product-image-normalized", async (req, res) => {
+    const sourceUrl = safeString(req.query?.url);
+    if (!isAllowedProductImageUrl(sourceUrl)) {
+        return res.status(400).json({ success: false, message: "Imagem inválida." });
+    }
+
+    const cached = normalizedProductImageCache.get(sourceUrl);
+    if (cached) {
+        res.setHeader("Content-Type", cached.contentType);
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        return res.end(cached.buffer);
+    }
+
+    try {
+        const response = await fetch(sourceUrl);
+        if (!response.ok) {
+            return res.status(404).end();
+        }
+
+        const contentType = String(response.headers.get("content-type") || "").split(";")[0].toLowerCase();
+        if (!["image/jpeg", "image/png", "image/webp"].includes(contentType)) {
+            return res.status(415).end();
+        }
+
+        const sourceBuffer = Buffer.from(await response.arrayBuffer());
+        if (!sourceBuffer.length || sourceBuffer.length > 20 * 1024 * 1024) {
+            return res.status(413).end();
+        }
+
+        const normalizedBuffer = await sharp(sourceBuffer)
+            .trim({
+                threshold: 18,
+                margin: 20
+            })
+            .toBuffer();
+
+        const result = {
+            buffer: normalizedBuffer,
+            contentType
+        };
+
+        normalizedProductImageCache.set(sourceUrl, result);
+        if (normalizedProductImageCache.size > 250) {
+            const oldestKey = normalizedProductImageCache.keys().next().value;
+            normalizedProductImageCache.delete(oldestKey);
+        }
+
+        res.setHeader("Content-Type", contentType);
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        return res.end(normalizedBuffer);
+    } catch (error) {
+        console.error("Product image normalization:", error);
+        return res.redirect(sourceUrl);
+    }
+});
+
+
 
 async function uploadProductImage({ productId, fileName, contentType, dataBase64 }) {
     if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY não configurada no backend.");
