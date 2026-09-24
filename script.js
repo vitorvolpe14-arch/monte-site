@@ -2180,3 +2180,65 @@ document.addEventListener("DOMContentLoaded", () => {
  setInterval(saveCart,30000);
  document.addEventListener("click",e=>{const el=e.target.closest?.("[data-product-id]");if(el)track("view_product",{product_id:el.dataset.productId,product_name:el.dataset.productName||null})});
 })();
+
+
+/* =====================================================
+   INSTAGRAM — CARROSSEL AUTOMÁTICO
+   Troca a foto a cada 10 segundos.
+===================================================== */
+
+const instagramSlides = document.querySelectorAll(".instagram-slide");
+const instagramDotsContainer = document.getElementById("instagramDots");
+let currentInstagramSlide = 0;
+
+if (instagramSlides.length && instagramDotsContainer) {
+
+    instagramSlides.forEach((_, index) => {
+        const dot = document.createElement("button");
+        dot.type = "button";
+        dot.className = "instagram-dot";
+        if (index === 0) dot.classList.add("active");
+
+        dot.addEventListener("click", () => {
+            currentInstagramSlide = index;
+            showInstagramSlide(currentInstagramSlide);
+            restartInstagramTimer();
+        });
+
+        instagramDotsContainer.appendChild(dot);
+    });
+
+    function showInstagramSlide(index) {
+        instagramSlides.forEach(slide => slide.classList.remove("active"));
+        instagramDotsContainer
+            .querySelectorAll(".instagram-dot")
+            .forEach(dot => dot.classList.remove("active"));
+
+        instagramSlides[index]?.classList.add("active");
+        instagramDotsContainer
+            .querySelectorAll(".instagram-dot")[index]?.classList.add("active");
+    }
+
+    function nextInstagramSlide() {
+        currentInstagramSlide =
+            (currentInstagramSlide + 1) % instagramSlides.length;
+        showInstagramSlide(currentInstagramSlide);
+    }
+
+    function previousInstagramSlide() {
+        currentInstagramSlide =
+            (currentInstagramSlide - 1 + instagramSlides.length) %
+            instagramSlides.length;
+        showInstagramSlide(currentInstagramSlide);
+    }
+
+    let instagramTimer = setInterval(nextInstagramSlide, 10000);
+
+    function restartInstagramTimer() {
+        clearInterval(instagramTimer);
+        instagramTimer = setInterval(nextInstagramSlide, 10000);
+    }
+
+    window.nextInstagramSlide = nextInstagramSlide;
+    window.previousInstagramSlide = previousInstagramSlide;
+}
