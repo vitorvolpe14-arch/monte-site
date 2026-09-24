@@ -4924,3 +4924,38 @@ img {
     z-index: 3;
 }
 
+
+
+/* =====================================================
+   CARDS — PREENCHIMENTO LIMPO EM BRANCO
+   A foto original permanece inteira, sem bordas artificiais,
+   desfoque ou cópia da imagem no fundo.
+===================================================== */
+.product-card .product-image,
+.products-grid .product-image,
+.collection-products-grid .product-image,
+.new-products-grid .product-image,
+.sale-products-grid .product-image {
+    background: #ffffff !important;
+    isolation: auto !important;
+}
+
+.product-card .product-image::before,
+.products-grid .product-image::before,
+.collection-products-grid .product-image::before,
+.new-products-grid .product-image::before,
+.sale-products-grid .product-image::before {
+    display: none !important;
+    content: none !important;
+}
+
+.product-card .product-image img,
+.products-grid .product-image img,
+.collection-products-grid .product-image img,
+.new-products-grid .product-image img,
+.sale-products-grid .product-image img {
+    position: relative !important;
+    z-index: 1 !important;
+    object-fit: contain !important;
+    object-position: center center !important;
+}
