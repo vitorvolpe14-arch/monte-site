@@ -73,6 +73,10 @@ const NEW_STEP = 4;
 let newProducts = [];
 let currentNewIndex = 0;
 
+function getCarouselVisibleCount() {
+    return window.matchMedia("(max-width: 650px)").matches ? 4 : 5;
+}
+
 
 /* =====================================================
    FORMATAÇÃO DE PREÇO
@@ -298,7 +302,7 @@ function renderNewPage() {
 
     for (
         let offset = 0;
-        offset < Math.min(NEW_VISIBLE_COUNT, total);
+        offset < Math.min(getCarouselVisibleCount(), total);
         offset++
     ) {
         const product =
@@ -310,7 +314,7 @@ function renderNewPage() {
     }
 
     const hasCarousel =
-        total > NEW_VISIBLE_COUNT;
+        total > getCarouselVisibleCount();
 
     if (previousButton) {
         previousButton.disabled = !hasCarousel;
@@ -329,7 +333,7 @@ function renderNewPage() {
 
 function nextNewPage() {
 
-    if (newProducts.length <= NEW_VISIBLE_COUNT) return;
+    if (newProducts.length <= getCarouselVisibleCount()) return;
 
     currentNewIndex =
         (currentNewIndex + NEW_STEP) % newProducts.length;
@@ -341,7 +345,7 @@ function nextNewPage() {
 
 function previousNewPage() {
 
-    if (newProducts.length <= NEW_VISIBLE_COUNT) return;
+    if (newProducts.length <= getCarouselVisibleCount()) return;
 
     currentNewIndex =
         (currentNewIndex - NEW_STEP + newProducts.length) %
@@ -397,7 +401,7 @@ function renderSalePage() {
 
     for (
         let offset = 0;
-        offset < Math.min(SALE_VISIBLE_COUNT, total);
+        offset < Math.min(getCarouselVisibleCount(), total);
         offset++
     ) {
         const product =
@@ -409,7 +413,7 @@ function renderSalePage() {
     }
 
     const hasCarousel =
-        total > SALE_VISIBLE_COUNT;
+        total > getCarouselVisibleCount();
 
     if (previousButton) {
         previousButton.disabled = !hasCarousel;
@@ -428,7 +432,7 @@ function renderSalePage() {
 
 function nextSalePage() {
 
-    if (saleProducts.length <= SALE_VISIBLE_COUNT) {
+    if (saleProducts.length <= getCarouselVisibleCount()) {
         return;
     }
 
@@ -442,7 +446,7 @@ function nextSalePage() {
 
 function previousSalePage() {
 
-    if (saleProducts.length <= SALE_VISIBLE_COUNT) {
+    if (saleProducts.length <= getCarouselVisibleCount()) {
         return;
     }
 
@@ -494,7 +498,7 @@ function renderCollectionPage() {
 
     for (
         let offset = 0;
-        offset < Math.min(COLLECTION_VISIBLE_COUNT, total);
+        offset < Math.min(getCarouselVisibleCount(), total);
         offset++
     ) {
 
@@ -509,7 +513,7 @@ function renderCollectionPage() {
 
 
     const hasCarousel =
-        total > COLLECTION_VISIBLE_COUNT;
+        total > getCarouselVisibleCount();
 
 
     if (previousButton) {
@@ -529,7 +533,7 @@ function renderCollectionPage() {
 
 function nextCollectionPage() {
 
-    if (collectionProducts.length <= COLLECTION_VISIBLE_COUNT) {
+    if (collectionProducts.length <= getCarouselVisibleCount()) {
         return;
     }
 
@@ -545,7 +549,7 @@ function nextCollectionPage() {
 
 function previousCollectionPage() {
 
-    if (collectionProducts.length <= COLLECTION_VISIBLE_COUNT) {
+    if (collectionProducts.length <= getCarouselVisibleCount()) {
         return;
     }
 
@@ -563,6 +567,17 @@ function previousCollectionPage() {
 /* =====================================================
    FILTRO
 ===================================================== */
+
+let lastMobileCarouselMode = window.matchMedia("(max-width: 650px)").matches;
+
+window.addEventListener("resize", () => {
+    const mobileMode = window.matchMedia("(max-width: 650px)").matches;
+    if (mobileMode === lastMobileCarouselMode) return;
+    lastMobileCarouselMode = mobileMode;
+    renderCollectionPage();
+    renderNewPage();
+    renderSalePage();
+});
 
 function filterProducts(category) {
 
