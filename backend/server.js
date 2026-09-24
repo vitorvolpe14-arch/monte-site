@@ -151,6 +151,79 @@ async function sendOrderConfirmationEmail(order) {
     return { sent: true, status: "sent", message_id: data?.id || null };
 }
 
+
+function trackingStatusLabel(status) {
+    return ({
+        paid: "Pagamento confirmado",
+        processing: "Pedido em separação",
+        shipped: "Pedido enviado",
+        delivered: "Pedido entregue"
+    })[status] || status || "Atualização do pedido";
+}
+
+async function sendOrderTrackingEmail(order) {
+    if (!order?.customer_email || !order?.order_nsu) return { sent: false, status: "invalid_recipient", message_id: null };
+    if (!RESEND_API_KEY || !RESEND_FROM_EMAIL) return { sent: false, status: "not_configured", message_id: null };
+
+    const email = safeString(order.customer_email).toLowerCase();
+    const orderCode = safeString(order.order_nsu);
+    const customerName = safeString(order.customer_name).split(/\s+/)[0] || "cliente";
+    const status = safeString(order.status).toLowerCase();
+    const statusLabel = trackingStatusLabel(status);
+    const carrier = safeString(order.shipping_carrier);
+    const trackingCode = safeString(order.tracking_code);
+    const trackingUrl = safeString(order.tracking_url);
+    const purchasesUrl = SITE_URL.replace(/\/$/, "") + "/minhas-compras.html?order_nsu=" + encodeURIComponent(orderCode);
+    const total = Number(order.total || 0);
+
+    if (status === "shipped" && !trackingCode) {
+        throw new Error("O pedido precisa ter código de rastreio para enviar o e-mail de envio.");
+    }
+
+    let shippingBlock = "";
+    if (status === "shipped" || status === "delivered") {
+        shippingBlock =
+            "<div style=\"margin:24px 0;padding:20px;background:#f7f5f2;\">" +
+            "<p style=\"margin:0 0 12px;font-size:11px;letter-spacing:1.5px;color:#777;\">DETALHES DA ENTREGA</p>" +
+            (carrier ? "<p style=\"margin:7px 0;font-size:14px;\"><strong>Transportadora:</strong> " + escapeEmailHtml(carrier) + "</p>" : "") +
+            "<p style=\"margin:7px 0;font-size:14px;\"><strong>Código de rastreio:</strong> " + escapeEmailHtml(trackingCode || "—") + "</p>" +
+            (trackingUrl ? "<p style=\"margin:16px 0 0;\"><a href=\"" + trackingUrl.replace(/"/g, "&quot;") + "\" style=\"color:#111;font-size:14px;font-weight:bold;\">ACOMPANHAR ENTREGA</a></p>" : "") +
+            "</div>";
+    }
+
+    const html =
+        "<html><body style=\"margin:0;background:#f7f5f2;font-family:Arial,Helvetica,sans-serif;color:#171717;\">" +
+        "<div style=\"max-width:620px;margin:0 auto;padding:40px 20px;\">" +
+        "<div style=\"background:#111;color:#fff;text-align:center;padding:24px 20px;letter-spacing:6px;font-size:24px;\">MONTÊ</div>" +
+        "<div style=\"background:#fff;padding:38px 30px;\">" +
+        "<p style=\"margin:0 0 12px;font-size:12px;letter-spacing:2px;color:#777;\">ATUALIZAÇÃO DO PEDIDO</p>" +
+        "<h1 style=\"margin:0 0 18px;font-size:28px;font-weight:500;\">Olá, " + escapeEmailHtml(customerName) + ".</h1>" +
+        "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Seu pedido <strong>" + escapeEmailHtml(orderCode) + "</strong> foi atualizado.</p>" +
+        "<div style=\"margin:24px 0;padding:22px;background:#f7f5f2;text-align:center;\"><p style=\"margin:0 0 8px;font-size:11px;letter-spacing:1.5px;color:#777;\">STATUS ATUAL</p><strong style=\"font-size:21px;\">" + escapeEmailHtml(statusLabel) + "</strong></div>" +
+        shippingBlock +
+        "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Você pode consultar os detalhes completos do pedido e acompanhar novas atualizações pela área <strong>Minhas Compras</strong>.</p>" +
+        "<div style=\"text-align:center;margin:30px 0;\"><a href=\"" + purchasesUrl + "\" style=\"display:inline-block;background:#111;color:#fff;text-decoration:none;padding:15px 26px;font-size:13px;letter-spacing:1.5px;\">ACESSAR MINHAS COMPRAS</a></div>" +
+        "<p style=\"font-size:13px;line-height:1.6;color:#777;\">Total do pedido: <strong>R$ " + total.toFixed(2).replace(".", ",") + "</strong></p>" +
+        "</div><p style=\"text-align:center;font-size:11px;color:#999;margin:20px 0;\">MONTÊ — Bolsas e acessórios</p></div></body></html>";
+
+    const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({
+            from: RESEND_FROM_NAME ? RESEND_FROM_NAME + " <" + RESEND_FROM_EMAIL + ">" : RESEND_FROM_EMAIL,
+            to: [email],
+            subject: "MONTÊ — Pedido " + orderCode + " · " + statusLabel,
+            html
+        })
+    });
+
+    const responseText = await response.text();
+    let data = {};
+    try { data = responseText ? JSON.parse(responseText) : {}; } catch { data = { raw: responseText }; }
+    if (!response.ok) throw new Error("Resend API " + response.status + ": " + JSON.stringify(data));
+    return { sent: true, status: "sent", message_id: data?.id || null };
+}
+
 async function ensureOrderConfirmationEmail(order) {
     if (!order || order.order_confirmation_email_sent_at) return { sent: false, status: "already_sent" };
     try {
@@ -760,6 +833,35 @@ app.post("/api/admin/orders/:id/tracking-whatsapp",requireAdmin,async(req,res)=>
         console.error("Admin WhatsApp tracking:",e);
         await supabaseRequest(`orders?id=eq.${encodeURIComponent(req.params.id)}`,{method:"PATCH",body:JSON.stringify({whatsapp_tracking_status:"error"})}).catch(()=>{});
         return res.status(500).json({success:false,message:"Não foi possível enviar a atualização pelo WhatsApp.",error:process.env.NODE_ENV==="development"?e.message:undefined});
+    }
+});
+
+app.post("/api/admin/orders/:id/tracking-email",requireAdmin,async(req,res)=>{
+    try{
+        const id=encodeURIComponent(req.params.id);
+        const rows=await supabaseRequest(`orders?id=eq.${id}&select=*`,{method:"GET"});
+        const order=Array.isArray(rows)?rows[0]:null;
+        if(!order) return res.status(404).json({success:false,message:"Pedido não encontrado."});
+        if(order.status==="pending") return res.status(400).json({success:false,message:"O pedido precisa ter um pagamento confirmado antes de enviar uma atualização por e-mail."});
+        if(order.status==="shipped" && !order.tracking_code) return res.status(400).json({success:false,message:"Informe o código de rastreio antes de enviar o e-mail de envio."});
+
+        const result=await sendOrderTrackingEmail(order);
+        await supabaseRequest(`orders?id=eq.${id}`,{
+            method:"PATCH",
+            body:JSON.stringify({
+                tracking_email_status: result.status,
+                tracking_email_sent_at: result.sent ? new Date().toISOString() : null,
+                tracking_email_message_id: result.message_id || null
+            })
+        });
+        return res.json({success:true,email:result});
+    }catch(e){
+        console.error("Admin tracking email:",e);
+        await supabaseRequest(`orders?id=eq.${encodeURIComponent(req.params.id)}`,{
+            method:"PATCH",
+            body:JSON.stringify({tracking_email_status:"error"})
+        }).catch(()=>{});
+        return res.status(500).json({success:false,message:"Não foi possível enviar a atualização por e-mail.",error:process.env.NODE_ENV==="development"?e.message:undefined});
     }
 });
 
