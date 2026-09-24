@@ -1445,11 +1445,8 @@ async function checkout() {
         state !== "CE" ||
         !["FORTALEZA", ...metropolitanCities].includes(normalizeCity(city));
 
-    if (whatsappField) whatsappField.hidden = !isOutsideLocalArea;
-    if (whatsappInput && !isOutsideLocalArea) {
-        whatsappInput.value = "";
-        if (whatsappUpdates) whatsappUpdates.checked = false;
-    }
+    // O cliente pode autorizar o WhatsApp independentemente da região de entrega.
+    if (whatsappField) whatsappField.hidden = false;
 
 
     // 3. Validação
@@ -1477,7 +1474,7 @@ async function checkout() {
     const cpfDigits = cpf.replace(/\D/g, "");
     const whatsappNumber = (whatsappInput?.value || "").replace(/\D/g, "");
     const wantsWhatsappTracking =
-        isOutsideLocalArea && whatsappUpdates?.checked === true;
+        whatsappUpdates?.checked === true;
 
     if (cpfDigits.length !== 11) {
         showToast("Informe um CPF válido com 11 dígitos.");
