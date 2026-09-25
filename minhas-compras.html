@@ -28,7 +28,7 @@
     <form id="purchaseLookup" class="purchase-lookup">
         <label>
             Número do pedido
-            <input id="purchaseOrder" type="text" placeholder="Ex.: MONTE-1234567890" autocomplete="off" required>
+            <input id="purchaseOrder" type="text" placeholder="Ex.: 0007" autocomplete="off" required>
         </label>
         <label>
             E-mail usado na compra
@@ -117,7 +117,7 @@ form.addEventListener("submit", async (event) => {
             <div class="purchase-header">
                 <div>
                     <p class="section-label">PEDIDO</p>
-                    <h2>${esc(o.order_nsu)}</h2>
+                    <h2>${esc(o.order_code||o.order_nsu)}</h2>
                     <p>Realizado em ${date(o.created_at)}</p>
                 </div>
                 <span class="purchase-status">${esc(statusLabel(o.status))}</span>
