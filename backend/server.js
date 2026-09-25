@@ -772,6 +772,38 @@ app.post("/api/admin/uploads/product-image", requireAdmin, async (req, res) => {
 function sanitizeProductPayload(b={}){return{name:safeString(b.name),sku:safeString(b.sku)||null,category:safeString(b.category)||"bolsas",price:Number(b.price||0),sale_price:b.sale_price===null||b.sale_price===""||b.sale_price===undefined?null:Number(b.sale_price),description:safeString(b.description),images:Array.isArray(b.images)?b.images:[],shipping_weight_kg:b.shipping_weight_kg===null||b.shipping_weight_kg===""||b.shipping_weight_kg===undefined?null:Number(b.shipping_weight_kg),shipping_height_cm:b.shipping_height_cm===null||b.shipping_height_cm===""||b.shipping_height_cm===undefined?null:Number(b.shipping_height_cm),shipping_width_cm:b.shipping_width_cm===null||b.shipping_width_cm===""||b.shipping_width_cm===undefined?null:Number(b.shipping_width_cm),shipping_length_cm:b.shipping_length_cm===null||b.shipping_length_cm===""||b.shipping_length_cm===undefined?null:Number(b.shipping_length_cm),is_new:Boolean(b.is_new),is_sale:Boolean(b.is_sale),active:b.active!==false}}
 app.post("/api/admin/products",requireAdmin,async(req,res)=>{try{const p=sanitizeProductPayload(req.body);if(!p.name)return res.status(400).json({success:false,message:"Informe o nome do produto."});const d=await supabaseRequest("products",{method:"POST",body:JSON.stringify(p)});return res.status(201).json({success:true,product:d?.[0]||d})}catch(e){console.error("Admin products POST:",e);return res.status(500).json({success:false,message:e.message})}});
 app.put("/api/admin/products/:id",requireAdmin,async(req,res)=>{try{const p=sanitizeProductPayload(req.body);if(!p.name)return res.status(400).json({success:false,message:"Informe o nome do produto."});const d=await supabaseRequest(`products?id=eq.${encodeURIComponent(req.params.id)}`,{method:"PATCH",body:JSON.stringify(p)});return res.json({success:true,product:d?.[0]||d})}catch(e){console.error("Admin products PUT:",e);return res.status(500).json({success:false,message:e.message})}});
+app.delete("/api/admin/products/:id",requireAdmin,async(req,res)=>{
+    try{
+        const productId=safeString(req.params.id);
+        if(!/^[0-9a-f-]{36}$/i.test(productId)) return res.status(400).json({success:false,message:"Produto inválido."});
+
+        const orders=await supabaseRequest(
+            "order_items?product_id=eq."+encodeURIComponent(productId)+"&select=id&limit=1"
+        );
+        if(Array.isArray(orders)&&orders.length){
+            return res.status(409).json({
+                success:false,
+                message:"Este produto já está vinculado a um pedido. Para preservar o histórico da venda, use DESATIVAR em vez de excluir."
+            });
+        }
+
+        await supabaseRequest(
+            "product_variants?product_id=eq."+encodeURIComponent(productId),
+            {method:"DELETE",headers:{"Prefer":"return=minimal"}}
+        );
+        const deleted=await supabaseRequest(
+            "products?id=eq."+encodeURIComponent(productId),
+            {method:"DELETE",headers:{"Prefer":"return=representation"}}
+        );
+        if(!Array.isArray(deleted)||!deleted[0]){
+            return res.status(404).json({success:false,message:"Produto não encontrado."});
+        }
+        return res.json({success:true});
+    }catch(e){
+        console.error("Admin product DELETE:",e);
+        return res.status(500).json({success:false,message:"Não foi possível excluir o produto."});
+    }
+});
 app.put("/api/admin/products/:id/variants",requireAdmin,async(req,res)=>{
     try{
         const productId=safeString(req.params.id);
