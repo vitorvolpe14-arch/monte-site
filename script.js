@@ -1751,138 +1751,63 @@ async function checkout() {
    CARROSSEL
 ===================================================== */
 
-const slides =
-    document.querySelectorAll(
-        ".slide"
-    );
+let carouselSlides=[];
+let carouselAutoTimer=null;
 
-
-const dotsContainer =
-    document.getElementById(
-        "carouselDots"
-    );
-
-
-slides.forEach(
-    (_, index) => {
-
-        const dot =
-            document.createElement(
-                "button"
-            );
-
-
-        dot.className =
-            "carousel-dot";
-
-
-        if (index === 0) {
-
-            dot.classList.add(
-                "active"
-            );
-
-        }
-
-
-        dot.addEventListener(
-            "click",
-            () => {
-
-                currentSlide =
-                    index;
-
-                showSlide(
-                    currentSlide
-                );
-
-            }
-        );
-
-
-        dotsContainer.appendChild(
-            dot
-        );
-
-    }
-);
-
-
-function showSlide(index) {
-
-    slides.forEach(
-        slide =>
-            slide.classList
-                .remove("active")
-    );
-
-
-    document
-        .querySelectorAll(
-            ".carousel-dot"
-        )
-        .forEach(
-            dot =>
-                dot.classList
-                    .remove("active")
-        );
-
-
-    slides[index]
-        .classList
-        .add("active");
-
-
-    document
-        .querySelectorAll(
-            ".carousel-dot"
-        )[index]
-        .classList
-        .add("active");
-
+async function loadHomepageCarousel(){
+  try{
+    const response=await fetch("/api/carousel",{cache:"no-store"});
+    const data=await response.json();
+    const images=Array.isArray(data?.images)?data.images.filter(Boolean):[];
+    renderHomepageCarousel(images.length?images:[
+      "/backend/assets/carousel-photo-1.webp",
+      "/backend/assets/carousel-photo-2.webp"
+    ]);
+  }catch{
+    renderHomepageCarousel([
+      "/backend/assets/carousel-photo-1.webp",
+      "/backend/assets/carousel-photo-2.webp"
+    ]);
+  }
 }
 
-
-function nextSlide() {
-
-    currentSlide =
-        (currentSlide + 1)
-        % slides.length;
-
-
-    showSlide(
-        currentSlide
-    );
-
+function renderHomepageCarousel(images){
+  const container=document.getElementById("carouselSlides");
+  if(!container)return;
+  container.innerHTML=images.map((src,i)=>'<div class="slide'+(i===0?' active':'')+'"><img src="'+String(src).replace(/"/g,'%22')+'" alt="MONTÊ"></div>').join("");
+  carouselSlides=[...container.querySelectorAll(".slide")];
+  const dots=document.getElementById("carouselDots");
+  dots.innerHTML="";
+  carouselSlides.forEach((_,index)=>{
+    const dot=document.createElement("button");
+    dot.className="carousel-dot"+(index===0?" active":"");
+    dot.addEventListener("click",()=>{currentSlide=index;showSlide(currentSlide)});
+    dots.appendChild(dot);
+  });
+  currentSlide=0;
+  if(carouselAutoTimer)clearInterval(carouselAutoTimer);
+  carouselAutoTimer=setInterval(nextSlide,20000);
 }
-
-
-function previousSlide() {
-
-    currentSlide =
-        (currentSlide - 1 +
-            slides.length)
-        % slides.length;
-
-
-    showSlide(
-        currentSlide
-    );
-
+function showSlide(index){
+  if(!carouselSlides.length)return;
+  currentSlide=(index+carouselSlides.length)%carouselSlides.length;
+  carouselSlides.forEach(slide=>slide.classList.remove("active"));
+  carouselSlides[currentSlide].classList.add("active");
+  document.querySelectorAll("#carouselDots .carousel-dot").forEach(dot=>dot.classList.remove("active"));
+  const dot=document.querySelectorAll("#carouselDots .carousel-dot")[currentSlide];
+  if(dot)dot.classList.add("active");
 }
-
-
-/*
-   CARROSSEL AUTOMÁTICO
-
-   20 SEGUNDOS
-*/
-
-setInterval(
-    nextSlide,
-    20000
-);
-
+function nextSlide(){
+  if(!carouselSlides.length)return;
+  currentSlide=(currentSlide+1)%carouselSlides.length;
+  showSlide(currentSlide);
+}
+function previousSlide(){
+  if(!carouselSlides.length)return;
+  currentSlide=(currentSlide-1+carouselSlides.length)%carouselSlides.length;
+  showSlide(currentSlide);
+}
+document.addEventListener("DOMContentLoaded",loadHomepageCarousel);
 
 /* =====================================================
    PESQUISA
