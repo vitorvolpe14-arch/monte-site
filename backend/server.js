@@ -37,6 +37,9 @@ const WHATSAPP_PHONE_NUMBER_ID = safeString(process.env.WHATSAPP_PHONE_NUMBER_ID
 const WHATSAPP_ACCESS_TOKEN = safeString(process.env.WHATSAPP_ACCESS_TOKEN);
 const WHATSAPP_TEMPLATE_NAME = safeString(process.env.WHATSAPP_TEMPLATE_NAME || "monte_rastreio");
 const WHATSAPP_TEMPLATE_LANGUAGE = safeString(process.env.WHATSAPP_TEMPLATE_LANGUAGE || "pt_BR");
+const WHATSAPP_ADMIN_PHONE = safeString(process.env.WHATSAPP_ADMIN_PHONE);
+const WHATSAPP_ADMIN_TEMPLATE_NAME = safeString(process.env.WHATSAPP_ADMIN_TEMPLATE_NAME || "monte_nova_venda");
+const WHATSAPP_ADMIN_TEMPLATE_LANGUAGE = safeString(process.env.WHATSAPP_ADMIN_TEMPLATE_LANGUAGE || "pt_BR");
 
 const RESEND_API_KEY = safeString(process.env.RESEND_API_KEY);
 const RESEND_FROM_EMAIL = safeString(process.env.RESEND_FROM_EMAIL);
@@ -99,6 +102,101 @@ async function sendWhatsAppTrackingNotification(order) {
 
     const messageId = data?.messages?.[0]?.id || null;
     return { sent: true, status: "sent", message_id: messageId };
+}
+
+function formatWhatsAppCurrency(value) {
+    return "R$ " + Number(value || 0).toFixed(2).replace(".", ",");
+}
+
+function formatWhatsAppPaymentMethod(method) {
+    const value = safeString(method).toLowerCase();
+    if (value === "pix") return "Pix";
+    if (value === "credit_card" || value === "card") return "Cartão de crédito";
+    return value || "Não informado";
+}
+
+function formatWhatsAppAddress(address) {
+    if (!address || typeof address !== "object") return "Não informado";
+    const parts = [
+        address.street,
+        address.number ? "nº " + address.number : "",
+        address.complement,
+        address.neighborhood,
+        address.city,
+        address.state,
+        address.cep ? "CEP " + address.cep : ""
+    ].filter(Boolean);
+    return parts.join(", ") || "Não informado";
+}
+
+async function sendWhatsAppAdminNewOrderNotification(order) {
+    if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN || !WHATSAPP_ADMIN_PHONE) {
+        return { sent: false, status: "not_configured", message_id: null };
+    }
+    if (!order || order.whatsapp_admin_notification_sent_at) {
+        return { sent: false, status: "already_sent", message_id: order?.whatsapp_admin_notification_message_id || null };
+    }
+
+    let phone = WHATSAPP_ADMIN_PHONE.replace(/\D/g, "");
+    if (phone.length === 10 || phone.length === 11) phone = "55" + phone;
+    if (phone.length < 12) return { sent: false, status: "invalid_admin_phone", message_id: null };
+
+    const orderCode = formatOrderCode(order.order_code || order.order_nsu);
+    const customerName = safeString(order.customer_name) || "Não informado";
+    const customerPhone = safeString(order.customer_phone || order.customer_whatsapp) || "Não informado";
+    const cpf = safeString(order.customer_cpf) || "Não informado";
+    const products = Array.isArray(order.items) && order.items.length
+        ? order.items.map(item => {
+            const variant = safeString(item.variant_color || item.color);
+            const name = safeString(item.name || item.product_name || item.description) || "Produto";
+            const qty = Math.max(1, Number(item.quantity || 1));
+            const unit = Number(item.price ?? item.unit_price ?? 0);
+            return qty + "x " + name + (variant ? " (" + variant + ")" : "") + " — " + formatWhatsAppCurrency(unit);
+        }).join("\n")
+        : "Consultar itens no painel administrativo.";
+    const customerData = "Tel.: " + customerPhone + "\nCPF: " + cpf + "\nEndereço: " + formatWhatsAppAddress(order.customer_address);
+    const apiUrl = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
+
+    const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+            "Authorization": "Bearer " + WHATSAPP_ACCESS_TOKEN,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to: phone,
+            type: "template",
+            template: {
+                name: WHATSAPP_ADMIN_TEMPLATE_NAME,
+                language: { code: WHATSAPP_ADMIN_TEMPLATE_LANGUAGE },
+                components: [{
+                    type: "body",
+                    parameters: [
+                        { type: "text", text: orderCode },
+                        { type: "text", text: customerName },
+                        { type: "text", text: products },
+                        { type: "text", text: formatWhatsAppPaymentMethod(order.payment_method) },
+                        { type: "text", text: formatWhatsAppCurrency(order.total) },
+                        { type: "text", text: customerData }
+                    ]
+                }]
+            }
+        })
+    });
+
+    const responseText = await response.text();
+    let data = {};
+    try { data = responseText ? JSON.parse(responseText) : {}; } catch { data = { raw: responseText }; }
+    if (!response.ok) {
+        throw new Error("WhatsApp API " + response.status + ": " + JSON.stringify(data));
+    }
+    return {
+        sent: true,
+        status: "sent",
+        message_id: data?.messages?.[0]?.id || null
+    };
 }
 
 function formatOrderCode(value) {
@@ -231,6 +329,31 @@ async function sendOrderTrackingEmail(order) {
     try { data = responseText ? JSON.parse(responseText) : {}; } catch { data = { raw: responseText }; }
     if (!response.ok) throw new Error("Resend API " + response.status + ": " + JSON.stringify(data));
     return { sent: true, status: "sent", message_id: data?.id || null };
+}
+
+async function ensureWhatsAppAdminNewOrderNotification(order) {
+    if (!order || order.whatsapp_admin_notification_sent_at) {
+        return { sent: false, status: "already_sent", message_id: order?.whatsapp_admin_notification_message_id || null };
+    }
+    try {
+        const result = await sendWhatsAppAdminNewOrderNotification(order);
+        await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
+            method: "PATCH",
+            body: JSON.stringify({
+                whatsapp_admin_notification_status: result.status,
+                whatsapp_admin_notification_sent_at: result.sent ? new Date().toISOString() : null,
+                whatsapp_admin_notification_message_id: result.message_id
+            })
+        });
+        return result;
+    } catch (error) {
+        console.error("WhatsApp nova venda:", error);
+        await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
+            method: "PATCH",
+            body: JSON.stringify({ whatsapp_admin_notification_status: "error" })
+        }).catch(() => {});
+        return { sent: false, status: "error", message_id: null, error: error.message };
+    }
 }
 
 async function ensureOrderConfirmationEmail(order) {
@@ -2326,6 +2449,7 @@ app.post(
             ) {
                 processedPayments.add(orderNsu);
                 const confirmationEmail = await ensureOrderConfirmationEmail(order);
+                const adminWhatsApp = await ensureWhatsAppAdminNewOrderNotification(order);
                 return res.status(200).json({
                     success: true,
                     already_processed: true,
@@ -2452,15 +2576,32 @@ app.post(
                 order_confirmation_email_sent_at: null
             });
 
+            const adminWhatsApp = await ensureWhatsAppAdminNewOrderNotification({
+                ...order,
+                id: order.id,
+                order_nsu: orderNsu,
+                customer_name: order.customer_name,
+                customer_phone: order.customer_phone,
+                customer_whatsapp: order.customer_whatsapp,
+                customer_cpf: order.customer_cpf,
+                customer_address: order.customer_address,
+                payment_method: order.payment_method,
+                total: order.total,
+                items: order.items,
+                whatsapp_admin_notification_sent_at: order.whatsapp_admin_notification_sent_at,
+                whatsapp_admin_notification_message_id: order.whatsapp_admin_notification_message_id
+            });
+
             processedPayments.add(orderNsu);
 
-            console.log("✅ Pagamento confirmado, estoque baixado e pedido conciliado:", orderNsu);
+            console.log("✅ Pagamento confirmado, estoque baixado, notificações processadas e pedido conciliado:", orderNsu);
 
             return res.status(200).json({
                 success: true,
                 paid: true,
                 order_nsu: orderNsu,
-                confirmation_email: confirmationEmail.status
+                confirmation_email: confirmationEmail.status,
+                    whatsapp_admin_notification: adminWhatsApp.status
             });
 
         } catch (error) {
