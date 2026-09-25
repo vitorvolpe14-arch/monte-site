@@ -1247,6 +1247,8 @@ a {
 
     color: white;
 
+    font-family: "DM Sans", sans-serif;
+
     padding: 70px 5% 25px;
 
     display: grid;
@@ -1260,7 +1262,9 @@ a {
 
 .footer-logo {
 
-    font-family: "Playfair Display", serif;
+    font-family: "Lovelo Black", sans-serif;
+
+    font-weight: 900;
 
     font-size: 30px;
 
