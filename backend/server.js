@@ -491,8 +491,8 @@ async function readCarouselImages(){
     return rows[0].value.images.filter(v=>typeof v==="string"&&v).slice(0,20);
   }
   return [
-    SITE_URL.replace(/\\/$/,"") + "/backend/assets/carousel-photo-1.webp",
-    SITE_URL.replace(/\\/$/,"") + "/backend/assets/carousel-photo-2.webp"
+    SITE_URL.replace(/\/$/,"") + "/backend/assets/carousel-photo-1.webp",
+    SITE_URL.replace(/\/$/,"") + "/backend/assets/carousel-photo-2.webp"
   ];
 }
 function normalizeCarouselImages(images){
