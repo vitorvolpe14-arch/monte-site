@@ -639,3 +639,6 @@
         font-size: 18px;
     }
 }
+
+/* Carrossel inicial — módulo isolado */
+.carousel-save-actions{justify-content:flex-end;margin-top:18px}.carousel-image-item{position:relative}.carousel-drag-handle{position:absolute;right:5px;top:5px;background:rgba(255,255,255,.94);color:#191919;border:1px solid #ddd;border-radius:50%;padding:4px 7px;font-size:11px;cursor:grab}.carousel-image-item.is-dragging{opacity:.55}.carousel-image-item.drag-over{border:2px solid #191919}
