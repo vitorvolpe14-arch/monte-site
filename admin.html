@@ -39,11 +39,11 @@
       <div class="panel">
         <div class="panel-head"><div><h2>Fotos do carrossel</h2><p class="field-help">A primeira foto aparece primeiro no site. Arraste para alterar a ordem.</p></div></div>
         <div id="carouselImageDropzone" class="product-image-dropzone" tabindex="0" role="button" aria-label="Adicionar fotos ao carrossel">
-          <input id="carouselImageFiles" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+          <input id="carouselImageFiles" type="file" accept="image/*,.jpg,.jpeg,.png,.webp" multiple>
           <div class="dropzone-icon">＋</div>
           <strong>Arraste suas fotos aqui</strong>
-          <span>ou clique para selecionar do computador</span>
-          <small>JPG, PNG ou WebP · até 20 MB por imagem</small>
+          <span>ou selecione as fotos do celular ou computador</span>
+          <small>JPG, PNG ou WebP · até 20 MB por imagem</small><label class="upload-file-button" for="carouselImageFiles">SELECIONAR FOTOS</label>
         </div>
         <small id="carouselImageStatus" class="field-help"></small>
         <div id="carouselImageManager" class="product-image-manager"></div>
