@@ -251,13 +251,8 @@ function renderProducts() {
     );
 
     renderCategorySectionProducts(
-        "cintos",
-        products.filter(product => product.category === "cintos")
-    );
-
-    renderCategorySectionProducts(
-        "acessorios",
-        products.filter(product => product.category === "acessorios")
+        "cintos-acessorios",
+        products.filter(product => product.category === "cintos" || product.category === "acessorios")
     );
 
     renderSaleProducts(products.filter(product => product.sale));
@@ -589,7 +584,7 @@ let categorySectionProducts = { cintos: [], acessorios: [] };
 let categorySectionIndexes = { cintos: 0, acessorios: 0 };
 
 function renderCategorySection(category) {
-    const container = document.getElementById(category + "Products");
+    const container = document.getElementById(category === "cintos-acessorios" ? "cintosAcessoriosProducts" : category + "Products");
     if (!container) return;
 
     const list = categorySectionProducts[category] || [];
@@ -655,8 +650,7 @@ window.addEventListener("resize", () => {
     if (mobileMode === lastMobileCarouselMode) return;
     lastMobileCarouselMode = mobileMode;
     renderCollectionPage();
-    renderCategorySection("cintos");
-    renderCategorySection("acessorios");
+    renderCategorySection("cintos-acessorios");
     renderNewPage();
     renderSalePage();
 });
