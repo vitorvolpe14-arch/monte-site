@@ -60,7 +60,7 @@ async function loadOrder(){
     const data=await response.json();
     if(!response.ok||!data.success) throw new Error(data.message||'Pedido não encontrado.');
     const o=data.order;
-    document.getElementById("orderBox").innerHTML='<div class="row"><span class="label">Pedido</span><span class="value">'+(o.order_code||o.order_nsu)+'</span></div><div class="row"><span class="label">Status</span><span class="value">PAGO</span></div><div class="row"><span class="label">Frete</span><span class="value">'+money(o.shipping)+'</span></div><div class="total"><span>Total</span><span>'+money(o.total)+'</span></div>';
+    document.getElementById("orderBox").innerHTML='<div class="row"><span class="label">Pedido</span><span class="value">'+(o.order_code?"MONTÊ-"+o.order_code:o.order_nsu)+'</span></div><div class="row"><span class="label">Status</span><span class="value">PAGO</span></div><div class="row"><span class="label">Frete</span><span class="value">'+money(o.shipping)+'</span></div><div class="total"><span>Total</span><span>'+money(o.total)+'</span></div>';
     document.getElementById("items").innerHTML=(o.items||[]).map(i=>'<div class="item"><div><div class="item-name">'+escapeHtml(i.product_name)+'</div><div class="item-meta">'+(i.variant_color?escapeHtml(i.variant_color)+' · ':'')+'Qtd. '+i.quantity+(i.sku?' · SKU '+escapeHtml(i.sku):'')+'</div></div><strong>'+money(i.total_price)+'</strong></div>').join('');
     if(o.receipt_url) document.getElementById("receipt").innerHTML='<a class="receipt" href="'+escapeAttr(o.receipt_url)+'" target="_blank" rel="noopener noreferrer">VER COMPROVANTE</a>';
   }catch(error){
