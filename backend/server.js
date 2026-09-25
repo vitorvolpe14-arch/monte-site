@@ -484,6 +484,28 @@ async function calculateSuperfreteQuotes({toCep,items}) {
 }
 
 /* =====================================================
+   REDIRECIONAMENTO INFINITEPAY
+   Desktop: navegação direta pelo frontend.
+   Mobile: endpoint same-origin com HTTP 302, evitando bloqueios
+   de Safari/iOS e navegadores embutidos.
+===================================================== */
+app.get("/pagamento-infinitepay", (req, res) => {
+    try {
+        const target = String(req.query?.url || "").trim();
+        const parsed = new URL(target);
+
+        if (parsed.protocol !== "https:" || parsed.hostname !== "checkout.infinitepay.io") {
+            return res.status(400).send("Link de pagamento inválido.");
+        }
+
+        res.setHeader("Cache-Control", "no-store");
+        return res.redirect(302, parsed.href);
+    } catch {
+        return res.status(400).send("Link de pagamento inválido.");
+    }
+});
+
+/* =====================================================
    MIDDLEWARES
 ===================================================== */
 
