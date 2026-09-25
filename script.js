@@ -1768,32 +1768,14 @@ async function checkout() {
         closeCart();
 
 
-        // 14. Abre a InfinitePay.
-        // No iPhone/iPad, alguns navegadores embutidos e o Safari podem
-        // bloquear uma navegação assíncrona via location.assign. Forçamos
-        // uma navegação de página completa e mantemos um fallback visual.
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-            (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-
-        if (isIOS) {
-            window.location.href = validUrl.href;
-        } else {
-            window.location.assign(validUrl.href);
+        // 14. Redireciona para a InfinitePay.
+        // A navegação é feita na própria janela para funcionar também em
+        // Safari/iOS e navegadores embutidos no celular.
+        try {
+            window.top.location.replace(validUrl.href);
+        } catch (navigationError) {
+            window.location.replace(validUrl.href);
         }
-
-        // Fallback caso o navegador não conclua a navegação imediatamente.
-        setTimeout(() => {
-            if (document.visibilityState === "visible") {
-                const paymentLink = document.createElement("a");
-                paymentLink.href = validUrl.href;
-                paymentLink.target = "_self";
-                paymentLink.rel = "noopener";
-                paymentLink.style.display = "none";
-                document.body.appendChild(paymentLink);
-                paymentLink.click();
-                paymentLink.remove();
-            }
-        }, 1200);
 
 
     } catch (error) {
