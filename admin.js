@@ -20,12 +20,106 @@ function fmtInt(v){return new Intl.NumberFormat("pt-BR").format(Number(v||0))}
 function pct(v){return Number(v||0).toLocaleString("pt-BR",{maximumFractionDigits:1})+"%"}
 
 document.addEventListener("DOMContentLoaded",init);
-async function init(){$("loginForm").addEventListener("submit",login);$("logoutButton").addEventListener("click",logout);document.querySelectorAll(".nav-button").forEach(b=>b.onclick=()=>showSection(b.dataset.section));document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>showSection(b.dataset.go));$("newProductButton").onclick=()=>openProduct();$("closeModal").onclick=closeProduct;$("cancelProduct").onclick=closeProduct;$("addVariant").onclick=()=>addVariant();$("productForm").onsubmit=saveProduct;$("productSearch").oninput=renderProducts;bindProductImageDropzone();$("refreshOrders").onclick=loadOrders;$("refreshStock").onclick=loadStockMovements;$("refreshAnalytics").onclick=loadAnalytics;$("analyticsDays").onchange=loadAnalytics;try{const s=await api("/api/admin/session");await enterApp(s)}catch{showLogin()}}
+async function init(){$("loginForm").addEventListener("submit",login);$("logoutButton").addEventListener("click",logout);document.querySelectorAll(".nav-button").forEach(b=>b.onclick=()=>showSection(b.dataset.section));document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>showSection(b.dataset.go));$("newProductButton").onclick=()=>openProduct();$("saveCarouselButton").onclick=saveCarousel;bindCarouselImageDropzone();$("closeModal").onclick=closeProduct;$("cancelProduct").onclick=closeProduct;$("addVariant").onclick=()=>addVariant();$("productForm").onsubmit=saveProduct;$("productSearch").oninput=renderProducts;bindProductImageDropzone();$("refreshOrders").onclick=loadOrders;$("refreshStock").onclick=loadStockMovements;$("refreshAnalytics").onclick=loadAnalytics;$("analyticsDays").onchange=loadAnalytics;if($("carouselSection"))loadCarousel();try{const s=await api("/api/admin/session");await enterApp(s)}catch{showLogin()}}
 function showLogin(){$("loginView").classList.remove("hidden");$("appView").classList.add("hidden");$("loginEmail").focus()}
 async function login(e){e.preventDefault();$("loginError").textContent="";try{await enterApp(await api("/api/admin/login",{method:"POST",body:JSON.stringify({email:$("loginEmail").value.trim(),password:$("loginPassword").value})}))}catch(e){$("loginError").textContent=e.message}}
 async function logout(){try{await api("/api/admin/logout",{method:"POST"})}catch{}products=[];orders=[];showLogin();$("loginPassword").value=""}
 async function enterApp(s){$("loginView").classList.add("hidden");$("appView").classList.remove("hidden");$("adminEmail").textContent=s.email||"Administrador";try{await Promise.all([loadProducts(),loadOrders(),loadStockMovements()]);renderDashboard()}catch(e){console.error("Falha ao carregar dados do painel:",e);$("loginError").textContent="Login realizado, mas houve um erro ao carregar os dados. Atualize a página e tente novamente.";renderDashboard()}}
-function showSection(s){document.querySelectorAll(".section").forEach(x=>x.classList.add("hidden"));$(s+"Section").classList.remove("hidden");document.querySelectorAll(".nav-button").forEach(b=>b.classList.toggle("active",b.dataset.section===s));$("pageTitle").textContent={dashboard:"Visão geral",products:"Produtos",orders:"Pedidos",stock:"Estoque",analytics:"Analytics & Financeiro"}[s];if(s==="analytics")loadAnalytics();if(s==="products")renderProducts();if(s==="orders")renderOrders();if(s==="stock")renderStock()}
+function showSection(s){document.querySelectorAll(".section").forEach(x=>x.classList.add("hidden"));$(s+"Section").classList.remove("hidden");document.querySelectorAll(".nav-button").forEach(b=>b.classList.toggle("active",b.dataset.section===s));$("pageTitle").textContent={dashboard:"Visão geral",products:"Produtos",carousel:"Carrossel",orders:"Pedidos",stock:"Estoque",analytics:"Analytics & Financeiro"}[s];if(s==="analytics")loadAnalytics();if(s==="products")renderProducts();if(s==="carousel")loadCarousel();if(s==="orders")renderOrders();if(s==="stock")renderStock()}
+let carouselImagesDraft=[];
+
+async function loadCarousel(){
+  try{
+    const d=await api("/api/admin/carousel");
+    carouselImagesDraft=Array.isArray(d.images)?d.images:[];
+    renderCarouselImageManager();
+    setCarouselStatus("");
+  }catch(e){setCarouselStatus(e.message,true)}
+}
+function setCarouselStatus(message="",error=false){
+  const el=$("carouselImageStatus");
+  if(el){el.textContent=message;el.classList.toggle("error",!!error)}
+}
+function renderCarouselImageManager(){
+  const box=$("carouselImageManager");
+  if(!box)return;
+  box.innerHTML=carouselImagesDraft.map((url,i)=>
+    '<div class="product-image-item carousel-image-item" draggable="true" data-index="'+i+'">'+
+      '<img src="'+esc(url)+'" alt="Carrossel '+(i+1)+'" onerror="this.style.opacity=\\'0.2\\'">'+
+      '<button type="button" class="image-remove" data-remove-carousel="'+i+'">×</button>'+
+      '<span>'+(i===0?"CAPA":"FOTO "+(i+1))+'</span>'+
+      '<span class="carousel-drag-handle">↕</span>'+
+    '</div>'
+  ).join("") || '<p class="field-help">Nenhuma foto adicionada.</p>';
+  box.querySelectorAll("[data-remove-carousel]").forEach(btn=>{
+    btn.addEventListener("click",e=>{
+      e.stopPropagation();
+      carouselImagesDraft.splice(Number(btn.dataset.removeCarousel),1);
+      renderCarouselImageManager();
+      setCarouselStatus("Foto removida. Clique em SALVAR CARROSSEL para confirmar.");
+    });
+  });
+  let draggingIndex=null;
+  box.querySelectorAll(".carousel-image-item").forEach(item=>{
+    item.addEventListener("dragstart",()=>{draggingIndex=Number(item.dataset.index);item.classList.add("is-dragging")});
+    item.addEventListener("dragend",()=>{draggingIndex=null;item.classList.remove("is-dragging");box.querySelectorAll(".drag-over").forEach(x=>x.classList.remove("drag-over"))});
+    item.addEventListener("dragover",e=>{e.preventDefault();item.classList.add("drag-over")});
+    item.addEventListener("dragleave",()=>item.classList.remove("drag-over"));
+    item.addEventListener("drop",e=>{
+      e.preventDefault();item.classList.remove("drag-over");
+      const targetIndex=Number(item.dataset.index);
+      if(draggingIndex===null||draggingIndex===targetIndex)return;
+      const [moved]=carouselImagesDraft.splice(draggingIndex,1);
+      carouselImagesDraft.splice(targetIndex,0,moved);
+      renderCarouselImageManager();
+      setCarouselStatus("Ordem alterada. Clique em SALVAR CARROSSEL para confirmar.");
+    });
+  });
+}
+function validateCarouselImage(file){validateProductImage(file)}
+async function uploadCarouselImages(files){
+  const urls=[];
+  for(const file of files){
+    validateCarouselImage(file);
+    const dataUrl=await readFileAsDataUrl(file);
+    const d=await api("/api/admin/uploads/carousel-image",{method:"POST",body:JSON.stringify({file_name:file.name,content_type:file.type,data_base64:dataUrl})});
+    urls.push(d.url);
+  }
+  return urls;
+}
+function bindCarouselImageDropzone(){
+  const zone=$("carouselImageDropzone"),input=$("carouselImageFiles");
+  if(!zone||!input)return;
+  zone.onclick=e=>{if(e.target!==input)input.click()};
+  zone.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();input.click()}};
+  input.onchange=async e=>{await handleCarouselFiles([...e.target.files]);input.value=""};
+  ["dragenter","dragover"].forEach(type=>zone.addEventListener(type,e=>{e.preventDefault();e.stopPropagation();zone.classList.add("drag-over")}));
+  ["dragleave","drop"].forEach(type=>zone.addEventListener(type,e=>{e.preventDefault();e.stopPropagation();zone.classList.remove("drag-over")}));
+  zone.addEventListener("drop",async e=>{await handleCarouselFiles([...e.dataTransfer.files])});
+}
+async function handleCarouselFiles(files){
+  if(!files.length)return;
+  try{
+    files.forEach(validateCarouselImage);
+    setCarouselStatus("Enviando foto(s)...");
+    const uploaded=await uploadCarouselImages(files);
+    carouselImagesDraft.push(...uploaded);
+    renderCarouselImageManager();
+    setCarouselStatus(uploaded.length+" foto(s) adicionada(s). Clique em SALVAR CARROSSEL para publicar.");
+  }catch(e){setCarouselStatus(e.message,true)}
+}
+async function saveCarousel(){
+  const button=$("saveCarouselButton");
+  if(button)button.disabled=true;
+  try{
+    const d=await api("/api/admin/carousel",{method:"PUT",body:JSON.stringify({images:carouselImagesDraft})});
+    carouselImagesDraft=Array.isArray(d.images)?d.images:carouselImagesDraft;
+    renderCarouselImageManager();
+    setCarouselStatus("Carrossel salvo com sucesso.");
+  }catch(e){setCarouselStatus(e.message,true)}
+  finally{if(button)button.disabled=false}
+}
+
 async function loadProducts(){const d=await api("/api/admin/products");products=d.products||[];renderProducts();renderStock();renderDashboard()}
 async function loadStockMovements(){try{const d=await api("/api/admin/stock/movements");renderStockMovements(d.movements||[])}catch(e){$("stockMovements").innerHTML='<p>'+esc(e.message)+'</p>'}}
 async function loadOrders(){const d=await api("/api/admin/orders");orders=d.orders||[];renderOrders();renderDashboard()}
