@@ -762,3 +762,59 @@
         font-size:17px;
     }
 }
+
+
+/* Edição de produto — ação de excluir dentro do editor */
+.admin-product-actions .edit-product-button{
+    width:auto;
+    min-width:0;
+    height:36px;
+    padding:0 14px;
+    background:#fff;
+    color:#191919;
+    border:1px solid #dedbd5;
+    font-size:9px;
+    font-weight:600;
+    letter-spacing:1.2px;
+    line-height:1;
+    font-family:Arial,sans-serif;
+}
+.admin-product-actions .edit-product-button:hover{
+    background:#f7f6f3;
+    color:#191919;
+    border-color:#cfcac2;
+}
+.product-modal-actions{
+    align-items:center;
+}
+.product-modal-actions .danger-button{
+    margin-right:auto;
+}
+.danger-button{
+    min-height:42px;
+    padding:10px 14px;
+    background:#fff;
+    color:#8b1e1e;
+    border:1px solid #dfd1d1;
+    font-size:9px;
+    font-weight:600;
+    letter-spacing:1px;
+    cursor:pointer;
+}
+.danger-button:hover{
+    background:#8b1e1e;
+    color:#fff;
+    border-color:#8b1e1e;
+}
+@media(max-width:800px){
+    .admin-product-actions .edit-product-button{
+        width:100%;
+        min-height:36px;
+        height:auto;
+        padding:9px 7px;
+        font-size:8px;
+    }
+    .product-modal-actions .danger-button{
+        margin-right:0;
+    }
+}
