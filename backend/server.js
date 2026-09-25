@@ -45,6 +45,7 @@ const RESEND_API_KEY = safeString(process.env.RESEND_API_KEY);
 const RESEND_FROM_EMAIL = safeString(process.env.RESEND_FROM_EMAIL || "contato@oficialmontee.com.br");
 const RESEND_MARKETING_FROM_EMAIL = safeString(process.env.RESEND_MARKETING_FROM_EMAIL || "mkt@oficialmontee.com.br");
 const RESEND_FROM_NAME = safeString(process.env.RESEND_FROM_NAME || "MONTÊ");
+const ORDER_NOTIFICATION_EMAILS = safeString(process.env.ORDER_NOTIFICATION_EMAILS);
 
 async function sendWhatsAppTrackingNotification(order) {
     if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
@@ -269,6 +270,69 @@ function trackingStatusLabel(status) {
     })[status] || status || "Atualização do pedido";
 }
 
+
+async function sendAdminSaleNotificationEmail(order) {
+    if (!order?.order_nsu) return { sent: false, status: "invalid_order" };
+    if (!RESEND_API_KEY || !RESEND_FROM_EMAIL) return { sent: false, status: "not_configured" };
+    const recipients = ORDER_NOTIFICATION_EMAILS.split(",").map(v => v.trim().toLowerCase()).filter(Boolean);
+    if (!recipients.length) return { sent: false, status: "no_recipients" };
+    const orderCode = formatOrderCode(order.order_code || order.order_nsu);
+    const customerName = safeString(order.customer_name) || "Não informado";
+    const customerEmail = safeString(order.customer_email) || "Não informado";
+    const customerPhone = safeString(order.customer_phone || order.customer_whatsapp) || "Não informado";
+    const paymentMethod = formatWhatsAppPaymentMethod(order.payment_method);
+    const address = formatWhatsAppAddress(order.customer_address);
+    const total = Number(order.total || 0);
+    const items = Array.isArray(order.items) && order.items.length
+        ? order.items.map(item => {
+            const name = safeString(item.name || item.product_name || item.description) || "Produto";
+            const color = safeString(item.variant_color || item.color);
+            const qty = Math.max(1, Number(item.quantity || 1));
+            const unit = Number(item.price ?? item.unit_price ?? 0);
+            return qty + "x " + name + (color ? " (" + color + ")" : "") + " — R$ " + unit.toFixed(2).replace(".", ",");
+        }).join("<br>")
+        : "Consultar itens do pedido no painel.";
+    const html =
+        "<html><body style=\"margin:0;background:#f7f5f2;font-family:Arial,Helvetica,sans-serif;color:#171717;\">" +
+        "<div style=\"max-width:680px;margin:0 auto;padding:32px 18px;\">" +
+        "<div style=\"background:#111;color:#fff;text-align:center;padding:22px;letter-spacing:6px;font-size:24px;\">MONTÊ</div>" +
+        "<div style=\"background:#fff;padding:30px;\">" +
+        "<p style=\"margin:0 0 8px;font-size:11px;letter-spacing:2px;color:#777;\">NOVA VENDA</p>" +
+        "<h1 style=\"margin:0 0 22px;font-size:28px;font-weight:500;\">Pagamento confirmado</h1>" +
+        "<div style=\"padding:18px;background:#f7f5f2;margin-bottom:20px;\"><strong style=\"font-size:20px;\">" + escapeEmailHtml(orderCode) + "</strong><br><span style=\"font-size:14px;color:#555;\">Total: <strong>R$ " + total.toFixed(2).replace(".", ",") + "</strong></span></div>" +
+        "<h3 style=\"font-size:14px;letter-spacing:1px;\">CLIENTE</h3>" +
+        "<p style=\"line-height:1.7;font-size:14px;\">Nome: " + escapeEmailHtml(customerName) + "<br>E-mail: " + escapeEmailHtml(customerEmail) + "<br>Telefone: " + escapeEmailHtml(customerPhone) + "<br>Endereço: " + escapeEmailHtml(address) + "</p>" +
+        "<h3 style=\"font-size:14px;letter-spacing:1px;\">PRODUTOS</h3>" +
+        "<p style=\"line-height:1.8;font-size:14px;\">" + items + "</p>" +
+        "<p style=\"font-size:14px;line-height:1.7;\"><strong>Pagamento:</strong> " + escapeEmailHtml(paymentMethod) + "<br><strong>Frete:</strong> R$ " + Number(order.shipping || 0).toFixed(2).replace(".", ",") + "<br><strong>Total:</strong> R$ " + total.toFixed(2).replace(".", ",") + "</p>" +
+        "</div><p style=\"text-align:center;font-size:11px;color:#999;margin:18px 0;\">MONTÊ — Notificação interna de venda</p></div></body></html>";
+    const text =
+        "NOVA VENDA MONTÊ\n\nPedido: " + orderCode + "\nCliente: " + customerName +
+        "\nE-mail: " + customerEmail + "\nTelefone: " + customerPhone +
+        "\nProdutos: " + (Array.isArray(order.items) ? order.items.map(i => (i.quantity || 1) + "x " + (i.name || i.product_name || "Produto")).join("; ") : "Consultar pedido") +
+        "\nPagamento: " + paymentMethod + "\nTotal: R$ " + total.toFixed(2).replace(".", ",");
+    const response = await fetch("https://api.resend.com/emails", {
+        method:"POST",
+        headers:{"Authorization":"Bearer "+RESEND_API_KEY,"Content-Type":"application/json","Accept":"application/json"},
+        body:JSON.stringify({from:RESEND_FROM_NAME+" <"+RESEND_FROM_EMAIL+">",to:recipients,subject:"MONTÊ — NOVA VENDA "+orderCode+" — R$ "+total.toFixed(2).replace(".", ","),text,html})
+    });
+    const responseText=await response.text();
+    let data={}; try{data=responseText?JSON.parse(responseText):{}}catch{data={raw:responseText};}
+    if(!response.ok) throw new Error("Resend API "+response.status+": "+JSON.stringify(data));
+    return {sent:true,status:"sent",message_id:data?.id||null};
+}
+async function ensureAdminSaleNotificationEmail(order) {
+    if (!order || order.admin_sale_email_sent_at) return {sent:false,status:"already_sent"};
+    try {
+        const result=await sendAdminSaleNotificationEmail(order);
+        await supabaseRequest("orders?id=eq."+encodeURIComponent(order.id),{method:"PATCH",body:JSON.stringify({admin_sale_email_status:result.status,admin_sale_email_sent_at:result.sent?new Date().toISOString():null})});
+        return result;
+    } catch(error) {
+        console.error("E-mail interno de nova venda:",error);
+        await supabaseRequest("orders?id=eq."+encodeURIComponent(order.id),{method:"PATCH",body:JSON.stringify({admin_sale_email_status:"error"})}).catch(()=>{});
+        return {sent:false,status:"error",error:error.message};
+    }
+}
 async function sendOrderTrackingEmail(order) {
     if (!order?.customer_email || !order?.order_nsu) return { sent: false, status: "invalid_recipient", message_id: null };
     if (!RESEND_API_KEY || !RESEND_FROM_EMAIL) return { sent: false, status: "not_configured", message_id: null };
@@ -2562,6 +2626,7 @@ app.post(
             ) {
                 processedPayments.add(orderNsu);
                 const confirmationEmail = await ensureOrderConfirmationEmail(order);
+                const adminSaleEmail = await ensureAdminSaleNotificationEmail(order);
                 const adminWhatsApp = await ensureWhatsAppAdminNewOrderNotification(order);
                 return res.status(200).json({
                     success: true,
@@ -2689,6 +2754,15 @@ app.post(
                 order_confirmation_email_sent_at: null
             });
 
+            const adminSaleEmail = await ensureAdminSaleNotificationEmail({
+                ...order, id: order.id, order_nsu: orderNsu, order_code: order.order_code,
+                customer_name: order.customer_name, customer_email: order.customer_email,
+                customer_phone: order.customer_phone, customer_whatsapp: order.customer_whatsapp,
+                customer_address: order.customer_address, payment_method: order.payment_method,
+                shipping: order.shipping, total: order.total, items: order.items,
+                admin_sale_email_sent_at: order.admin_sale_email_sent_at
+            });
+
             const adminWhatsApp = await ensureWhatsAppAdminNewOrderNotification({
                 ...order,
                 id: order.id,
@@ -2714,6 +2788,7 @@ app.post(
                 paid: true,
                 order_nsu: orderNsu,
                 confirmation_email: confirmationEmail.status,
+                    admin_sale_email: adminSaleEmail.status,
                     whatsapp_admin_notification: adminWhatsApp.status
             });
 
