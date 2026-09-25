@@ -510,7 +510,10 @@ app.get("/pagamento-infinitepay", (req, res) => {
 ===================================================== */
 
 const allowedOrigins = new Set([
-    SITE_URL.replace(/\/$/, "")
+    SITE_URL.replace(/\/$/, ""),
+    "https://oficialmontee.com.br",
+    "https://www.oficialmontee.com.br",
+    "https://monte-site-itjk.onrender.com"
 ]);
 
 app.use((req, res, next) => {
