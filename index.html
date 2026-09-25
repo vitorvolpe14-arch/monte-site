@@ -293,96 +293,58 @@
      COLEÇÃO
 ===================================================== -->
 
-<section id="colecao"
-         class="product-section collection-section">
+<section id="colecao" class="product-section collection-section">
 
     <div class="section-heading">
-
         <div>
-
-            <p class="section-label">
-                MONTÊ
-            </p>
-
-            <h2>
-                COLEÇÃO
-            </h2>
-
+            <p class="section-label">MONTÊ</p>
+            <h2>BOLSAS</h2>
         </div>
-
     </div>
-
-
-    <div class="collection-toolbar">
-
-        <button onclick="filterProducts('all')"
-                class="filter-button active"
-                data-filter="all">
-
-            TODOS
-
-        </button>
-
-        <button onclick="filterProducts('bolsas')"
-                class="filter-button"
-                data-filter="bolsas">
-
-            BOLSAS
-
-        </button>
-
-        <button onclick="filterProducts('acessorios')"
-                class="filter-button"
-                data-filter="acessorios">
-
-            ACESSÓRIOS
-
-        </button>
-
-        <button onclick="filterProducts('cintos')"
-                class="filter-button"
-                data-filter="cintos">
-
-            CINTOS
-
-        </button>
-
-    </div>
-
 
     <div class="collection-products-carousel">
-
-        <button
-            class="collection-carousel-arrow collection-prev"
-            onclick="previousCollectionPage()"
-            aria-label="Ver bolsas anteriores">
-
-            ‹
-
-        </button>
-
+        <button class="collection-carousel-arrow collection-prev" onclick="previousCollectionPage()" aria-label="Ver bolsas anteriores">‹</button>
         <div class="collection-products-viewport">
-
-            <div id="allProducts"
-                 class="products-grid collection-products-grid">
-
-            </div>
-
+            <div id="allProducts" class="products-grid collection-products-grid"></div>
         </div>
-
-        <button
-            class="collection-carousel-arrow collection-next"
-            onclick="nextCollectionPage()"
-            aria-label="Ver mais bolsas">
-
-            ›
-
-        </button>
-
+        <button class="collection-carousel-arrow collection-next" onclick="nextCollectionPage()" aria-label="Ver mais bolsas">›</button>
     </div>
 
 </section>
 
+<section id="cintos" class="product-section category-section">
+    <div class="section-heading">
+        <div>
+            <p class="section-label">MONTÊ</p>
+            <h2>CINTOS</h2>
+        </div>
+    </div>
+
+    <div class="collection-products-carousel">
+        <button class="collection-carousel-arrow category-prev" onclick="previousCategoryPage('cintos')" aria-label="Ver cintos anteriores">‹</button>
+        <div class="collection-products-viewport">
+            <div id="cintosProducts" class="products-grid collection-products-grid"></div>
+        </div>
+        <button class="collection-carousel-arrow category-next" onclick="nextCategoryPage('cintos')" aria-label="Ver mais cintos">›</button>
+    </div>
+</section>
+
+<section id="acessorios" class="product-section category-section">
+    <div class="section-heading">
+        <div>
+            <p class="section-label">MONTÊ</p>
+            <h2>ACESSÓRIOS</h2>
+        </div>
+    </div>
+
+    <div class="collection-products-carousel">
+        <button class="collection-carousel-arrow category-prev" onclick="previousCategoryPage('acessorios')" aria-label="Ver acessórios anteriores">‹</button>
+        <div class="collection-products-viewport">
+            <div id="acessoriosProducts" class="products-grid collection-products-grid"></div>
+        </div>
+        <button class="collection-carousel-arrow category-next" onclick="nextCategoryPage('acessorios')" aria-label="Ver mais acessórios">›</button>
+    </div>
+</section>
 
 <!-- =====================================================
      SALE
