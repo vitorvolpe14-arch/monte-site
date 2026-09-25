@@ -2552,6 +2552,7 @@ app.get("/api/pedido-status", orderStatusRateLimit, async (req, res) => {
             success: true,
             order: {
                 order_nsu: order.order_nsu,
+                order_code: order.order_code || order.order_nsu,
                 status: order.status,
                 total: Number(order.total || 0),
                 shipping: Number(order.shipping || 0),
