@@ -655,6 +655,8 @@ window.addEventListener("resize", () => {
     if (mobileMode === lastMobileCarouselMode) return;
     lastMobileCarouselMode = mobileMode;
     renderCollectionPage();
+    renderCategorySection("cintos");
+    renderCategorySection("acessorios");
     renderNewPage();
     renderSalePage();
 });
