@@ -7,8 +7,8 @@ async function loadAnalytics(){try{$("analyticsError").textContent="";analyticsD
 function renderAnalytics(){
  const d=analyticsData.summary||{}, k=[["Visitantes únicos",fmtInt(d.visitors)],["Visualizações",fmtInt(d.pageViews)],["Pedidos pagos",fmtInt(d.paidOrders)],["Faturamento bruto",money(d.grossRevenue)],["Ticket médio",money(d.ticketAverage)],["Conversão",pct(d.conversionRate)],["Carrinhos ativos",fmtInt(d.activeCarts)],["Valor em abandono",money(d.abandonedValue)]];
  $("analyticsKpis").innerHTML=k.map(x=>'<div class="analytics-kpi"><span>'+x[0]+'</span><strong>'+x[1]+'</strong></div>').join("");
- const maxV=Math.max(1,...(analyticsData.series||[]).map(x=>Number(x.visitors||0))), maxR=Math.max(1,...(analyticsData.series||[]).map(x=>Number(x.revenue||0)));
- const chartSeries=(window.matchMedia&&window.matchMedia("(max-width:620px)").matches?(analyticsData.series||[]).slice(-7):(analyticsData.series||[]).slice(-14)); $("analyticsChart").innerHTML='<div class="chart-bars">'+chartSeries.map(x=>'<div class="chart-day"><div class="bar-wrap"><i style="height:'+Math.max(4,(x.visitors/maxV)*150)+'px"></i><b style="height:'+Math.max(4,(x.revenue/maxR)*150)+'px"></b></div><span>'+x.date.slice(5)+'</span></div>').join("")+'</div><div class="chart-legend"><span>Visitas</span><span>Faturamento</span></div>';
+ renderVisitsRevenueChart(analyticsData.series||[]);
+
  const f=[["Visitas",d.visitors],["Add ao carrinho",d.addToCart],["Checkout",d.checkoutStarted],["Pagos",d.paidOrders]]; $("analyticsFunnel").innerHTML=f.map((x,i)=>'<div class="funnel-row"><span>'+x[0]+'</span><strong>'+fmtInt(x[1])+'</strong>'+(i?'<em>'+pct(Number(f[i-1][1])?x[1]/f[i-1][1]*100:0)+'</em>':'')+'</div>').join("");
  $("analyticsCarts").innerHTML='<div class="mini-stats"><div><span>Abandono estimado</span><strong>'+pct(d.abandonmentRate)+'</strong></div><div><span>Carrinhos convertidos</span><strong>'+fmtInt(d.convertedCarts)+'</strong></div></div><p class="analytics-note">'+fmtInt(d.activeCarts)+' carrinhos ativos representam '+money(d.abandonedValue)+'.</p>';
  const pays=Object.entries(analyticsData.paymentMethods||{});$("analyticsPayments").innerHTML=pays.length?'<table class="table"><thead><tr><th>MEIO</th><th>RECEITA</th></tr></thead><tbody>'+pays.map(x=>'<tr><td>'+esc(x[0])+'</td><td>'+money(x[1])+'</td></tr>').join("")+'</tbody></table>':'<p>Nenhum pagamento.</p>';
@@ -18,6 +18,23 @@ function renderAnalytics(){
 }
 function fmtInt(v){return new Intl.NumberFormat("pt-BR").format(Number(v||0))}
 function pct(v){return Number(v||0).toLocaleString("pt-BR",{maximumFractionDigits:1})+"%"}
+function renderVisitsRevenueChart(series){
+ const raw=Array.isArray(series)?series:[];
+ const data=(window.matchMedia&&window.matchMedia("(max-width:620px)").matches?raw.slice(-7):raw.slice(-14));
+ if(!data.length){$("analyticsChart").innerHTML='<div class="analytics-empty-chart">Sem dados para o período selecionado.</div>';return}
+ const W=900,H=330,left=58,right=58,top=30,bottom=52,plotW=W-left-right,plotH=H-top-bottom;
+ const maxV=Math.max(1,...data.map(x=>Number(x.visitors||0))),maxR=Math.max(1,...data.map(x=>Number(x.revenue||0)));
+ const points=data.map((x,i)=>({x:left+(data.length===1?plotW/2:i*(plotW/(data.length-1))),v:Number(x.visitors||0),r:Number(x.revenue||0),date:String(x.date||"").slice(5)}));
+ const yV=v=>top+plotH-(v/maxV)*plotH, yR=v=>top+plotH-(v/maxR)*plotH;
+ const line=points.map((p,i)=>(i?"L":"M")+p.x.toFixed(1)+" "+yR(p.r).toFixed(1)).join(" ");
+ const area=line+" L "+points[points.length-1].x.toFixed(1)+" "+(top+plotH)+" L "+points[0].x.toFixed(1)+" "+(top+plotH)+" Z";
+ const grid=[0,.25,.5,.75,1].map(t=>{const y=top+plotH-(t*plotH);const v=Math.round(maxV*t);const r=maxR*t;return '<line x1="'+left+'" y1="'+y+'" x2="'+(W-right)+'" y2="'+y+'" class="chart-grid-line"/><text x="'+(left-10)+'" y="'+(y+4)+'" text-anchor="end" class="chart-axis chart-axis-left">'+fmtInt(v)+'</text><text x="'+(W-right+10)+'" y="'+(y+4)+'" class="chart-axis chart-axis-right">'+money(r)+'</text>'}).join("");
+ const bars=points.map(p=>{const bh=Math.max(2,(p.v/maxV)*plotH),bw=Math.min(28,Math.max(10,plotW/data.length*.42));return '<rect x="'+(p.x-bw/2).toFixed(1)+'" y="'+(top+plotH-bh).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+bh.toFixed(1)+'" rx="2" class="chart-visits-bar"><title>'+esc(p.date)+' · '+fmtInt(p.v)+' visitas</title></rect>'}).join("");
+ const dots=points.map(p=>'<circle cx="'+p.x.toFixed(1)+'" cy="'+yR(p.r).toFixed(1)+'" r="4" class="chart-revenue-dot"><title>'+esc(p.date)+' · '+money(p.r)+' faturamento</title></circle>').join("");
+ const labels=points.map(p=>'<text x="'+p.x.toFixed(1)+'" y="'+(H-20)+'" text-anchor="middle" class="chart-date-label">'+esc(p.date)+'</text>').join("");
+ const totalV=data.reduce((n,x)=>n+Number(x.visitors||0),0),totalR=data.reduce((n,x)=>n+Number(x.revenue||0),0);
+ $("analyticsChart").innerHTML='<div class="analytics-chart-head"><div><strong>Visitas × faturamento</strong><span>Comparação diária no período selecionado</span></div><div class="analytics-chart-totals"><span><i class="legend-dot visits"></i>'+fmtInt(totalV)+' visitas</span><span><i class="legend-dot revenue"></i>'+money(totalR)+' faturamento</span></div></div><div class="professional-chart"><svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Gráfico comparando visitas ao site e faturamento bruto"><g>'+grid+'</g><g>'+bars+'</g><path d="'+area+'" class="chart-revenue-area"/><path d="'+line+'" class="chart-revenue-line"/><g>'+dots+'</g><g>'+labels+'</g></svg></div><div class="chart-legend"><span><i class="legend-swatch visits"></i><strong>Visitas ao site</strong><small>Número de acessos/visitantes registrados</small></span><span><i class="legend-swatch revenue"></i><strong>Faturamento bruto</strong><small>Valor bruto dos pedidos pagos</small></span></div>';
+}
 
 document.addEventListener("DOMContentLoaded",init);
 async function init(){
