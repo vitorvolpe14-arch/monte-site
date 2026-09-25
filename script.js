@@ -2178,3 +2178,23 @@ document.addEventListener("DOMContentLoaded", () => {
    O feed é renderizado pelo widget oficial do Elfsight no HTML.
 ===================================================== */
 
+
+
+// Garante que a newsletter apareça apenas uma vez na página.
+(function ensureSingleNewsletter() {
+    const removeDuplicateNewsletters = () => {
+        const newsletters = document.querySelectorAll('section.newsletter');
+        newsletters.forEach((section, index) => {
+            if (index > 0) section.remove();
+        });
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', removeDuplicateNewsletters, { once: true });
+    } else {
+        removeDuplicateNewsletters();
+    }
+
+    const observer = new MutationObserver(removeDuplicateNewsletters);
+    observer.observe(document.body, { childList: true, subtree: true });
+})();
