@@ -1727,3 +1727,104 @@ button.secondary:hover,
         min-width:0;
     }
 }
+
+
+/* =====================================================
+   PEDIDOS DO PERÍODO — LEITURA COMPLETA E RESPONSIVA
+===================================================== */
+.order-table{
+    width:100%;
+    table-layout:auto;
+}
+.order-table th,
+.order-table td{
+    vertical-align:middle;
+}
+.order-table th:nth-child(1),
+.order-table td:nth-child(1){min-width:125px}
+.order-table th:nth-child(2),
+.order-table td:nth-child(2){min-width:145px}
+.order-table th:nth-child(3),
+.order-table td:nth-child(3){min-width:135px;white-space:nowrap}
+.order-table th:nth-child(4),
+.order-table td:nth-child(4){min-width:95px;white-space:nowrap}
+.order-table th:nth-child(5),
+.order-table td:nth-child(5){min-width:105px}
+.order-table th:nth-child(6),
+.order-table td:nth-child(6){min-width:78px;text-align:right}
+.order-table .link-button{
+    max-width:100%;
+    white-space:normal;
+    overflow-wrap:anywhere;
+    text-align:left;
+}
+@media(max-width:800px){
+    #analyticsOrders .order-table{
+        display:block;
+        width:100%;
+        min-width:0;
+        border:0;
+    }
+    #analyticsOrders .order-table thead{
+        display:none;
+    }
+    #analyticsOrders .order-table tbody,
+    #analyticsOrders .order-table tr{
+        display:block;
+        width:100%;
+    }
+    #analyticsOrders .order-table tr{
+        box-sizing:border-box;
+        margin:0 0 10px;
+        padding:12px;
+        border:1px solid #e4e1dc;
+        background:#fff;
+    }
+    #analyticsOrders .order-table td{
+        display:grid;
+        grid-template-columns:82px minmax(0,1fr);
+        gap:8px;
+        width:100%;
+        min-width:0 !important;
+        box-sizing:border-box;
+        padding:6px 0;
+        border:0;
+        text-align:left !important;
+        white-space:normal !important;
+        overflow-wrap:anywhere;
+        word-break:break-word;
+        font-size:10px;
+        line-height:1.35;
+    }
+    #analyticsOrders .order-table td:before{
+        color:#88837c;
+        font-size:8px;
+        font-weight:600;
+        letter-spacing:1px;
+    }
+    #analyticsOrders .order-table td:nth-child(1):before{content:"PEDIDO"}
+    #analyticsOrders .order-table td:nth-child(2):before{content:"CLIENTE"}
+    #analyticsOrders .order-table td:nth-child(3):before{content:"DATA"}
+    #analyticsOrders .order-table td:nth-child(4):before{content:"TOTAL"}
+    #analyticsOrders .order-table td:nth-child(5):before{content:"STATUS"}
+    #analyticsOrders .order-table td:nth-child(6):before{content:"AÇÃO"}
+    #analyticsOrders .order-table td:nth-child(6){
+        margin-top:5px;
+        padding-top:9px;
+        border-top:1px solid #eeeae5;
+    }
+    #analyticsOrders .order-table .link-button{
+        font-size:10px;
+        padding:0;
+        line-height:1.35;
+    }
+    #analyticsOrders .order-table .badge{
+        justify-self:start;
+    }
+    #analyticsOrders .order-table .small-button{
+        width:max-content;
+        min-height:30px;
+        padding:7px 10px;
+        font-size:8px;
+    }
+}
