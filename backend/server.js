@@ -6,6 +6,7 @@ const sharp = require("sharp");
 require("dotenv").config();
 
 const app = express();
+app.disable("x-powered-by");
 app.set("trust proxy", 1);
 
 const PORT = process.env.PORT || 3000;
@@ -679,6 +680,28 @@ const orderStatusRateLimit = createRateLimiter({
     max: 30
 });
 
+// Endpoints públicos que acionam APIs externas ou processamento pesado recebem
+// limites próprios para reduzir abuso, consumo de quota e DoS.
+const shippingQuoteRateLimit = createRateLimiter({
+    windowMs: 60 * 1000,
+    max: 20
+});
+
+const newsletterRateLimit = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 5
+});
+
+const imageNormalizeRateLimit = createRateLimiter({
+    windowMs: 60 * 1000,
+    max: 20
+});
+
+const infinitePayWebhookRateLimit = createRateLimiter({
+    windowMs: 60 * 1000,
+    max: 30
+});
+
 /* =====================================================
    MONTÊ ADMIN AUTH — acesso exclusivo do administrador
 ===================================================== */
@@ -848,7 +871,7 @@ function isAllowedProductImageUrl(value) {
     }
 }
 
-app.get("/api/product-image-normalized", async (req, res) => {
+app.get("/api/product-image-normalized", imageNormalizeRateLimit, async (req, res) => {
     const sourceUrl = safeString(req.query?.url);
     if (!isAllowedProductImageUrl(sourceUrl)) {
         return res.status(400).json({ success: false, message: "Imagem inválida." });
@@ -1517,7 +1540,7 @@ setInterval(
    COM PEDIDO SALVO ANTES DO PAGAMENTO
 ===================================================== */
 
-app.post("/api/frete/cotacao", async (req,res)=>{
+app.post("/api/frete/cotacao", shippingQuoteRateLimit, async (req,res)=>{
     try{
         const toCep=safeString(req.body?.to_cep||req.body?.cep).replace(/\D/g,"");
         const items=Array.isArray(req.body?.items)?req.body.items:[];
@@ -1532,7 +1555,7 @@ app.post("/api/frete/cotacao", async (req,res)=>{
     }catch(error){console.error("❌ Erro na cotação SuperFrete:",error);return res.status(502).json({success:false,message:error.message||"Não foi possível calcular o frete."});}
 });
 
-app.post("/api/newsletter", async (req, res) => {
+app.post("/api/newsletter", newsletterRateLimit, async (req, res) => {
     try {
         if (!RESEND_API_KEY) {
             return res.status(503).json({ success: false, message: "Newsletter não configurada." });
@@ -2588,6 +2611,7 @@ async function verifyInfinitePayPayment({ orderNsu, transactionNsu, invoiceSlug,
 
 app.post(
     "/webhook-infinitepay",
+    infinitePayWebhookRateLimit,
     async (req, res) => {
         try {
             const webhook = req.body || {};
