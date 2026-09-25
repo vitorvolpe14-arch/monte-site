@@ -737,10 +737,6 @@ function updateProductAvailabilityUI() {
                 : "Essa cor se encontra esgotada no momento. Entre em contato com nossos atendentes para fazer sua reserva.";
             reservationBox.querySelector(".reservation-message").textContent = text;
             reservationBox.style.display = "block";
-        } else if ((product.variants || []).some(v => v.active !== false && Number(v.stock || 0) <= 0)) {
-            reservationBox.querySelector(".reservation-message").textContent =
-                "Algumas cores estão esgotadas. Se desejar uma delas, fale com nossos atendentes para fazer sua reserva.";
-            reservationBox.style.display = "block";
         } else {
             reservationBox.style.display = "none";
         }
