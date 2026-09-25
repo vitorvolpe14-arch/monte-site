@@ -86,7 +86,110 @@ function validateProductImage(file){if(file.size>20*1024*1024)throw new Error("A
 function setProductImageStatus(message="",error=false){const el=$("productImageUploadStatus");if(el){el.textContent=message;el.classList.toggle("error",!!error)}}
 function bindProductImageDropzone(){const zone=$("productImageDropzone"),input=$("productImageFiles");if(!zone||!input)return;zone.onclick=e=>{if(e.target!==input)input.click()};zone.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();input.click()}};input.onchange=async e=>{await handleProductImageFiles([...e.target.files]);input.value=""};["dragenter","dragover"].forEach(type=>zone.addEventListener(type,e=>{e.preventDefault();e.stopPropagation();zone.classList.add("drag-over")}));["dragleave","drop"].forEach(type=>zone.addEventListener(type,e=>{e.preventDefault();e.stopPropagation();zone.classList.remove("drag-over")}));zone.addEventListener("drop",async e=>{await handleProductImageFiles([...e.dataTransfer.files])})}
 async function handleProductImageFiles(files){if(!files.length)return;try{files.forEach(validateProductImage);if(editingProduct?.id){setProductImageStatus("Enviando foto(s)...");const uploaded=await uploadProductImages(editingProduct.id,files);productImageDraft.push(...uploaded);await persistProductImages(editingProduct.id);productImageFiles=[];renderProductImageManager();setProductImageStatus(uploaded.length+" foto(s) adicionada(s) ao produto.");await loadProducts();editingProduct=products.find(p=>p.id===editingProduct.id)||editingProduct;productImageDraft=Array.isArray(editingProduct.images)?[...editingProduct.images]:productImageDraft;renderProductImageManager()}else{productImageFiles.push(...files);renderProductImageManager();setProductImageStatus(files.length+" foto(s) pronta(s). Salve o produto para concluir o upload.")}}catch(e){setProductImageStatus(e.message,true)}}
-function renderProductImageManager(){const box=$("productImageManager");if(!box)return;let html="";productImageDraft.forEach((url,i)=>{html+='<div class="product-image-item"><img src="'+esc(url)+'" onerror="this.style.opacity=\'0.2\'"><button type="button" class="image-remove" onclick="removeProductImage('+i+')">×</button><span>'+(i===0?"CAPA":"FOTO "+(i+1))+'</span></div>'});productImageFiles.forEach((file,i)=>{const preview=URL.createObjectURL(file);html+='<div class="product-image-item pending"><img src="'+preview+'" alt=""><span>AGUARDANDO UPLOAD</span><button type="button" class="image-remove" onclick="removePendingImage('+i+')">×</button></div>'});box.innerHTML=html||'<p class="field-help">Nenhuma foto adicionada.</p>'}
+function renderProductImageManager(){
+ const box=$("productImageManager");
+ if(!box)return;
+ let html="";
+ productImageDraft.forEach((url,i)=>{
+   html+='<div class="product-image-item" draggable="true" data-image-index="'+i+'" title="Arraste para alterar a ordem">'+
+     '<img src="'+esc(url)+'" onerror="this.style.opacity=\\'0.2\\'">'+
+     '<span class="image-drag-handle" aria-hidden="true">↕</span>'+
+     '<button type="button" class="image-remove" onclick="removeProductImage('+i+');event.stopPropagation()">×</button>'+
+     '<span>'+(i===0?"CAPA":"FOTO "+(i+1))+'</span>'+
+   '</div>';
+ });
+ productImageFiles.forEach((file,i)=>{
+   const preview=URL.createObjectURL(file);
+   html+='<div class="product-image-item pending" draggable="true" data-pending-index="'+i+'" title="Arraste para alterar a ordem">'+
+     '<img src="'+preview+'" alt="">'+
+     '<span class="image-drag-handle" aria-hidden="true">↕</span>'+
+     '<span>AGUARDANDO UPLOAD</span>'+
+     '<button type="button" class="image-remove" onclick="removePendingImage('+i+');event.stopPropagation()">×</button>'+
+   '</div>';
+ });
+ box.innerHTML=html||'<p class="field-help">Nenhuma foto adicionada.</p>';
+ bindProductImageReorder(box);
+}
+
+function bindProductImageReorder(box){
+ let draggingIndex=null;
+ box.querySelectorAll("[data-image-index]").forEach(item=>{
+   item.addEventListener("dragstart",e=>{
+     draggingIndex=Number(item.dataset.imageIndex);
+     e.dataTransfer.effectAllowed="move";
+     e.dataTransfer.setData("text/plain",String(draggingIndex));
+     item.classList.add("is-dragging");
+   });
+   item.addEventListener("dragend",()=>{
+     draggingIndex=null;
+     item.classList.remove("is-dragging");
+     box.querySelectorAll(".drag-over").forEach(x=>x.classList.remove("drag-over"));
+   });
+   item.addEventListener("dragover",e=>{
+     e.preventDefault();
+     e.dataTransfer.dropEffect="move";
+     if(draggingIndex!==null && draggingIndex!==Number(item.dataset.imageIndex)) item.classList.add("drag-over");
+   });
+   item.addEventListener("dragleave",()=>item.classList.remove("drag-over"));
+   item.addEventListener("drop",async e=>{
+     e.preventDefault();
+     e.stopPropagation();
+     item.classList.remove("drag-over");
+     const targetIndex=Number(item.dataset.imageIndex);
+     if(draggingIndex===null||draggingIndex===targetIndex)return;
+     const [moved]=productImageDraft.splice(draggingIndex,1);
+     productImageDraft.splice(targetIndex,0,moved);
+     renderProductImageManager();
+     setProductImageStatus("Ordem alterada. Salvando...");
+     if(editingProduct?.id){
+       try{
+         await persistProductImages(editingProduct.id);
+         setProductImageStatus("Ordem das fotos salva.");
+         await loadProducts();
+         editingProduct=products.find(p=>p.id===editingProduct.id)||editingProduct;
+         productImageDraft=Array.isArray(editingProduct.images)?[...editingProduct.images]:productImageDraft;
+         renderProductImageManager();
+       }catch(err){
+         setProductImageStatus("Não foi possível salvar a ordem: "+err.message,true);
+       }
+     }else{
+       setProductImageStatus("Ordem alterada. Salve o produto para confirmar.");
+     }
+   });
+ });
+ 
+ let pendingDraggingIndex=null;
+ box.querySelectorAll("[data-pending-index]").forEach(item=>{
+   item.addEventListener("dragstart",e=>{
+     pendingDraggingIndex=Number(item.dataset.pendingIndex);
+     e.dataTransfer.effectAllowed="move";
+     e.dataTransfer.setData("text/plain",String(pendingDraggingIndex));
+     item.classList.add("is-dragging");
+   });
+   item.addEventListener("dragend",()=>{
+     pendingDraggingIndex=null;
+     item.classList.remove("is-dragging");
+     box.querySelectorAll(".drag-over").forEach(x=>x.classList.remove("drag-over"));
+   });
+   item.addEventListener("dragover",e=>{
+     e.preventDefault();
+     e.dataTransfer.dropEffect="move";
+     if(pendingDraggingIndex!==null && pendingDraggingIndex!==Number(item.dataset.pendingIndex)) item.classList.add("drag-over");
+   });
+   item.addEventListener("dragleave",()=>item.classList.remove("drag-over"));
+   item.addEventListener("drop",e=>{
+     e.preventDefault();
+     e.stopPropagation();
+     item.classList.remove("drag-over");
+     const targetIndex=Number(item.dataset.pendingIndex);
+     if(pendingDraggingIndex===null||pendingDraggingIndex===targetIndex)return;
+     const [moved]=productImageFiles.splice(pendingDraggingIndex,1);
+     productImageFiles.splice(targetIndex,0,moved);
+     renderProductImageManager();
+     setProductImageStatus("Ordem das novas fotos alterada. Salve o produto para confirmar.");
+   });
+ });
+}
 function removeProductImage(i){productImageDraft.splice(i,1);renderProductImageManager();setProductImageStatus("A foto foi removida da galeria.")}
 function removePendingImage(i){productImageFiles.splice(i,1);renderProductImageManager()}
 async function uploadProductImages(productId,files=productImageFiles){const urls=[];for(const file of files){validateProductImage(file);const dataUrl=await readFileAsDataUrl(file);const d=await api("/api/admin/uploads/product-image",{method:"POST",body:JSON.stringify({product_id:productId,file_name:file.name,content_type:file.type,data_base64:dataUrl})});urls.push(d.url)}return urls}
