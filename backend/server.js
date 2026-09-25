@@ -277,7 +277,7 @@ function localShippingOption(city, state) {
     const normalized = normalizeCity(city);
     const normalizedState = safeString(state).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
     if (normalizedState !== "CE") return null;
-    if (normalized === "FORTALEZA") return { id:"monte-fortaleza", name:"Entrega MONTÊ — Fortaleza", price:15, delivery_days:2 };
+    if (normalized === "FORTALEZA") return { id:"monte-fortaleza", name:"Entrega MONTÊ — Fortaleza", price:15, delivery_days:1 };
     if (METROPOLITAN_CITIES.has(normalized)) return { id:"monte-regiao-metropolitana", name:"Entrega MONTÊ — Região Metropolitana", price:20, delivery_days:3 };
     return null;
 }
