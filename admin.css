@@ -1460,3 +1460,80 @@ button.secondary:hover,
         font-size:7px;
     }
 }
+
+
+/* Analytics mobile — tabelas sem rolagem lateral */
+@media (max-width:800px){
+    #analyticsPayments,
+    #analyticsOrders,
+    #analyticsTopProducts,
+    #analyticsRecentCarts{
+        width:100%;
+        max-width:100%;
+        overflow:hidden;
+    }
+
+    #analyticsPayments .table,
+    #analyticsOrders .table,
+    #analyticsTopProducts .table,
+    #analyticsRecentCarts .table{
+        width:100%;
+        min-width:0;
+        table-layout:fixed;
+    }
+
+    #analyticsPayments .table th,
+    #analyticsPayments .table td,
+    #analyticsOrders .table th,
+    #analyticsOrders .table td,
+    #analyticsTopProducts .table th,
+    #analyticsTopProducts .table td,
+    #analyticsRecentCarts .table th,
+    #analyticsRecentCarts .table td{
+        white-space:normal;
+        overflow-wrap:anywhere;
+        word-break:break-word;
+        padding:10px 6px;
+        font-size:9px;
+        line-height:1.3;
+    }
+
+    #analyticsPayments .table th:nth-child(1),
+    #analyticsPayments .table td:nth-child(1){width:58%}
+    #analyticsPayments .table th:nth-child(2),
+    #analyticsPayments .table td:nth-child(2){width:42%;text-align:right}
+
+    #analyticsOrders .table th:nth-child(1),
+    #analyticsOrders .table td:nth-child(1){width:23%}
+    #analyticsOrders .table th:nth-child(2),
+    #analyticsOrders .table td:nth-child(2){width:27%}
+    #analyticsOrders .table th:nth-child(3),
+    #analyticsOrders .table td:nth-child(3){width:22%}
+    #analyticsOrders .table th:nth-child(4),
+    #analyticsOrders .table td:nth-child(4){width:28%}
+
+    #analyticsTopProducts .table th:nth-child(1),
+    #analyticsTopProducts .table td:nth-child(1){width:50%}
+    #analyticsTopProducts .table th:nth-child(2),
+    #analyticsTopProducts .table td:nth-child(2){width:18%;text-align:center}
+    #analyticsTopProducts .table th:nth-child(3),
+    #analyticsTopProducts .table td:nth-child(3){width:32%;text-align:right}
+
+    #analyticsRecentCarts .table th,
+    #analyticsRecentCarts .table td{
+        padding-left:5px;
+        padding-right:5px;
+        font-size:8px;
+    }
+
+    #analyticsRecentCarts .table th:nth-child(1),
+    #analyticsRecentCarts .table td:nth-child(1){width:22%}
+    #analyticsRecentCarts .table th:nth-child(2),
+    #analyticsRecentCarts .table td:nth-child(2){width:27%}
+    #analyticsRecentCarts .table th:nth-child(3),
+    #analyticsRecentCarts .table td:nth-child(3){width:12%;text-align:center}
+    #analyticsRecentCarts .table th:nth-child(4),
+    #analyticsRecentCarts .table td:nth-child(4){width:19%;text-align:right}
+    #analyticsRecentCarts .table th:nth-child(5),
+    #analyticsRecentCarts .table td:nth-child(5){width:20%}
+}
