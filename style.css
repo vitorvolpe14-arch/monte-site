@@ -641,7 +641,8 @@ a {
 
 #novidades {
 
-    background: var(--wine);
+    /* Bordô do banner MONTÊ — ajuste isolado para não alterar o restante do site. */
+    background: #8a1f2c;
 
     color: white;
 
