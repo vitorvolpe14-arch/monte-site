@@ -5247,3 +5247,103 @@ img {
     object-fit: initial !important;
     object-position: center center;
 }
+
+
+/* =====================================================
+   BENEFÍCIOS DA LOJA
+===================================================== */
+
+.store-benefits {
+    width: 100%;
+    padding: 58px 5%;
+    background: #faf9f7;
+    border-top: 1px solid #eee;
+    border-bottom: 1px solid #eee;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 32px;
+}
+
+.store-benefit {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    text-align: left;
+}
+
+.store-benefit-icon {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #222;
+}
+
+.store-benefit-icon svg {
+    width: 27px;
+    height: 27px;
+}
+
+.store-benefit div {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.store-benefit strong {
+    font-size: 9px;
+    line-height: 1.35;
+    letter-spacing: 1.2px;
+    font-weight: 500;
+}
+
+.store-benefit span:not(.store-benefit-icon) {
+    color: #888;
+    font-size: 10px;
+    line-height: 1.45;
+}
+
+@media (max-width: 900px) {
+    .store-benefits {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 30px 22px;
+        padding: 45px 6%;
+    }
+}
+
+@media (max-width: 560px) {
+    .store-benefits {
+        grid-template-columns: 1fr 1fr;
+        gap: 28px 14px;
+        padding: 38px 18px;
+    }
+
+    .store-benefit {
+        justify-content: flex-start;
+        align-items: flex-start;
+        gap: 9px;
+    }
+
+    .store-benefit-icon {
+        width: 25px;
+        height: 25px;
+        flex-basis: 25px;
+    }
+
+    .store-benefit-icon svg {
+        width: 23px;
+        height: 23px;
+    }
+
+    .store-benefit strong {
+        font-size: 8px;
+        letter-spacing: .8px;
+    }
+
+    .store-benefit span:not(.store-benefit-icon) {
+        font-size: 9px;
+    }
+}
