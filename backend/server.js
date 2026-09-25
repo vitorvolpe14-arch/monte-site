@@ -1483,13 +1483,17 @@ app.post("/api/newsletter", async (req, res) => {
         // Envia confirmação de cadastro somente para um novo inscrito.
         if (!alreadyRegistered && RESEND_MARKETING_FROM_EMAIL) {
             const welcomeHtml =
-                "<div style=\"font-family:Arial,Helvetica,sans-serif;max-width:620px;margin:0 auto;color:#171717;line-height:1.7\">" +
-                "<div style=\"background:#111;color:#fff;text-align:center;padding:24px;letter-spacing:6px;font-size:24px\">MONTÊ</div>" +
-                "<div style=\"padding:36px 28px;background:#fff\">" +
-                "<p style=\"font-size:12px;letter-spacing:2px;color:#777\">BEM-VINDA À MONTÊ</p>" +
-                "<h1 style=\"font-size:28px;font-weight:500;margin:0 0 16px\">Seu cadastro foi confirmado.</h1>" +
-                "<p style=\"color:#555\">Agora você receberá novidades, lançamentos e conteúdos exclusivos da MONTÊ.</p>" +
-                "</div></div>";
+                "<!doctype html><html><body style=\"margin:0;padding:0;background:#f4f2ef;color:#171717;font-family:Arial,Helvetica,sans-serif\">" +
+                "<div style=\"max-width:640px;margin:0 auto;padding:34px 18px\">" +
+                "<div style=\"background:#111;padding:28px 24px;text-align:center\"><div style=\"color:#fff;font-size:25px;letter-spacing:7px;font-weight:600\">MONTÊ</div><div style=\"color:#cfcac3;font-size:10px;letter-spacing:3px;margin-top:9px\">BOLSAS & ACESSÓRIOS</div></div>" +
+                "<div style=\"background:#fff;padding:44px 38px 40px\">" +
+                "<p style=\"margin:0 0 14px;color:#8a847d;font-size:10px;letter-spacing:2.5px\">CADASTRO CONFIRMADO</p>" +
+                "<h1 style=\"margin:0 0 18px;font-size:30px;line-height:1.2;font-weight:500\">Bem-vinda à MONTÊ.</h1>" +
+                "<p style=\"margin:0;color:#555;font-size:15px;line-height:1.8\">Seu cadastro foi realizado com sucesso. A partir de agora, você receberá novidades, lançamentos e conteúdos selecionados da MONTÊ.</p>" +
+                "<div style=\"margin:30px 0;border-top:1px solid #e8e5e1;border-bottom:1px solid #e8e5e1;padding:22px 0\"><p style=\"margin:0;color:#777;font-size:13px;line-height:1.7\">Prepare-se para conhecer novas coleções, peças e histórias da marca antes de todo mundo.</p></div>" +
+                "<div style=\"text-align:center;margin:30px 0 8px\"><a href=\"https://monte-site-itjk.onrender.com\" style=\"display:inline-block;background:#111;color:#fff;text-decoration:none;padding:15px 28px;font-size:11px;letter-spacing:2px\">VISITAR A MONTÊ</a></div>" +
+                "</div><div style=\"padding:22px;text-align:center;color:#999;font-size:10px;line-height:1.6\">MONTÊ — Bolsas & acessórios<br>Você recebeu este e-mail porque se cadastrou para receber novidades da marca.</div>" +
+                "</div></body></html>";
 
             const welcomeResponse = await fetch("https://api.resend.com/emails", {
                 method: "POST",
