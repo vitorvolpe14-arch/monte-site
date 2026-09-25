@@ -1828,3 +1828,19 @@ button.secondary:hover,
         font-size:8px;
     }
 }
+
+
+/* MONTÊ — mesma tipografia do logotipo do site */
+@font-face{
+    font-family:"Lovelo Black";
+    src:url("https://raw.githubusercontent.com/lorenz/lovelo-fontface/master/fonts/lovelo_black-webfont.woff2") format("woff2"),
+        url("https://raw.githubusercontent.com/lorenz/lovelo-fontface/master/fonts/lovelo_black-webfont.woff") format("woff");
+    font-weight:900;
+    font-style:normal;
+    font-display:swap;
+}
+.sidebar .brand{
+    font-family:"Lovelo Black",sans-serif;
+    font-weight:900;
+    letter-spacing:5px;
+}
