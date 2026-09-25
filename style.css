@@ -5185,3 +5185,11 @@ img {
 .sale-section .old-price {
     opacity: .65;
 }
+
+
+/* SALE — nomes e preços em branco */
+.sale-section .product-name,
+.sale-section .old-price,
+.sale-section .sale-price {
+    color: #fff;
+}
