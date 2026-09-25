@@ -60,9 +60,10 @@ async function uploadCarouselImages(files){
   return urls;
 }
 function bindCarouselImageDropzone(){
-  const zone=$("carouselImageDropzone"),input=$("carouselImageFiles");
+  const zone=$("carouselImageDropzone"),input=$("carouselImageFiles"),button=$("selectCarouselPhotosButton");
   if(!zone||!input)return;
-  zone.onclick=e=>{if(e.target!==input)input.click()};
+  if(button)button.onclick=e=>{e.preventDefault();e.stopPropagation();input.click()};
+  zone.onclick=e=>{if(e.target!==input&&e.target!==button)input.click()};
   zone.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();input.click()}};
   input.onchange=async e=>{await handleCarouselFiles([...e.target.files]);input.value=""};
   ["dragenter","dragover"].forEach(type=>zone.addEventListener(type,e=>{e.preventDefault();e.stopPropagation();zone.classList.add("drag-over")}));
