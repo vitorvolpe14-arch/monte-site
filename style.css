@@ -1598,6 +1598,49 @@ a {
 }
 
 
+.reservation-box {
+    margin: 0 0 20px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    background: #faf9f7;
+}
+
+.reservation-message {
+    margin: 0 0 14px;
+    color: #555;
+    font-size: 11px;
+    line-height: 1.7;
+}
+
+.whatsapp-reservation-button {
+    width: 100%;
+    border: 1px solid var(--black);
+    background: var(--black);
+    color: #fff;
+    padding: 15px 14px;
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    line-height: 1.4;
+}
+
+.whatsapp-reservation-button:hover {
+    background: var(--wine);
+    border-color: var(--wine);
+}
+
+.variant-option.unavailable {
+    border-color: #cfcfcf;
+    color: #777;
+    background: #f7f7f5;
+    text-decoration: line-through;
+}
+
+.variant-option.unavailable:hover {
+    border-color: var(--black);
+    color: var(--black);
+    text-decoration: none;
+}
+
 .add-cart-large {
 
     width: 100%;
