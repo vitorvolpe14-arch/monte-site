@@ -1844,3 +1844,41 @@ button.secondary:hover,
     font-weight:900;
     letter-spacing:5px;
 }
+
+
+/* CORREÇÃO FINAL — cards de pedidos no mobile */
+@media(max-width:800px){
+    #analyticsOrders .order-table td:nth-child(1),
+    #analyticsOrders .order-table td:nth-child(2),
+    #analyticsOrders .order-table td:nth-child(3),
+    #analyticsOrders .order-table td:nth-child(4),
+    #analyticsOrders .order-table td:nth-child(5),
+    #analyticsOrders .order-table td:nth-child(6){
+        width:100% !important;
+        min-width:0 !important;
+        max-width:none !important;
+        display:grid !important;
+        grid-template-columns:82px minmax(0,1fr) !important;
+        gap:8px !important;
+        box-sizing:border-box !important;
+    }
+    #analyticsOrders .order-table td:nth-child(1) .link-button,
+    #analyticsOrders .order-table td:nth-child(6) .small-button{
+        min-width:0 !important;
+        max-width:100% !important;
+    }
+    #analyticsOrders .order-table td:nth-child(1) .link-button{
+        display:block !important;
+        width:100% !important;
+        white-space:normal !important;
+        overflow-wrap:anywhere !important;
+        word-break:normal !important;
+        text-align:left !important;
+    }
+    #analyticsOrders .order-table td:nth-child(2),
+    #analyticsOrders .order-table td:nth-child(3),
+    #analyticsOrders .order-table td:nth-child(4),
+    #analyticsOrders .order-table td:nth-child(5){
+        align-items:start;
+    }
+}
