@@ -101,7 +101,20 @@ async function sendWhatsAppTrackingNotification(order) {
     return { sent: true, status: "sent", message_id: messageId };
 }
 
-function formatOrderCode(value) { const raw = safeString(value); if (/^\\d{4}$/.test(raw)) return "MONTÊ-" + raw; if (/^MONTÊ-\\d{4}$/i.test(raw)) return "MONTÊ-" + raw.slice(-4); return raw; }\n\nfunction normalizeOrderCode(value) { const raw = safeString(value).trim(); const match = raw.match(/^MONTÊ-(\\d{4})$/i); return match ? match[1] : raw; }\n\nfunction escapeEmailHtml(value) {
+function formatOrderCode(value) {
+    const raw = safeString(value);
+    if (/^\d{4}$/.test(raw)) return "MONTÊ-" + raw;
+    if (/^MONTÊ-\d{4}$/i.test(raw)) return "MONTÊ-" + raw.slice(-4);
+    return raw;
+}
+
+function normalizeOrderCode(value) {
+    const raw = safeString(value).trim();
+    const match = raw.match(/^MONTÊ-(\d{4})$/i);
+    return match ? match[1] : raw;
+}
+
+function escapeEmailHtml(value) {
     return String(value ?? "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
