@@ -462,7 +462,7 @@ const ADMIN_SESSION_TTL = 1000 * 60 * 60 * 8;
 const adminSessions = new Map();
 const adminLoginAttempts = new Map();
 function parseCookies(req){const h=req.headers.cookie||"";const o={};h.split(";").filter(Boolean).forEach(p=>{const i=p.indexOf("=");if(i>=0)o[p.slice(0,i).trim()]=decodeURIComponent(p.slice(i+1).trim())});return o}
-function getAdminSession(req){const t=parseCookies(req)["__Host-monte_admin_session"];if(!t)return null;const s=adminSessions.get(t);if(!s)return null;if(Date.now()>s.expiresAt){adminSessions.delete(t);return null}return {token:t,...s}}
+function getAdminSession(req){const t=parseCookies(req)["monte_admin_session"];if(!t)return null;const s=adminSessions.get(t);if(!s)return null;if(Date.now()>s.expiresAt){adminSessions.delete(t);return null}return {token:t,...s}}
 function requireAdmin(req,res,next){
     const origin = safeString(req.headers.origin);
     if (origin && !allowedOrigins.has(origin.replace(/\/$/, ""))) {
@@ -500,8 +500,8 @@ function loginKey(req,email){return `${req.ip||"unknown"}:${safeString(email).to
 function loginAllowed(req,email){const r=adminLoginAttempts.get(loginKey(req,email));if(!r)return true;if(r.lockedUntil&&Date.now()<r.lockedUntil)return false;if(r.lockedUntil)adminLoginAttempts.delete(loginKey(req,email));return true}
 function failedLogin(req,email){const k=loginKey(req,email);const r=adminLoginAttempts.get(k)||{count:0,lockedUntil:0};r.count++;if(r.count>=5){r.count=0;r.lockedUntil=Date.now()+15*60*1000}adminLoginAttempts.set(k,r)}
 function clearLoginFailures(req,email){adminLoginAttempts.delete(loginKey(req,email))}
-function setAdminCookie(res,t){res.setHeader("Set-Cookie",`__Host-monte_admin_session=${encodeURIComponent(t)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(ADMIN_SESSION_TTL/1000)}`)}
-function clearAdminCookie(res){res.setHeader("Set-Cookie","__Host-monte_admin_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0")}
+function setAdminCookie(res,t){res.setHeader("Set-Cookie",`monte_admin_session=${encodeURIComponent(t)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(ADMIN_SESSION_TTL/1000)}`)}
+function clearAdminCookie(res){res.setHeader("Set-Cookie","monte_admin_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0")}
 app.post("/api/admin/login",adminLoginRateLimit,(req,res)=>{const email=safeString(req.body?.email).toLowerCase(),password=req.body?.password;if(!ADMIN_EMAIL||!ADMIN_PASSWORD_HASH)return res.status(503).json({success:false,message:"Acesso administrativo não configurado no servidor."});if(!loginAllowed(req,email))return res.status(429).json({success:false,message:"Muitas tentativas. Tente novamente em 15 minutos."});if(email!==ADMIN_EMAIL.toLowerCase()||!passwordMatches(password)){failedLogin(req,email);return res.status(401).json({success:false,message:"E-mail ou senha incorretos."})}clearLoginFailures(req,email);const token=crypto.randomBytes(32).toString("hex");adminSessions.set(token,{email:ADMIN_EMAIL,expiresAt:Date.now()+ADMIN_SESSION_TTL});setAdminCookie(res,token);return res.json({success:true,email:ADMIN_EMAIL})});
 app.post("/api/admin/logout",(req,res)=>{const t=parseCookies(req).monte_admin_session;if(t)adminSessions.delete(t);clearAdminCookie(res);return res.json({success:true})});
 app.get("/api/admin/session",(req,res)=>{const s=getAdminSession(req);if(!s)return res.status(401).json({success:false});return res.json({success:true,email:s.email})});
