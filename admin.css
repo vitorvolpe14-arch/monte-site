@@ -734,3 +734,31 @@
         font-size:15px;
     }
 }
+
+
+.admin-product-actions .edit-product-button{
+    width:42px;
+    min-width:42px;
+    padding:0;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    background:transparent;
+    color:#777;
+    border:1px solid #e5e3df;
+    font-size:18px;
+    line-height:1;
+    font-family:Arial,sans-serif;
+}
+.admin-product-actions .edit-product-button:hover{
+    background:#f7f6f3;
+    color:#191919;
+    border-color:#d5d2cc;
+}
+@media (max-width:800px){
+    .admin-product-actions .edit-product-button{
+        width:100%;
+        min-height:36px;
+        font-size:17px;
+    }
+}
