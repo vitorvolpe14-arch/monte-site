@@ -1448,11 +1448,14 @@ app.post("/api/newsletter", async (req, res) => {
         if (!RESEND_API_KEY) {
             return res.status(503).json({ success: false, message: "Newsletter não configurada." });
         }
+
         const email = safeString(req.body?.email).trim().toLowerCase();
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
             return res.status(400).json({ success: false, message: "Informe um e-mail válido." });
         }
 
+        // Cadastra o contato diretamente na lista Geral da MONTÊ.
+        const segmentId = "a58fa01c-4292-4ba7-ac63-7928f68567c6";
         const response = await fetch("https://api.resend.com/contacts", {
             method: "POST",
             headers: {
@@ -1462,7 +1465,8 @@ app.post("/api/newsletter", async (req, res) => {
             },
             body: JSON.stringify({
                 email,
-                unsubscribed: false
+                unsubscribed: false,
+                segment_ids: [segmentId]
             })
         });
 
@@ -1474,7 +1478,48 @@ app.post("/api/newsletter", async (req, res) => {
             throw new Error("Resend Contacts API " + response.status + ": " + JSON.stringify(data));
         }
 
-        return res.json({ success: true, status: response.status === 409 ? "already_registered" : "subscribed" });
+        const alreadyRegistered = response.status === 409;
+
+        // Envia confirmação de cadastro somente para um novo inscrito.
+        if (!alreadyRegistered && RESEND_MARKETING_FROM_EMAIL) {
+            const welcomeHtml =
+                "<div style=\"font-family:Arial,Helvetica,sans-serif;max-width:620px;margin:0 auto;color:#171717;line-height:1.7\">" +
+                "<div style=\"background:#111;color:#fff;text-align:center;padding:24px;letter-spacing:6px;font-size:24px\">MONTÊ</div>" +
+                "<div style=\"padding:36px 28px;background:#fff\">" +
+                "<p style=\"font-size:12px;letter-spacing:2px;color:#777\">BEM-VINDA À MONTÊ</p>" +
+                "<h1 style=\"font-size:28px;font-weight:500;margin:0 0 16px\">Seu cadastro foi confirmado.</h1>" +
+                "<p style=\"color:#555\">Agora você receberá novidades, lançamentos e conteúdos exclusivos da MONTÊ.</p>" +
+                "</div></div>";
+
+            const welcomeResponse = await fetch("https://api.resend.com/emails", {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer " + RESEND_API_KEY,
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                },
+                body: JSON.stringify({
+                    from: RESEND_FROM_NAME + " <" + RESEND_MARKETING_FROM_EMAIL + ">",
+                    to: [email],
+                    subject: "MONTÊ — cadastro confirmado",
+                    html: welcomeHtml
+                })
+            });
+
+            const welcomeText = await welcomeResponse.text();
+            let welcomeData = {};
+            try { welcomeData = welcomeText ? JSON.parse(welcomeText) : {}; } catch { welcomeData = { raw: welcomeText }; }
+
+            if (!welcomeResponse.ok) {
+                console.error("Newsletter welcome email:", welcomeResponse.status, welcomeData);
+            }
+        }
+
+        return res.json({
+            success: true,
+            status: alreadyRegistered ? "already_registered" : "subscribed",
+            email_sent: !alreadyRegistered && Boolean(RESEND_MARKETING_FROM_EMAIL)
+        });
     } catch (error) {
         console.error("Newsletter:", error);
         return res.status(500).json({ success: false, message: "Não foi possível concluir o cadastro agora." });
