@@ -1768,13 +1768,23 @@ async function checkout() {
         closeCart();
 
 
-        // 14. Redireciona para a InfinitePay.
-        // A navegação é feita na própria janela para funcionar também em
-        // Safari/iOS e navegadores embutidos no celular.
-        try {
-            window.top.location.replace(validUrl.href);
-        } catch (navigationError) {
-            window.location.replace(validUrl.href);
+        // 14. Mantém dois fluxos de navegação:
+        // DESKTOP: abre a InfinitePay diretamente.
+        // MOBILE: passa primeiro pelo nosso domínio e o backend responde
+        // com HTTP 302 para a InfinitePay, evitando bloqueios de Safari/iOS
+        // e navegadores embutidos sem alterar o checkout.
+        const isMobileDevice =
+            /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+            (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+        if (isMobileDevice) {
+            const mobileRedirectUrl =
+                "/pagamento-infinitepay?url=" +
+                encodeURIComponent(validUrl.href);
+
+            window.location.href = mobileRedirectUrl;
+        } else {
+            window.location.href = validUrl.href;
         }
 
 
