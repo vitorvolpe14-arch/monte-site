@@ -699,99 +699,98 @@ function filterProducts(category) {
    MODAL PRODUTO
 ===================================================== */
 
+function openWhatsAppReservation(product = selectedProduct, variant = selectedVariant) {
+    if (!product) return;
+
+    const productName = product.name || "produto MONTÊ";
+    const color = variant?.color ? " — cor: " + variant.color : "";
+    const message = "Olá, MONTÊ! Gostaria de reservar o produto \"" + productName + "\""+ color + ". Vi que ele está esgotado e gostaria de saber a disponibilidade para reserva.";
+    const url = "https://wa.me/5585992163305?text=" + encodeURIComponent(message);
+    window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function updateProductAvailabilityUI() {
+    const product = selectedProduct;
+    if (!product) return;
+
+    const activeVariants = (product.variants || []).filter(v => v.active !== false);
+    const totalStock = activeVariants.length
+        ? activeVariants.reduce((total, variant) => total + Number(variant.stock || 0), 0)
+        : Number(product.stock || 0);
+    const selectedStock = selectedVariant ? Number(selectedVariant.stock || 0) : totalStock;
+    const isProductSoldOut = totalStock <= 0;
+    const isSelectionSoldOut = selectedStock <= 0;
+
+    const quantityTitle = document.querySelector("#productModal .quantity-title");
+    const quantitySelector = document.querySelector("#productModal .quantity-selector");
+    const addButton = document.getElementById("addProductButton");
+    const reservationBox = document.getElementById("reservationBox");
+
+    if (quantityTitle) quantityTitle.style.display = isSelectionSoldOut ? "none" : "";
+    if (quantitySelector) quantitySelector.style.display = isSelectionSoldOut ? "none" : "";
+    if (addButton) addButton.style.display = isSelectionSoldOut ? "none" : "";
+
+    if (reservationBox) {
+        if (isSelectionSoldOut) {
+            const text = isProductSoldOut
+                ? "Esse produto se encontra esgotado no momento. Entre em contato com nossos atendentes para fazer sua reserva."
+                : "Essa cor se encontra esgotada no momento. Entre em contato com nossos atendentes para fazer sua reserva.";
+            reservationBox.querySelector(".reservation-message").textContent = text;
+            reservationBox.style.display = "block";
+        } else if ((product.variants || []).some(v => v.active !== false && Number(v.stock || 0) <= 0)) {
+            reservationBox.querySelector(".reservation-message").textContent =
+                "Algumas cores estão esgotadas. Se desejar uma delas, fale com nossos atendentes para fazer sua reserva.";
+            reservationBox.style.display = "block";
+        } else {
+            reservationBox.style.display = "none";
+        }
+    }
+}
+
 function openProductModal(productId) {
-
-    selectedProduct =
-        products.find(
-            product => product.id === productId
-        );
-
+    selectedProduct = products.find(product => product.id === productId);
+    if (!selectedProduct) return;
 
     selectedVariant = null;
     selectedQuantity = 1;
 
     const activeVariants = (selectedProduct.variants || []).filter(v => v.active !== false);
     const availableVariants = activeVariants.filter(v => Number(v.stock || 0) > 0);
-    if (availableVariants.length) {
-        selectedVariant = availableVariants[0];
-    } else if ((selectedProduct.stock || 0) <= 0) {
-        showToast("Este produto está esgotado no momento.");
-        return;
+    if (availableVariants.length) selectedVariant = availableVariants[0];
+
+    document.getElementById("quantity").textContent = selectedQuantity;
+    document.getElementById("modalName").textContent = selectedProduct.name;
+    document.getElementById("modalCategory").textContent = selectedProduct.category.toUpperCase();
+    document.getElementById("modalDescription").textContent = selectedProduct.description;
+
+    let priceHTML = formatPrice(selectedProduct.price);
+    if (selectedProduct.sale && selectedProduct.oldPrice) {
+        priceHTML = '<span class="old-price">' + formatPrice(selectedProduct.oldPrice) + '</span>' +
+            '<span class="sale-price">' + formatPrice(selectedProduct.price) + '</span>';
     }
-
-    document.getElementById("quantity")
-        .textContent = selectedQuantity;
-
-
-    document.getElementById("modalName")
-        .textContent = selectedProduct.name;
-
-
-    document.getElementById("modalCategory")
-        .textContent =
-        selectedProduct.category.toUpperCase();
-
-
-    document.getElementById("modalDescription")
-        .textContent =
-        selectedProduct.description;
-
-
-    let priceHTML =
-        formatPrice(selectedProduct.price);
-
-
-    if (
-        selectedProduct.sale &&
-        selectedProduct.oldPrice
-    ) {
-
-        priceHTML = `
-
-            <span class="old-price">
-                ${formatPrice(
-                    selectedProduct.oldPrice
-                )}
-            </span>
-
-            <span class="sale-price">
-                ${formatPrice(
-                    selectedProduct.price
-                )}
-            </span>
-
-        `;
-
-    }
-
-
-    document.getElementById("modalPrice")
-        .innerHTML = priceHTML;
+    document.getElementById("modalPrice").innerHTML = priceHTML;
 
     const variantSelector = document.getElementById("variantSelector");
     const variantOptions = document.getElementById("variantOptions");
     if (variantSelector && variantOptions) {
-        const activeVariants = (selectedProduct.variants || []).filter(v => v.active !== false);
         if (activeVariants.length) {
             variantSelector.style.display = "block";
             variantOptions.innerHTML = "";
-            activeVariants.forEach((variant, index) => {
+            activeVariants.forEach(variant => {
                 const button = document.createElement("button");
                 button.type = "button";
                 const variantAvailable = Number(variant.stock || 0) > 0;
-                button.className = "variant-option" + (index === 0 && variantAvailable ? " active" : "") + (variantAvailable ? "" : " unavailable");
-                button.textContent = variantAvailable ? variant.color : variant.color + " — esgotado";
-                button.disabled = !variantAvailable;
+                const isSelected = selectedVariant?.id === variant.id;
+                button.className = "variant-option" + (isSelected ? " active" : "") + (variantAvailable ? "" : " unavailable");
+                button.textContent = variantAvailable ? variant.color : (variant.color || "Cor") + " — esgotado";
+                button.disabled = false;
                 button.addEventListener("click", () => {
-                    if (!variantAvailable) {
-                        showToast("Esta cor está esgotada.");
-                        return;
-                    }
                     selectedVariant = variant;
                     selectedQuantity = 1;
                     document.querySelectorAll(".variant-option").forEach(b => b.classList.remove("active"));
                     button.classList.add("active");
                     document.getElementById("quantity").textContent = "1";
+                    updateProductAvailabilityUI();
                 });
                 variantOptions.appendChild(button);
             });
@@ -801,15 +800,10 @@ function openProductModal(productId) {
         }
     }
 
+    updateProductAvailabilityUI();
     renderGallery();
-
-
-    document.getElementById("productModal")
-        .classList.add("active");
-
-
+    document.getElementById("productModal").classList.add("active");
     document.body.style.overflow = "hidden";
-
 }
 
 
