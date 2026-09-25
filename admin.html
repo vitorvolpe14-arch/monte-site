@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20260925-4">
+<link rel="stylesheet" href="admin.css?v=20260925-5">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -124,7 +124,7 @@
     <div class="checks"><label><input id="productNew" type="checkbox"> Marcar como novidade</label><label><input id="productSale" type="checkbox"> Mostrar em SALE</label><label><input id="productActive" type="checkbox" checked> Produto ativo</label></div>
     <div class="variants-head"><h3>Cores, SKU e estoque</h3><button type="button" id="addVariant" class="secondary">+ COR</button></div>
     <div id="variantsList"></div><div id="formError" class="error"></div>
-    <div class="modal-actions"><button type="button" id="cancelProduct" class="secondary">CANCELAR</button><button type="submit">SALVAR PRODUTO</button></div>
+    <div class="modal-actions product-modal-actions"><button type="button" id="deleteProductButton" class="danger-button hidden">EXCLUIR PRODUTO</button><button type="button" id="cancelProduct" class="secondary">CANCELAR</button><button type="submit">SALVAR PRODUTO</button></div>
   </form>
 </div></div>
 
@@ -133,7 +133,7 @@
   <div id="orderDetails"></div>
 </div></div>
 
-<script src="admin.js?v=20260925-2"></script>
+<script src="admin.js?v=20260925-3"></script>
 <script src="admin-carousel.js?v=20260925-2"></script>
 </body>
 </html>
