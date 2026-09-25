@@ -24,6 +24,7 @@
     <div class="brand">MONTÊ</div><p class="sidebar-label">GESTÃO</p>
     <button class="nav-button active" data-section="dashboard">Visão geral</button>
     <button class="nav-button" data-section="products">Produtos</button>
+    <button class="nav-button" data-section="carousel">Carrossel</button>
     <button class="nav-button" data-section="orders">Pedidos</button>
     <button class="nav-button" data-section="stock">Estoque</button>
     <button class="nav-button" data-section="analytics">Analytics</button>
@@ -32,6 +33,25 @@
 
   <main class="main">
     <header class="topbar"><div><p class="eyebrow">MONTÊ</p><h1 id="pageTitle">Visão geral</h1></div><span id="adminEmail" class="admin-email"></span></header>
+
+    <section id="carouselSection" class="section hidden">
+      <div class="section-actions"><div><p class="eyebrow">HOME</p><h2>Carrossel inicial</h2></div></div>
+      <div class="panel">
+        <div class="panel-head"><div><h2>Fotos do carrossel</h2><p class="field-help">A primeira foto aparece primeiro no site. Arraste para alterar a ordem.</p></div></div>
+        <div id="carouselImageDropzone" class="product-image-dropzone" tabindex="0" role="button" aria-label="Adicionar fotos ao carrossel">
+          <input id="carouselImageFiles" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+          <div class="dropzone-icon">＋</div>
+          <strong>Arraste suas fotos aqui</strong>
+          <span>ou clique para selecionar do computador</span>
+          <small>JPG, PNG ou WebP · até 20 MB por imagem</small>
+        </div>
+        <small id="carouselImageStatus" class="field-help"></small>
+        <div id="carouselImageManager" class="product-image-manager"></div>
+        <div class="modal-actions carousel-save-actions">
+          <button id="saveCarouselButton" type="button">SALVAR CARROSSEL</button>
+        </div>
+      </div>
+    </section>
 
     <section id="dashboardSection" class="section">
       <div class="stats">
