@@ -5363,3 +5363,13 @@ img {
 #cintos-acessorios {
     background: #f5f3ef;
 }
+
+
+/* MONTÊ — aplicação explícita da Lovelo nas duas logos da marca */
+.logo,
+.footer-logo {
+    font-family: "Lovelo", sans-serif !important;
+    font-weight: 900 !important;
+    font-style: normal;
+    font-synthesis: none;
+}
