@@ -1281,7 +1281,7 @@ async function updateShipping() {
     if (cep.length !== 8) { shippingValueElement.textContent = "Informe seu CEP"; return; }
     const localCity = state === "CE" && ["FORTALEZA", ...metropolitanCities].includes(city);
     if (localCity) {
-        const local = city === "FORTALEZA" ? {id:"monte-fortaleza",name:"Entrega MONTÊ — Fortaleza",price:15,delivery_days:2} : {id:"monte-regiao-metropolitana",name:"Entrega MONTÊ — Região Metropolitana",price:20,delivery_days:3};
+        const local = city === "FORTALEZA" ? {id:"monte-fortaleza",name:"Entrega MONTÊ — Fortaleza",price:15,delivery_days:1} : {id:"monte-regiao-metropolitana",name:"Entrega MONTÊ — Região Metropolitana",price:20,delivery_days:3};
         shippingOptions = [local]; selectedShippingOption = local;
         shippingValueElement.textContent = formatPrice(local.price);
         renderShippingOptions(); updatePaymentSummary(); return;
