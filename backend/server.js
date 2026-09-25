@@ -318,7 +318,7 @@ async function sendOrderTrackingEmail(order) {
         method: "POST",
         headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json", "Accept": "application/json" },
         body: JSON.stringify({
-            from: RESEND_FROM_NAME ? RESEND_FROM_NAME + " <" + RESEND_MARKETING_FROM_EMAIL + ">" : RESEND_MARKETING_FROM_EMAIL,
+            from: RESEND_FROM_NAME ? RESEND_FROM_NAME + " <" + RESEND_FROM_EMAIL + ">" : RESEND_FROM_EMAIL,
             to: [email],
             subject: "MONTÊ — Pedido " + orderCode + " · " + statusLabel,
             html
