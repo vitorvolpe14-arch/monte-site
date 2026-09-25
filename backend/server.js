@@ -42,7 +42,8 @@ const WHATSAPP_ADMIN_TEMPLATE_NAME = safeString(process.env.WHATSAPP_ADMIN_TEMPL
 const WHATSAPP_ADMIN_TEMPLATE_LANGUAGE = safeString(process.env.WHATSAPP_ADMIN_TEMPLATE_LANGUAGE || "pt_BR");
 
 const RESEND_API_KEY = safeString(process.env.RESEND_API_KEY);
-const RESEND_FROM_EMAIL = safeString(process.env.RESEND_FROM_EMAIL);
+const RESEND_FROM_EMAIL = safeString(process.env.RESEND_FROM_EMAIL || "contato@oficialmontee.com.br");
+const RESEND_MARKETING_FROM_EMAIL = safeString(process.env.RESEND_MARKETING_FROM_EMAIL || "mkt@oficialmontee.com.br");
 const RESEND_FROM_NAME = safeString(process.env.RESEND_FROM_NAME || "MONTÊ");
 
 async function sendWhatsAppTrackingNotification(order) {
@@ -317,7 +318,7 @@ async function sendOrderTrackingEmail(order) {
         method: "POST",
         headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json", "Accept": "application/json" },
         body: JSON.stringify({
-            from: RESEND_FROM_NAME ? RESEND_FROM_NAME + " <" + RESEND_FROM_EMAIL + ">" : RESEND_FROM_EMAIL,
+            from: RESEND_FROM_NAME ? RESEND_FROM_NAME + " <" + RESEND_MARKETING_FROM_EMAIL + ">" : RESEND_MARKETING_FROM_EMAIL,
             to: [email],
             subject: "MONTÊ — Pedido " + orderCode + " · " + statusLabel,
             html
@@ -1440,6 +1441,44 @@ app.post("/api/frete/cotacao", async (req,res)=>{
         if(!options.length)return res.status(422).json({success:false,message:"Nenhuma modalidade de frete disponível para este CEP."});
         return res.json({success:true,source:"superfrete",options});
     }catch(error){console.error("❌ Erro na cotação SuperFrete:",error);return res.status(502).json({success:false,message:error.message||"Não foi possível calcular o frete."});}
+});
+
+app.post("/api/newsletter", async (req, res) => {
+    try {
+        if (!RESEND_API_KEY) {
+            return res.status(503).json({ success: false, message: "Newsletter não configurada." });
+        }
+        const email = safeString(req.body?.email).trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.status(400).json({ success: false, message: "Informe um e-mail válido." });
+        }
+
+        const response = await fetch("https://api.resend.com/contacts", {
+            method: "POST",
+            headers: {
+                "Authorization": "Bearer " + RESEND_API_KEY,
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            },
+            body: JSON.stringify({
+                email,
+                unsubscribed: false
+            })
+        });
+
+        const responseText = await response.text();
+        let data = {};
+        try { data = responseText ? JSON.parse(responseText) : {}; } catch { data = { raw: responseText }; }
+
+        if (!response.ok && response.status !== 409) {
+            throw new Error("Resend Contacts API " + response.status + ": " + JSON.stringify(data));
+        }
+
+        return res.json({ success: true, status: response.status === 409 ? "already_registered" : "subscribed" });
+    } catch (error) {
+        console.error("Newsletter:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível concluir o cadastro agora." });
+    }
 });
 
 app.post(
