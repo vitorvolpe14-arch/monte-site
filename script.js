@@ -243,24 +243,25 @@ function createProductCard(product) {
 ===================================================== */
 
 function renderProducts() {
+    const newContainer = document.getElementById("newProducts");
+    if (newContainer) newContainer.innerHTML = "";
 
-    const newContainer =
-        document.getElementById("newProducts");
-
-
-    newContainer.innerHTML = "";
-
-
-    renderCollectionProducts(products);
-
-    renderSaleProducts(
-        products.filter(product => product.sale)
+    renderCollectionProducts(
+        products.filter(product => product.category === "bolsas")
     );
 
-    renderNewProducts(
-        products.filter(product => product.newProduct)
+    renderCategorySectionProducts(
+        "cintos",
+        products.filter(product => product.category === "cintos")
     );
 
+    renderCategorySectionProducts(
+        "acessorios",
+        products.filter(product => product.category === "acessorios")
+    );
+
+    renderSaleProducts(products.filter(product => product.sale));
+    renderNewProducts(products.filter(product => product.newProduct));
 }
 
 
@@ -583,6 +584,65 @@ function previousCollectionPage() {
 
 }
 
+
+let categorySectionProducts = { cintos: [], acessorios: [] };
+let categorySectionIndexes = { cintos: 0, acessorios: 0 };
+
+function renderCategorySection(category) {
+    const container = document.getElementById(category + "Products");
+    if (!container) return;
+
+    const list = categorySectionProducts[category] || [];
+    const prev = document.querySelector('#' + category + ' .category-prev');
+    const next = document.querySelector('#' + category + ' .category-next');
+
+    container.innerHTML = "";
+
+    if (!list.length) {
+        if (prev) prev.style.visibility = "hidden";
+        if (next) next.style.visibility = "hidden";
+        return;
+    }
+
+    const total = list.length;
+    const start = categorySectionIndexes[category] % total;
+
+    for (let offset = 0; offset < Math.min(getCarouselVisibleCount(), total); offset++) {
+        container.appendChild(createProductCard(list[(start + offset) % total]));
+    }
+
+    const hasCarousel = total > getCarouselVisibleCount();
+    if (prev) {
+        prev.disabled = !hasCarousel;
+        prev.style.visibility = hasCarousel ? "visible" : "hidden";
+    }
+    if (next) {
+        next.disabled = !hasCarousel;
+        next.style.visibility = hasCarousel ? "visible" : "hidden";
+    }
+}
+
+function renderCategorySectionProducts(category, list) {
+    categorySectionProducts[category] = Array.isArray(list) ? list : [];
+    categorySectionIndexes[category] = 0;
+    renderCategorySection(category);
+}
+
+function nextCategoryPage(category) {
+    const list = categorySectionProducts[category] || [];
+    if (list.length <= getCarouselVisibleCount()) return;
+    categorySectionIndexes[category] =
+        (categorySectionIndexes[category] + COLLECTION_STEP) % list.length;
+    renderCategorySection(category);
+}
+
+function previousCategoryPage(category) {
+    const list = categorySectionProducts[category] || [];
+    if (list.length <= getCarouselVisibleCount()) return;
+    categorySectionIndexes[category] =
+        (categorySectionIndexes[category] - COLLECTION_STEP + list.length) % list.length;
+    renderCategorySection(category);
+}
 
 /* =====================================================
    FILTRO
