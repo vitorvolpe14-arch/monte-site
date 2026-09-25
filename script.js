@@ -1962,18 +1962,44 @@ function searchProducts() {
    NEWSLETTER
 ===================================================== */
 
-function subscribeNewsletter(event) {
-
+async function subscribeNewsletter(event) {
     event.preventDefault();
 
+    const form = event.target;
+    const input = form.querySelector('input[type="email"]');
+    const email = String(input?.value || "").trim().toLowerCase();
 
-    showToast(
-        "Cadastro realizado com sucesso."
-    );
+    if (!email) return;
 
+    const button = form.querySelector("button");
+    if (button) {
+        button.disabled = true;
+        button.textContent = "CADASTRANDO...";
+    }
 
-    event.target.reset();
+    try {
+        const response = await fetch("/api/newsletter", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email })
+        });
 
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Não foi possível concluir o cadastro.");
+        }
+
+        showToast("Cadastro realizado com sucesso.");
+        form.reset();
+    } catch (error) {
+        console.error("Newsletter:", error);
+        showToast(error.message || "Não foi possível concluir o cadastro.");
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = "CADASTRAR";
+        }
+    }
 }
 
 
