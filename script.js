@@ -1594,9 +1594,9 @@ async function checkout() {
 
                             phone: phone,
 
-                            whatsapp_phone: wantsWhatsappTracking ? whatsappNumber : "",
+                            whatsapp_phone: whatsappNumber,
 
-                            whatsapp_updates: wantsWhatsappTracking,
+                            whatsapp_updates: true,
 
                             cpf: cpfDigits,
 
