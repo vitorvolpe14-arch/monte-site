@@ -2180,21 +2180,32 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
-// Garante que a newsletter apareça apenas uma vez na página.
+// Garante que a newsletter apareça apenas uma vez na página,
+// mesmo que algum conteúdo seja reinserido dinamicamente.
 (function ensureSingleNewsletter() {
     const removeDuplicateNewsletters = () => {
-        const newsletters = document.querySelectorAll('section.newsletter');
-        newsletters.forEach((section, index) => {
-            if (index > 0) section.remove();
+        const candidates = Array.from(document.querySelectorAll('section.newsletter, .newsletter'));
+        const seen = new Set();
+        candidates.forEach((section) => {
+            const heading = section.querySelector('h2')?.textContent?.trim().replace(/\s+/g, ' ').toUpperCase() || '';
+            const key = heading || 'newsletter';
+            if (seen.has(key)) {
+                section.remove();
+            } else {
+                seen.add(key);
+            }
         });
     };
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', removeDuplicateNewsletters, { once: true });
-    } else {
+    const start = () => {
         removeDuplicateNewsletters();
-    }
+        const observer = new MutationObserver(removeDuplicateNewsletters);
+        observer.observe(document.body, { childList: true, subtree: true });
+    };
 
-    const observer = new MutationObserver(removeDuplicateNewsletters);
-    observer.observe(document.body, { childList: true, subtree: true });
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start, { once: true });
+    } else {
+        start();
+    }
 })();
