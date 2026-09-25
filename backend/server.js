@@ -57,7 +57,7 @@ async function sendWhatsAppTrackingNotification(order) {
     }
 
     const firstName = safeString(order.customer_name).split(/\s+/)[0] || "cliente";
-    const orderCode = safeString(order.order_code || order.order_nsu);
+    const orderCode = formatOrderCode(order.order_code || order.order_nsu);
     const apiUrl = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
     const response = await fetch(apiUrl, {
@@ -101,7 +101,7 @@ async function sendWhatsAppTrackingNotification(order) {
     return { sent: true, status: "sent", message_id: messageId };
 }
 
-function escapeEmailHtml(value) {
+function formatOrderCode(value) { const raw = safeString(value); if (/^\\d{4}$/.test(raw)) return "MONTÊ-" + raw; if (/^MONTÊ-\\d{4}$/i.test(raw)) return "MONTÊ-" + raw.slice(-4); return raw; }\n\nfunction normalizeOrderCode(value) { const raw = safeString(value).trim(); const match = raw.match(/^MONTÊ-(\\d{4})$/i); return match ? match[1] : raw; }\n\nfunction escapeEmailHtml(value) {
     return String(value ?? "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
@@ -114,7 +114,7 @@ async function sendOrderConfirmationEmail(order) {
     if (!order?.customer_email || !order?.order_nsu) return { sent: false, status: "invalid_recipient" };
     if (!RESEND_API_KEY || !RESEND_FROM_EMAIL) return { sent: false, status: "not_configured" };
     const email = safeString(order.customer_email).toLowerCase();
-    const orderCode = safeString(order.order_code || order.order_nsu);
+    const orderCode = formatOrderCode(order.order_code || order.order_nsu);
     const customerName = safeString(order.customer_name).split(/\s+/)[0] || "cliente";
     const total = Number(order.total || 0);
     const purchasesUrl = SITE_URL.replace(/\/$/, "") + "/minhas-compras.html?order_nsu=" + encodeURIComponent(orderCode);
@@ -2467,7 +2467,7 @@ app.post(
 
 app.get("/api/minhas-compras", orderStatusRateLimit, async (req, res) => {
     try {
-        const orderNsu = safeString(req.query.order_nsu);
+        const orderNsu = normalizeOrderCode(req.query.order_nsu);
         const email = safeString(req.query.email).toLowerCase();
 
         if (!orderNsu || !email || orderNsu.length > 80 || email.length > 160) {
@@ -2488,7 +2488,7 @@ app.get("/api/minhas-compras", orderStatusRateLimit, async (req, res) => {
             success: true,
             order: {
                 order_nsu: order.order_nsu,
-                order_code: order.order_code || order.order_nsu,
+                order_code: formatOrderCode(order.order_code || order.order_nsu),
                 customer_name: order.customer_name,
                 status: order.status,
                 subtotal: Number(order.subtotal || 0),
@@ -2552,7 +2552,7 @@ app.get("/api/pedido-status", orderStatusRateLimit, async (req, res) => {
             success: true,
             order: {
                 order_nsu: order.order_nsu,
-                order_code: order.order_code || order.order_nsu,
+                order_code: formatOrderCode(order.order_code || order.order_nsu),
                 status: order.status,
                 total: Number(order.total || 0),
                 shipping: Number(order.shipping || 0),
