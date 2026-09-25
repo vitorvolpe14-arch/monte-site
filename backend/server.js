@@ -1,3 +1,4 @@
+// MONTÊ backend — alterações de frontend acompanham este serviço.
 const express = require("express");
 const crypto = require("crypto");
 const path = require("path");
