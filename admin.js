@@ -20,7 +20,26 @@ function fmtInt(v){return new Intl.NumberFormat("pt-BR").format(Number(v||0))}
 function pct(v){return Number(v||0).toLocaleString("pt-BR",{maximumFractionDigits:1})+"%"}
 
 document.addEventListener("DOMContentLoaded",init);
-async function init(){$("loginForm").addEventListener("submit",login);$("logoutButton").addEventListener("click",logout);document.querySelectorAll(".nav-button").forEach(b=>b.onclick=()=>showSection(b.dataset.section));document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>showSection(b.dataset.go));$("newProductButton").onclick=()=>openProduct();$("saveCarouselButton").onclick=saveCarousel;bindCarouselImageDropzone();$("closeModal").onclick=closeProduct;$("cancelProduct").onclick=closeProduct;$("addVariant").onclick=()=>addVariant();$("productForm").onsubmit=saveProduct;$("productSearch").oninput=renderProducts;bindProductImageDropzone();$("refreshOrders").onclick=loadOrders;$("refreshStock").onclick=loadStockMovements;$("refreshAnalytics").onclick=loadAnalytics;$("analyticsDays").onchange=loadAnalytics;if($("carouselSection"))loadCarousel();try{const s=await api("/api/admin/session");await enterApp(s)}catch{showLogin()}}
+async function init(){
+  const loginForm=$("loginForm"); if(loginForm) loginForm.addEventListener("submit",login);
+  const logoutButton=$("logoutButton"); if(logoutButton) logoutButton.addEventListener("click",logout);
+  document.querySelectorAll(".nav-button").forEach(b=>b.onclick=()=>showSection(b.dataset.section));
+  document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>showSection(b.dataset.go));
+  const newProductButton=$("newProductButton"); if(newProductButton) newProductButton.onclick=()=>openProduct();
+  const carouselSave=$("saveCarouselButton"); if(carouselSave) carouselSave.onclick=saveCarousel;
+  if($("carouselImageDropzone")) bindCarouselImageDropzone();
+  const closeModalButton=$("closeModal"); if(closeModalButton) closeModalButton.onclick=closeProduct;
+  const cancelProductButton=$("cancelProduct"); if(cancelProductButton) cancelProductButton.onclick=closeProduct;
+  const addVariantButton=$("addVariant"); if(addVariantButton) addVariantButton.onclick=()=>addVariant();
+  const productForm=$("productForm"); if(productForm) productForm.onsubmit=saveProduct;
+  const productSearch=$("productSearch"); if(productSearch) productSearch.oninput=renderProducts;
+  bindProductImageDropzone();
+  const refreshOrders=$("refreshOrders"); if(refreshOrders) refreshOrders.onclick=loadOrders;
+  const refreshStock=$("refreshStock"); if(refreshStock) refreshStock.onclick=loadStockMovements;
+  const refreshAnalytics=$("refreshAnalytics"); if(refreshAnalytics) refreshAnalytics.onclick=loadAnalytics;
+  const analyticsDays=$("analyticsDays"); if(analyticsDays) analyticsDays.onchange=loadAnalytics;
+  try{const s=await api("/api/admin/session");await enterApp(s)}catch{showLogin()}
+}
 function showLogin(){$("loginView").classList.remove("hidden");$("appView").classList.add("hidden");$("loginEmail").focus()}
 async function login(e){e.preventDefault();$("loginError").textContent="";try{await enterApp(await api("/api/admin/login",{method:"POST",body:JSON.stringify({email:$("loginEmail").value.trim(),password:$("loginPassword").value})}))}catch(e){$("loginError").textContent=e.message}}
 async function logout(){try{await api("/api/admin/logout",{method:"POST"})}catch{}products=[];orders=[];showLogin();$("loginPassword").value=""}
