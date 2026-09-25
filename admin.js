@@ -92,7 +92,7 @@ function renderProductImageManager(){
  let html="";
  productImageDraft.forEach((url,i)=>{
    html+='<div class="product-image-item" draggable="true" data-image-index="'+i+'" title="Arraste para alterar a ordem">'+
-     '<img src="'+esc(url)+'" onerror="this.style.opacity=\\'0.2\\'">'+
+     '<img src="'+esc(url)+'" onerror="this.style.opacity=\'0.2\'">'+
      '<span class="image-drag-handle" aria-hidden="true">↕</span>'+
      '<button type="button" class="image-remove" onclick="removeProductImage('+i+');event.stopPropagation()">×</button>'+
      '<span>'+(i===0?"CAPA":"FOTO "+(i+1))+'</span>'+
