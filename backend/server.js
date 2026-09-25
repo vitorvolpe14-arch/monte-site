@@ -162,7 +162,7 @@ async function sendOrderTrackingEmail(order) {
     if (!RESEND_API_KEY || !RESEND_FROM_EMAIL) return { sent: false, status: "not_configured", message_id: null };
 
     const email = safeString(order.customer_email).toLowerCase();
-    const orderCode = safeString(order.order_code || order.order_nsu);
+    const orderCode = formatOrderCode(order.order_code || order.order_nsu);
     const customerName = safeString(order.customer_name).split(/\s+/)[0] || "cliente";
     const status = safeString(order.status).toLowerCase();
     const statusLabel = trackingStatusLabel(status);
