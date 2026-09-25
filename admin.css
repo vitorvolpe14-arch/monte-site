@@ -642,3 +642,67 @@
 
 /* Carrossel inicial — módulo isolado */
 .carousel-save-actions{justify-content:flex-end;margin-top:18px}.carousel-image-item{position:relative}.carousel-drag-handle{position:absolute;right:5px;top:5px;background:rgba(255,255,255,.94);color:#191919;border:1px solid #ddd;border-radius:50%;padding:4px 7px;font-size:11px;cursor:grab}.carousel-image-item.is-dragging{opacity:.55}.carousel-image-item.drag-over{border:2px solid #191919}
+
+
+/* CARROSSEL — DESKTOP */
+@media (min-width: 801px) {
+  #carouselSection .panel {
+    max-width: 1180px;
+  }
+  #carouselSection .panel-head {
+    margin-bottom: 18px;
+  }
+  #carouselImageDropzone {
+    min-height: 190px;
+    padding: 34px 30px;
+    border: 1px dashed #c9c6bf;
+    background: #fcfcfa;
+    position: relative;
+  }
+  #carouselImageDropzone:hover,
+  #carouselImageDropzone.drag-over {
+    background: #f4f2ee;
+    border-color: #191919;
+  }
+  #carouselImageDropzone .dropzone-icon {
+    font-size: 30px;
+  }
+  #carouselImageDropzone strong {
+    font-size: 14px;
+  }
+  #carouselImageDropzone span {
+    font-size: 12px;
+  }
+  #carouselImageDropzone small {
+    font-size: 10px;
+  }
+  #carouselImageDropzone .upload-file-button {
+    min-width: 190px;
+    margin-top: 10px;
+  }
+  #carouselImageManager {
+    grid-template-columns: repeat(5, minmax(150px, 1fr));
+    gap: 14px;
+    margin-top: 18px;
+  }
+  #carouselImageManager .carousel-image-item {
+    aspect-ratio: 4 / 3;
+    min-height: 0;
+  }
+  #carouselImageManager .carousel-image-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  #carouselImageManager .carousel-drag-handle {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #saveCarouselButton {
+    min-width: 190px;
+  }
+}
