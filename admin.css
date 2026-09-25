@@ -18,7 +18,7 @@
 .upload-file-button{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:0 18px;border:1px solid #191919;background:#191919;color:#fff;font-size:11px;letter-spacing:.7px;font-weight:600;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;margin-top:7px}.upload-file-button:active{transform:translateY(1px)}@media(max-width:700px){.product-image-dropzone{min-height:180px;padding:22px 14px}.upload-file-button{width:100%;max-width:280px}.product-image-manager{grid-template-columns:repeat(2,minmax(0,1fr))}}\n\n.product-image-dropzone{border:1px dashed #bdbab3;background:#fff;min-height:150px;padding:28px 20px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center;cursor:pointer;transition:background .15s,border-color .15s,transform .15s}
 .product-image-dropzone:hover,.product-image-dropzone.drag-over{background:#f3f1ec;border-color:#191919}
 .product-image-dropzone.drag-over{transform:scale(1.005)}
-.product-image-dropzone input[type=file]{display:none}
+.product-image-dropzone{position:relative}.product-image-dropzone input[type=file]{display:none}.product-image-dropzone .native-file-input{display:block;position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:3}.product-image-dropzone .upload-file-button{position:relative;z-index:4}
 .product-image-dropzone strong{font-size:13px;font-weight:600;color:#191919}
 .product-image-dropzone span,.product-image-dropzone small{font-size:11px;color:#777}
 .dropzone-icon{font-size:25px;line-height:1;margin-bottom:2px}
