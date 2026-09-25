@@ -57,7 +57,7 @@ async function sendWhatsAppTrackingNotification(order) {
     }
 
     const firstName = safeString(order.customer_name).split(/\s+/)[0] || "cliente";
-    const orderCode = safeString(order.order_nsu);
+    const orderCode = safeString(order.order_code || order.order_nsu);
     const apiUrl = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
     const response = await fetch(apiUrl, {
@@ -114,7 +114,7 @@ async function sendOrderConfirmationEmail(order) {
     if (!order?.customer_email || !order?.order_nsu) return { sent: false, status: "invalid_recipient" };
     if (!RESEND_API_KEY || !RESEND_FROM_EMAIL) return { sent: false, status: "not_configured" };
     const email = safeString(order.customer_email).toLowerCase();
-    const orderCode = safeString(order.order_nsu);
+    const orderCode = safeString(order.order_code || order.order_nsu);
     const customerName = safeString(order.customer_name).split(/\s+/)[0] || "cliente";
     const total = Number(order.total || 0);
     const purchasesUrl = SITE_URL.replace(/\/$/, "") + "/minhas-compras.html?order_nsu=" + encodeURIComponent(orderCode);
@@ -162,7 +162,7 @@ async function sendOrderTrackingEmail(order) {
     if (!RESEND_API_KEY || !RESEND_FROM_EMAIL) return { sent: false, status: "not_configured", message_id: null };
 
     const email = safeString(order.customer_email).toLowerCase();
-    const orderCode = safeString(order.order_nsu);
+    const orderCode = safeString(order.order_code || order.order_nsu);
     const customerName = safeString(order.customer_name).split(/\s+/)[0] || "cliente";
     const status = safeString(order.status).toLowerCase();
     const statusLabel = trackingStatusLabel(status);
@@ -1729,8 +1729,13 @@ app.post(
                ORDER NSU
             ================================================= */
 
-            const orderNsu =
-                `MONTE-${Date.now()}`;
+            const orderNsu = `MONTE-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
+
+            const orderCodeRows = await supabaseRequest("rpc/next_monte_order_code", { method: "POST" });
+            const orderCode = Array.isArray(orderCodeRows) ? orderCodeRows[0] : orderCodeRows;
+            if (!orderCode || !/^\d{4}$/.test(String(orderCode))) {
+                throw new Error("Não foi possível gerar o número de pedido da MONTÊ.");
+            }
 
 
             /* =================================================
@@ -1741,6 +1746,9 @@ app.post(
 
                 order_nsu:
                     orderNsu,
+
+                order_code:
+                    String(orderCode),
 
                 customer: {
 
@@ -1833,6 +1841,7 @@ app.post(
                 method: "POST",
                 body: JSON.stringify({
                     order_nsu: orderNsu,
+                    order_code: String(orderCode),
                     customer_name: pendingOrder.customer.name,
                     customer_email: pendingOrder.customer.email,
                     customer_phone: pendingOrder.customer.phone,
@@ -1912,6 +1921,9 @@ app.post(
 
                 order_nsu:
                     orderNsu,
+
+                order_code:
+                    String(orderCode),
 
                 redirect_url:
                     `${SITE_URL}/pagamento-sucesso`,
@@ -2463,7 +2475,7 @@ app.get("/api/minhas-compras", orderStatusRateLimit, async (req, res) => {
         }
 
         const rows = await supabaseRequest(
-            `orders?order_nsu=eq.${encodeURIComponent(orderNsu)}&customer_email=eq.${encodeURIComponent(email)}&select=id,order_nsu,customer_name,customer_email,status,total,subtotal,shipping,shipping_carrier,tracking_code,tracking_url,shipping_service_name,created_at,paid_at,processing_at,shipped_at,delivered_at,order_items(product_name,variant_color,sku,quantity,unit_price,total_price)`,
+            `orders?${/^\d{4}$/.test(orderNsu) ? "order_code=eq."+encodeURIComponent(orderNsu) : "order_nsu=eq."+encodeURIComponent(orderNsu)}&customer_email=eq.${encodeURIComponent(email)}&select=id,order_nsu,order_code,customer_name,customer_email,status,total,subtotal,shipping,shipping_carrier,tracking_code,tracking_url,shipping_service_name,created_at,paid_at,processing_at,shipped_at,delivered_at,order_items(product_name,variant_color,sku,quantity,unit_price,total_price)`,
             { method: "GET" }
         );
 
@@ -2476,6 +2488,7 @@ app.get("/api/minhas-compras", orderStatusRateLimit, async (req, res) => {
             success: true,
             order: {
                 order_nsu: order.order_nsu,
+                order_code: order.order_code || order.order_nsu,
                 customer_name: order.customer_name,
                 status: order.status,
                 subtotal: Number(order.subtotal || 0),
@@ -2522,7 +2535,7 @@ app.get("/api/pedido-status", orderStatusRateLimit, async (req, res) => {
         }
 
         const rows = await supabaseRequest(
-            `orders?order_nsu=eq.${encodeURIComponent(orderNsu)}&transaction_nsu=eq.${encodeURIComponent(transactionNsu)}&select=id,order_nsu,status,total,shipping,receipt_url,created_at,paid_at,order_items(product_name,variant_color,sku,quantity,unit_price,total_price)`,
+            `orders?order_nsu=eq.${encodeURIComponent(orderNsu)}&transaction_nsu=eq.${encodeURIComponent(transactionNsu)}&select=id,order_nsu,order_code,status,total,shipping,receipt_url,created_at,paid_at,order_items(product_name,variant_color,sku,quantity,unit_price,total_price)`,
             { method: "GET" }
         );
 
