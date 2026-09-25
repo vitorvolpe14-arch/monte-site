@@ -483,6 +483,39 @@ function clearAdminCookie(res){res.setHeader("Set-Cookie","monte_admin_session=;
 app.post("/api/admin/login",adminLoginRateLimit,(req,res)=>{const email=safeString(req.body?.email).toLowerCase(),password=req.body?.password;if(!ADMIN_EMAIL||!ADMIN_PASSWORD_HASH)return res.status(503).json({success:false,message:"Acesso administrativo não configurado no servidor."});if(!loginAllowed(req,email))return res.status(429).json({success:false,message:"Muitas tentativas. Tente novamente em 15 minutos."});if(email!==ADMIN_EMAIL.toLowerCase()||!passwordMatches(password)){failedLogin(req,email);return res.status(401).json({success:false,message:"E-mail ou senha incorretos."})}clearLoginFailures(req,email);const token=crypto.randomBytes(32).toString("hex");adminSessions.set(token,{email:ADMIN_EMAIL,expiresAt:Date.now()+ADMIN_SESSION_TTL});setAdminCookie(res,token);return res.json({success:true,email:ADMIN_EMAIL})});
 app.post("/api/admin/logout",(req,res)=>{const t=parseCookies(req).monte_admin_session;if(t)adminSessions.delete(t);clearAdminCookie(res);return res.json({success:true})});
 app.get("/api/admin/session",(req,res)=>{const s=getAdminSession(req);if(!s)return res.status(401).json({success:false});return res.json({success:true,email:s.email})});
+const CAROUSEL_KV_KEY = "site_carousel_images";
+
+async function readCarouselImages(){
+  const rows=await supabaseRequest("kv_store_48db9b7e?key=eq."+encodeURIComponent(CAROUSEL_KV_KEY)+"&select=key,value",{method:"GET"});
+  if(Array.isArray(rows)&&rows[0]?.value?.images&&Array.isArray(rows[0].value.images)){
+    return rows[0].value.images.filter(v=>typeof v==="string"&&v).slice(0,20);
+  }
+  return [
+    SITE_URL.replace(/\\/$/,"") + "/backend/assets/carousel-photo-1.webp",
+    SITE_URL.replace(/\\/$/,"") + "/backend/assets/carousel-photo-2.webp"
+  ];
+}
+function normalizeCarouselImages(images){
+  return Array.isArray(images)?images.map(v=>safeString(v)).filter(Boolean).slice(0,20):[];
+}
+app.get("/api/carousel",async(req,res)=>{
+  try{return res.json({success:true,images:await readCarouselImages()})}
+  catch(e){console.error("Public carousel GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar o carrossel."})}
+});
+app.get("/api/admin/carousel",requireAdmin,async(req,res)=>{
+  try{return res.json({success:true,images:await readCarouselImages()})}
+  catch(e){console.error("Admin carousel GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar o carrossel."})}
+});
+app.put("/api/admin/carousel",requireAdmin,async(req,res)=>{
+  try{
+    const images=normalizeCarouselImages(req.body?.images);
+    if(!images.length)return res.status(400).json({success:false,message:"Adicione pelo menos uma foto ao carrossel."});
+    const body=JSON.stringify({key:CAROUSEL_KV_KEY,value:{images,updated_at:new Date().toISOString()}});
+    await supabaseRequest("kv_store_48db9b7e",{method:"POST",body,headers:{"Prefer":"resolution=merge-duplicates,return=representation"}});
+    return res.json({success:true,images});
+  }catch(e){console.error("Admin carousel PUT:",e);return res.status(500).json({success:false,message:e.message||"Não foi possível salvar o carrossel."})}
+});
+
 app.get("/api/admin/products",requireAdmin,async(req,res)=>{try{const data=await supabaseRequest("products?select=*,product_variants(*)&order=created_at.desc");return res.json({success:true,products:data||[]})}catch(e){console.error("Admin products GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar os produtos."})}});
 
 function analyticsClientInfo(req){
@@ -644,6 +677,39 @@ async function uploadProductImage({ productId, fileName, contentType, dataBase64
     if (!response.ok) throw new Error("Upload da imagem falhou (" + response.status + ").");
     return SUPABASE_URL + "/storage/v1/object/public/" + PRODUCT_IMAGE_BUCKET + "/" + objectPath;
 }
+
+async function uploadCarouselImage({fileName,contentType,dataBase64}) {
+    if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY não configurada no backend.");
+    const allowed = new Set(["image/jpeg", "image/png", "image/webp"]);
+    if (!allowed.has(contentType)) throw new Error("Formato de imagem não permitido. Use JPG, PNG ou WebP.");
+    const raw = String(dataBase64 || "").replace(/^data:[^;]+;base64,/, "");
+    const buffer = Buffer.from(raw, "base64");
+    if (!buffer.length) throw new Error("Arquivo de imagem vazio.");
+    if (buffer.length > 20 * 1024 * 1024) throw new Error("Cada imagem pode ter no máximo 20 MB.");
+    const ext = contentType === "image/png" ? "png" : contentType === "image/webp" ? "webp" : "jpg";
+    const safeName = safeString(fileName).toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/-+/g, "-").replace(/^[-.]+|[-.]+$/g, "") || "carousel."+ext;
+    const objectPath = "carousel/" + Date.now() + "-" + crypto.randomBytes(5).toString("hex") + "-" + safeName;
+    const response = await fetch(SUPABASE_URL + "/storage/v1/object/" + PRODUCT_IMAGE_BUCKET + "/" + encodeURIComponent(objectPath).replace(/%2F/g, "/"), {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY, "apikey": SUPABASE_SERVICE_ROLE_KEY, "Content-Type": contentType, "x-upsert": "false", "cache-control": "31536000" },
+        body: buffer
+    });
+    if (!response.ok) throw new Error("Upload da imagem do carrossel falhou (" + response.status + ").");
+    return SUPABASE_URL + "/storage/v1/object/public/" + PRODUCT_IMAGE_BUCKET + "/" + objectPath;
+}
+app.post("/api/admin/uploads/carousel-image", requireAdmin, async (req,res)=>{
+  try{
+    const url=await uploadCarouselImage({
+      fileName:safeString(req.body?.file_name),
+      contentType:safeString(req.body?.content_type).toLowerCase(),
+      dataBase64:safeString(req.body?.data_base64)
+    });
+    return res.status(201).json({success:true,url});
+  }catch(e){
+    console.error("Admin carousel image upload:",e);
+    return res.status(400).json({success:false,message:e.message||"Não foi possível enviar a imagem."});
+  }
+});
 
 app.post("/api/admin/uploads/product-image", requireAdmin, async (req, res) => {
     try {
