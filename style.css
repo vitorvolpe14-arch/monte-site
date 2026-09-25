@@ -392,6 +392,8 @@ a {
 
     min-height: 600px;
 
+    background: #8a1f2c;
+
 }
 
 
@@ -404,6 +406,8 @@ a {
     position: relative;
 
     overflow: hidden;
+
+    background: #8a1f2c;
 
 }
 
@@ -5220,7 +5224,7 @@ img {
     aspect-ratio: auto !important;
     position: relative;
     overflow: hidden;
-    background: #fff;
+    background: #8a1f2c;
 }
 
 #carouselSlides {
