@@ -1,4 +1,4 @@
-let carouselImagesDraft=[];
+let carouselImagesDraft=[];\nlet carouselModuleBound=false;
 
 window.loadCarousel=async function loadCarousel(){
   try{
