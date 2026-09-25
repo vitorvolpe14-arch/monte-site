@@ -359,7 +359,20 @@ app.use((req, res, next) => {
     res.setHeader("X-Frame-Options", "SAMEORIGIN");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-    res.setHeader("Content-Security-Policy", "object-src 'none'; base-uri 'self'; frame-ancestors 'self'");
+    res.setHeader("Content-Security-Policy", [
+        "default-src 'self'",
+        "base-uri 'self'",
+        "frame-ancestors 'self'",
+        "object-src 'none'",
+        "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' https://fonts.gstatic.com data:",
+        "img-src 'self' data: blob: https:",
+        "connect-src 'self' https://uvrhougaurupvkxmezwy.supabase.co https://viacep.com.br",
+        "form-action 'self' https:",
+        "upgrade-insecure-requests"
+    ].join("; "));
+    res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
     if (req.secure || req.headers["x-forwarded-proto"] === "https") {
         res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     }
@@ -449,8 +462,17 @@ const ADMIN_SESSION_TTL = 1000 * 60 * 60 * 8;
 const adminSessions = new Map();
 const adminLoginAttempts = new Map();
 function parseCookies(req){const h=req.headers.cookie||"";const o={};h.split(";").filter(Boolean).forEach(p=>{const i=p.indexOf("=");if(i>=0)o[p.slice(0,i).trim()]=decodeURIComponent(p.slice(i+1).trim())});return o}
-function getAdminSession(req){const t=parseCookies(req).monte_admin_session;if(!t)return null;const s=adminSessions.get(t);if(!s)return null;if(Date.now()>s.expiresAt){adminSessions.delete(t);return null}return {token:t,...s}}
-function requireAdmin(req,res,next){const s=getAdminSession(req);if(!s)return res.status(401).json({success:false,message:"Acesso administrativo não autorizado."});req.adminSession=s;next()}
+function getAdminSession(req){const t=parseCookies(req)["__Host-monte_admin_session"];if(!t)return null;const s=adminSessions.get(t);if(!s)return null;if(Date.now()>s.expiresAt){adminSessions.delete(t);return null}return {token:t,...s}}
+function requireAdmin(req,res,next){
+    const origin = safeString(req.headers.origin);
+    if (origin && !allowedOrigins.has(origin.replace(/\/$/, ""))) {
+        return res.status(403).json({success:false,message:"Origem não autorizada."});
+    }
+    const s=getAdminSession(req);
+    if(!s)return res.status(401).json({success:false,message:"Acesso administrativo não autorizado."});
+    req.adminSession=s;
+    next();
+}
 function normalizeCity(value) {
     return safeString(value)
         .normalize("NFD")
@@ -478,8 +500,8 @@ function loginKey(req,email){return `${req.ip||"unknown"}:${safeString(email).to
 function loginAllowed(req,email){const r=adminLoginAttempts.get(loginKey(req,email));if(!r)return true;if(r.lockedUntil&&Date.now()<r.lockedUntil)return false;if(r.lockedUntil)adminLoginAttempts.delete(loginKey(req,email));return true}
 function failedLogin(req,email){const k=loginKey(req,email);const r=adminLoginAttempts.get(k)||{count:0,lockedUntil:0};r.count++;if(r.count>=5){r.count=0;r.lockedUntil=Date.now()+15*60*1000}adminLoginAttempts.set(k,r)}
 function clearLoginFailures(req,email){adminLoginAttempts.delete(loginKey(req,email))}
-function setAdminCookie(res,t){res.setHeader("Set-Cookie",`monte_admin_session=${encodeURIComponent(t)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(ADMIN_SESSION_TTL/1000)}`)}
-function clearAdminCookie(res){res.setHeader("Set-Cookie","monte_admin_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0")}
+function setAdminCookie(res,t){res.setHeader("Set-Cookie",`__Host-monte_admin_session=${encodeURIComponent(t)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(ADMIN_SESSION_TTL/1000)}`)}
+function clearAdminCookie(res){res.setHeader("Set-Cookie","__Host-monte_admin_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0")}
 app.post("/api/admin/login",adminLoginRateLimit,(req,res)=>{const email=safeString(req.body?.email).toLowerCase(),password=req.body?.password;if(!ADMIN_EMAIL||!ADMIN_PASSWORD_HASH)return res.status(503).json({success:false,message:"Acesso administrativo não configurado no servidor."});if(!loginAllowed(req,email))return res.status(429).json({success:false,message:"Muitas tentativas. Tente novamente em 15 minutos."});if(email!==ADMIN_EMAIL.toLowerCase()||!passwordMatches(password)){failedLogin(req,email);return res.status(401).json({success:false,message:"E-mail ou senha incorretos."})}clearLoginFailures(req,email);const token=crypto.randomBytes(32).toString("hex");adminSessions.set(token,{email:ADMIN_EMAIL,expiresAt:Date.now()+ADMIN_SESSION_TTL});setAdminCookie(res,token);return res.json({success:true,email:ADMIN_EMAIL})});
 app.post("/api/admin/logout",(req,res)=>{const t=parseCookies(req).monte_admin_session;if(t)adminSessions.delete(t);clearAdminCookie(res);return res.json({success:true})});
 app.get("/api/admin/session",(req,res)=>{const s=getAdminSession(req);if(!s)return res.status(401).json({success:false});return res.json({success:true,email:s.email})});
@@ -658,14 +680,36 @@ app.get("/api/product-image-normalized", async (req, res) => {
 
 
 
+async function validateImageBuffer(buffer, declaredContentType) {
+    if (!Buffer.isBuffer(buffer) || !buffer.length) {
+        throw new Error("Arquivo de imagem vazio.");
+    }
+    if (buffer.length > 20 * 1024 * 1024) {
+        throw new Error("Cada imagem pode ter no máximo 20 MB.");
+    }
+    const metadata = await sharp(buffer).metadata();
+    const detected = metadata?.format === "jpeg" ? "image/jpeg"
+        : metadata?.format === "png" ? "image/png"
+        : metadata?.format === "webp" ? "image/webp"
+        : null;
+    if (!detected || detected !== declaredContentType) {
+        throw new Error("O conteúdo da imagem não corresponde ao formato informado.");
+    }
+    if (!Number.isFinite(metadata.width) || !Number.isFinite(metadata.height) ||
+        metadata.width < 1 || metadata.height < 1 ||
+        metadata.width > 20000 || metadata.height > 20000) {
+        throw new Error("Dimensões de imagem inválidas.");
+    }
+    return metadata;
+}
+
 async function uploadProductImage({ productId, fileName, contentType, dataBase64 }) {
     if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY não configurada no backend.");
     const allowed = new Set(["image/jpeg", "image/png", "image/webp"]);
     if (!allowed.has(contentType)) throw new Error("Formato de imagem não permitido. Use JPG, PNG ou WebP.");
     const raw = String(dataBase64 || "").replace(/^data:[^;]+;base64,/, "");
     const buffer = Buffer.from(raw, "base64");
-    if (!buffer.length) throw new Error("Arquivo de imagem vazio.");
-    if (buffer.length > 20 * 1024 * 1024) throw new Error("Cada imagem pode ter no máximo 8 MB.");
+    await validateImageBuffer(buffer, contentType);
     const ext = contentType === "image/png" ? "png" : contentType === "image/webp" ? "webp" : "jpg";
     const safeName = safeString(fileName).toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/-+/g, "-").replace(/^[-.]+|[-.]+$/g, "") || "imagem." + ext;
     const objectPath = productId + "/" + Date.now() + "-" + crypto.randomBytes(5).toString("hex") + "-" + safeName;
@@ -684,8 +728,7 @@ async function uploadCarouselImage({fileName,contentType,dataBase64}) {
     if (!allowed.has(contentType)) throw new Error("Formato de imagem não permitido. Use JPG, PNG ou WebP.");
     const raw = String(dataBase64 || "").replace(/^data:[^;]+;base64,/, "");
     const buffer = Buffer.from(raw, "base64");
-    if (!buffer.length) throw new Error("Arquivo de imagem vazio.");
-    if (buffer.length > 20 * 1024 * 1024) throw new Error("Cada imagem pode ter no máximo 20 MB.");
+    await validateImageBuffer(buffer, contentType);
     const ext = contentType === "image/png" ? "png" : contentType === "image/webp" ? "webp" : "jpg";
     const safeName = safeString(fileName).toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/-+/g, "-").replace(/^[-.]+|[-.]+$/g, "") || "carousel."+ext;
     const objectPath = "carousel/" + Date.now() + "-" + crypto.randomBytes(5).toString("hex") + "-" + safeName;
