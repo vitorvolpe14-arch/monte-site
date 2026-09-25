@@ -232,6 +232,24 @@
      NOVIDADES
 ===================================================== -->
 
+<section id="colecao" class="product-section collection-section">
+
+    <div class="section-heading">
+        <div>
+            <h2>BOLSAS</h2>
+        </div>
+    </div>
+
+    <div class="collection-products-carousel">
+        <button class="collection-carousel-arrow collection-prev" onclick="previousCollectionPage()" aria-label="Ver bolsas anteriores">‹</button>
+        <div class="collection-products-viewport">
+            <div id="allProducts" class="products-grid collection-products-grid"></div>
+        </div>
+        <button class="collection-carousel-arrow collection-next" onclick="nextCollectionPage()" aria-label="Ver mais bolsas">›</button>
+    </div>
+
+</section>
+
 <section id="novidades"
          class="product-section">
 
@@ -288,24 +306,6 @@
 <!-- =====================================================
      COLEÇÃO
 ===================================================== -->
-
-<section id="colecao" class="product-section collection-section">
-
-    <div class="section-heading">
-        <div>
-            <h2>BOLSAS</h2>
-        </div>
-    </div>
-
-    <div class="collection-products-carousel">
-        <button class="collection-carousel-arrow collection-prev" onclick="previousCollectionPage()" aria-label="Ver bolsas anteriores">‹</button>
-        <div class="collection-products-viewport">
-            <div id="allProducts" class="products-grid collection-products-grid"></div>
-        </div>
-        <button class="collection-carousel-arrow collection-next" onclick="nextCollectionPage()" aria-label="Ver mais bolsas">›</button>
-    </div>
-
-</section>
 
 <section id="cintos-acessorios" class="product-section category-section">
     <div class="section-heading">
@@ -374,6 +374,539 @@
     </div>
 
 </section>
+
+
+<!-- =====================================================
+     NEWSLETTER
+===================================================== -->
+
+<section class="newsletter">
+
+    <div>
+
+        <p class="section-label">
+            MONTÊ
+        </p>
+
+        <h2>
+            ENTRE PARA A NOSSA LISTA
+        </h2>
+
+        <p>
+            Receba novidades, lançamentos e conteúdos
+            exclusivos da MONTÊ.
+        </p>
+
+    </div>
+
+
+    <form onsubmit="subscribeNewsletter(event)">
+
+        <input
+            type="email"
+            placeholder="Seu melhor e-mail"
+            required
+        >
+
+        <button type="submit">
+
+            CADASTRAR
+
+        </button>
+
+    </form>
+
+</section>
+
+
+</main>
+
+
+
+<!-- =====================================================
+     BENEFÍCIOS
+===================================================== -->
+<section class="store-benefits" aria-label="Benefícios da MONTÊ">
+    <div class="store-benefit">
+        <span class="store-benefit-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M3 6.5h11v10H3zM14 10h3.2l3 3v3.5H14zM6.5 19a1.8 1.8 0 1 0 0-3.6 1.8 1.8 0 0 0 0 3.6ZM18 19a1.8 1.8 0 1 0 0-3.6A1.8 1.8 0 0 0 18 19Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        </span>
+        <div>
+            <strong>ENTREGA EM TODO O BRASIL</strong>
+            <span>Receba sua MONTÊ onde estiver.</span>
+        </div>
+    </div>
+
+    <div class="store-benefit">
+        <span class="store-benefit-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 3v18M16 7.2c-.7-.9-1.9-1.5-3.7-1.5-2.2 0-3.7 1.1-3.7 2.8 0 4.4 7.5 2 7.5 6.2 0 1.7-1.5 2.8-3.9 2.8-1.8 0-3.1-.6-4-1.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </span>
+        <div>
+            <strong>5% OFF NO PIX</strong>
+            <span>Pagamento à vista com desconto.</span>
+        </div>
+    </div>
+
+    <div class="store-benefit">
+        <span class="store-benefit-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M3 10h18M7 15h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </span>
+        <div>
+            <strong>PARCELE EM ATÉ 10X NO CARTÃO</strong>
+            <span>Compre com praticidade.</span>
+        </div>
+    </div>
+
+    <div class="store-benefit">
+        <span class="store-benefit-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10" width="14" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </span>
+        <div>
+            <strong>COMPRA SEGURA</strong>
+            <span>Seus dados protegidos no pagamento.</span>
+        </div>
+    </div>
+</section>
+
+<!-- =====================================================
+     FOOTER
+===================================================== -->
+
+<footer class="footer">
+
+    <div class="footer-brand">
+
+        <div class="footer-logo">
+            MONTÊ
+        </div>
+
+        <p>
+            Bolsas e acessórios.
+        </p>
+
+    </div>
+
+
+    <div class="footer-column">
+
+        <h3>
+            MONTÊ
+        </h3>
+
+        <a href="#novidades">
+            Novidades
+        </a>
+
+        <a href="#colecao">
+            Coleção
+        </a>
+
+        <a href="#cintos-acessorios">
+            Cintos & acessórios
+        </a>
+
+        <a href="#sale">
+            Sale
+        </a>
+
+    </div>
+
+
+    <div class="footer-column">
+
+        <h3>
+            ATENDIMENTO
+        </h3>
+
+        <a href="trocas-devolucoes.html">
+            Trocas e devoluções
+        </a>
+
+        <a href="politica-privacidade.html">
+            Política de privacidade
+        </a>
+
+        <a href="entrega-frete.html">
+            Entrega e frete
+        </a>
+
+        <a href="termos-de-compra.html">
+            Termos de compra
+        </a>
+
+        <a href="/minhas-compras.html">
+            Minhas compras
+        </a>
+
+    </div>
+
+
+    <div class="footer-column">
+
+        <h3>
+            REDES
+        </h3>
+
+        <a href="https://www.instagram.com/oficialmonte_/" target="_blank" rel="noopener noreferrer">
+            Instagram — @oficialmonte_
+        </a>
+
+        <a href="https://wa.me/5585992163305" target="_blank" rel="noopener noreferrer">
+            WhatsApp — (85) 99216-3305
+        </a>
+
+    </div>
+
+
+    <div class="footer-bottom">
+
+        © 2026 MONTÊ — Todos os direitos reservados.
+
+    </div>
+
+</footer>
+
+
+<!-- =====================================================
+     MODAL DO PRODUTO
+===================================================== -->
+
+<div id="productModal"
+     class="modal">
+
+    <div class="modal-content">
+
+        <button class="modal-close"
+                onclick="closeProductModal()">
+
+            ×
+
+        </button>
+
+
+        <div class="product-detail">
+
+
+            <div class="product-gallery">
+
+                <div class="gallery-main">
+
+                    <img id="modalMainImage"
+                         src=""
+                         alt="">
+
+                </div>
+
+
+                <div id="galleryThumbnails"
+                     class="gallery-thumbnails">
+
+                </div>
+
+            </div>
+
+
+            <div class="product-information">
+
+                <p id="modalCategory"
+                   class="product-category">
+
+                </p>
+
+
+                <h2 id="modalName">
+
+                </h2>
+
+
+                <div id="modalPrice"
+                     class="modal-price">
+
+                </div>
+
+
+                <p id="modalDescription"
+                   class="modal-description">
+
+                </p>
+
+
+                <div class="product-divider">
+                </div>
+
+                <div id="variantSelector" class="variant-selector" style="display:none;">
+                    <p class="quantity-title">COR</p>
+                    <div id="variantOptions" class="variant-options"></div>
+                </div>
+
+                <p class="quantity-title">
+                    QUANTIDADE
+                </p>
+
+
+                <div class="quantity-selector">
+
+                    <button onclick="changeQuantity(-1)">
+                        −
+                    </button>
+
+                    <span id="quantity">
+                        1
+                    </span>
+
+                    <button onclick="changeQuantity(1)">
+                        +
+                    </button>
+
+                </div>
+
+
+                <button
+                    id="addProductButton"
+                    class="add-cart-large">
+
+                    ADICIONAR AO CARRINHO
+
+                </button>
+
+
+                <div class="product-shipping">
+
+                    <strong>
+                        ENVIO
+                    </strong>
+
+                    <p>
+                        Frete fixo de R$ 15,00 para a capital
+                        e R$ 20,00 para região metropolitana.
+                    </p>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =====================================================
+     CARRINHO
+===================================================== -->
+
+<div id="cartOverlay"
+     class="cart-overlay"
+     onclick="closeCartOutside(event)">
+
+
+    <aside class="cart">
+
+        <div class="cart-header">
+
+            <h2>
+                SEU CARRINHO
+            </h2>
+
+            <button onclick="closeCart()">
+                ×
+            </button>
+
+        </div>
+
+
+        <div id="cartItems"
+             class="cart-items">
+
+        </div>
+
+
+        <div class="cart-footer">
+
+            <div class="subtotal">
+
+                <span>
+                    SUBTOTAL
+                </span>
+
+                <strong id="cartTotal">
+                    R$ 0,00
+                </strong>
+
+            </div>
+
+
+            <div class="checkout-form">
+
+    <h3>SEUS DADOS</h3>
+
+    <input
+        type="text"
+        id="customerName"
+        placeholder="Nome completo"
+        autocomplete="name"
+    >
+
+    <input
+        type="email"
+        id="customerEmail"
+        placeholder="E-mail"
+        autocomplete="email"
+    >
+
+    <input
+        type="tel"
+        id="customerPhone"
+        placeholder="Telefone"
+        autocomplete="tel"
+    >
+
+
+    <input
+        type="text"
+        id="customerCpf"
+        placeholder="CPF"
+        inputmode="numeric"
+        maxlength="14"
+        autocomplete="off"
+    >
+
+    <h3>ENDEREÇO DE ENTREGA</h3>
+
+    <input
+        type="text"
+        id="customerCep"
+        placeholder="CEP"
+        maxlength="9"
+        autocomplete="postal-code"
+    >
+
+    <input
+        type="text"
+        id="customerStreet"
+        placeholder="Rua / Avenida"
+        autocomplete="street-address"
+    >
+
+    <div class="checkout-row">
+
+        <input
+            type="text"
+            id="customerNumber"
+            placeholder="Número"
+            autocomplete="address-line1"
+        >
+
+        <input
+            type="text"
+            id="customerComplement"
+            placeholder="Complemento (apto, bloco, condomínio)"
+            autocomplete="address-line2"
+        >
+
+    </div>
+
+    <input
+        type="text"
+        id="customerNeighborhood"
+        placeholder="Bairro"
+        autocomplete="address-level3"
+    >
+
+    <input
+        type="text"
+        id="customerCity"
+        placeholder="Cidade"
+        autocomplete="address-level2"
+    >
+
+    <input
+        type="text"
+        id="customerState"
+        placeholder="Estado (UF)"
+        maxlength="2"
+        autocomplete="address-level1"
+    >
+
+    <div class="shipping-result">
+        <div class="shipping-result-head">
+            <span>FRETE</span>
+            <strong id="shippingValue">Informe seu endereço</strong>
+        </div>
+        <div id="shippingOptions" class="shipping-options"></div>
+    </div>
+
+    <div class="payment-methods">
+        <h3>FORMA DE PAGAMENTO</h3>
+
+        <label class="payment-option selected">
+            <input type="radio" name="paymentMethod" value="pix" checked onchange="selectPaymentMethod('pix')">
+            <span class="payment-option-content">
+                <strong>Pix</strong>
+                <small>5% de desconto nos produtos</small>
+            </span>
+            <span class="payment-option-price" id="pixTotal">—</span>
+        </label>
+
+        <label class="payment-option">
+            <input type="radio" name="paymentMethod" value="card" onchange="selectPaymentMethod('card')">
+            <span class="payment-option-content">
+                <strong>Cartão de crédito</strong>
+                <small>Até 3x sem juros</small>
+            </span>
+            <span class="payment-option-price" id="cardTotal">—</span>
+        </label>
+    </div>
+
+    <div class="checkout-total">
+        <span>TOTAL</span>
+        <strong id="checkoutTotal">R$ 0,00</strong>
+    </div>
+
+</div>
+
+
+            <button
+                onclick="checkout()"
+                class="checkout-button">
+
+                FINALIZAR COMPRA
+
+            </button>
+
+
+            <button
+                onclick="closeCart()"
+                class="continue-shopping">
+
+                CONTINUAR COMPRANDO
+
+            </button>
+
+        </div>
+
+    </aside>
+
+</div>
+
+
+<!-- =====================================================
+     TOAST
+===================================================== -->
+
+<div id="toast"
+     class="toast">
+
+</div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="script.js?v=20260925-resend1"></script>
+
+</body>
+
+</html> 
 
 
 <!-- =====================================================
