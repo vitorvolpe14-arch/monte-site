@@ -43,7 +43,7 @@
           <div class="dropzone-icon">＋</div>
           <strong>Arraste suas fotos aqui</strong>
           <span>ou selecione as fotos do celular ou computador</span>
-          <small>JPG, PNG ou WebP · até 20 MB por imagem</small><label class="upload-file-button" for="carouselImageFiles">SELECIONAR FOTOS</label>
+          <small>JPG, PNG ou WebP · até 20 MB por imagem</small><button id="selectCarouselPhotosButton" type="button" class="upload-file-button">SELECIONAR FOTOS</button>
         </div>
         <small id="carouselImageStatus" class="field-help"></small>
         <div id="carouselImageManager" class="product-image-manager"></div>
@@ -100,7 +100,7 @@
       <div class="full-width image-upload-field">
         <label>Fotos do produto</label>
         <div id="productImageDropzone" class="product-image-dropzone" tabindex="0" role="button" aria-label="Adicionar fotos do produto">
-          <input id="productImageFiles" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+          <input id="productImageFiles" type="file" accept="image/*,.jpg,.jpeg,.png,.webp" multiple>
           <div class="dropzone-icon">＋</div>
           <strong>Arraste suas fotos aqui</strong>
           <span>ou clique para selecionar do computador</span>
