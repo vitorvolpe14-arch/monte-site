@@ -706,3 +706,31 @@
     min-width: 190px;
   }
 }
+
+
+/* Lixeira dos produtos */
+.admin-product-actions .delete-product-button{
+    width:42px;
+    min-width:42px;
+    padding:0;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    background:#fff;
+    color:#8b1e1e;
+    border:1px solid #e1d6d6;
+    font-size:16px;
+    line-height:1;
+}
+.admin-product-actions .delete-product-button:hover{
+    background:#8b1e1e;
+    color:#fff;
+    border-color:#8b1e1e;
+}
+@media (max-width:800px){
+    .admin-product-actions .delete-product-button{
+        width:100%;
+        min-height:36px;
+        font-size:15px;
+    }
+}
