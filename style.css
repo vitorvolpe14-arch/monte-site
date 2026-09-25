@@ -5373,3 +5373,12 @@ img {
     font-style: normal;
     font-synthesis: none;
 }
+
+
+/* MONTÊ — Lovelo oficial aplicada às logos */
+.logo, .footer-logo {
+    font-family: "Lovelo", sans-serif !important;
+    font-weight: 900 !important;
+    font-style: normal !important;
+    font-synthesis: none !important;
+}
