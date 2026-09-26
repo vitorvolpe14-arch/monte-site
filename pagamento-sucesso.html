@@ -36,7 +36,7 @@ h1{text-align:center;font-size:29px;font-weight:500;margin:0 0 10px}
 <div id="content"><div class="check">✓</div><h1 id="title">Pedido recebido</h1><p class="subtitle" id="subtitle">Estamos carregando os detalhes do seu pedido.</p>
 <div id="orderBox" class="order">Carregando pedido...</div><div id="items" class="items"></div><div id="pix" class="pix">
 <h2>PAGAMENTO VIA PIX</h2><p>Seu pedido foi criado. Para concluir, pague pelo QR Code ou copie o Pix Copia e Cola.</p>
-<canvas id="pixQr" width="240" height="240"></canvas><strong id="pixAmount"></strong>
+<img id="pixQr" width="240" height="240" alt="QR Code Pix" style="display:block;margin:18px auto;background:#fff;padding:8px;width:240px;height:240px;"><strong id="pixAmount"></strong>
 <textarea id="pixCode" class="pix-code" readonly></textarea><button class="copy" onclick="copyPix()">COPIAR PIX COPIA E COLA</button>
 </div><a class="back" href="/">Voltar para a MONTÊ</a></div>
 </section></main>
@@ -92,10 +92,14 @@ function renderOrder(o){
     pix.style.display="block";
     document.getElementById("pixAmount").textContent=money(o.total);
     document.getElementById("pixCode").value=o.pix_payload;
-    if(window.QRCode){
-      QRCode.toCanvas(document.getElementById("pixQr"),o.pix_payload,{
+    const qr=document.getElementById("pixQr");
+    const encoded=encodeURIComponent(o.pix_payload);
+    const fallback="https://quickchart.io/qr?size=280&margin=2&ecLevel=M&text="+encoded;
+    qr.src=fallback;
+    if(window.QRCode?.toDataURL){
+      QRCode.toDataURL(o.pix_payload,{
         width:240,margin:2,errorCorrectionLevel:"M"
-      });
+      }).then(url=>{qr.src=url;}).catch(()=>{qr.src=fallback;});
     }
   }
 
