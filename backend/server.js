@@ -560,7 +560,7 @@ app.get("/pagamento-infinitepay", (req, res) => {
         const target = String(req.query?.url || "").trim();
         const parsed = new URL(target);
 
-        if (parsed.protocol !== "https:" || parsed.hostname !== "checkout.infinitepay.io") {
+        if (parsed.protocol !== "https:" || !("checkout.infinitepay.io" === parsed.hostname || "checkout.infinitepay.com.br" === parsed.hostname || "buy.infinitepay.com" === parsed.hostname)) {
             return res.status(400).send("Link de pagamento inválido.");
         }
 
