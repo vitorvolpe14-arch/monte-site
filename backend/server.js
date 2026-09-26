@@ -2343,31 +2343,20 @@ app.post(
                CHAMADA REAL DA INFINITEPAY
             ================================================= */
 
-            const response =
-                await fetch(
-                    INFINITEPAY_API,
-                    {
-
-                        method:
-                            "POST",
-
-                        headers: {
-
-                            "Content-Type":
-                                "application/json",
-
-                            "Accept":
-                                "application/json"
-
-                        },
-
-                        body:
-                            JSON.stringify(
-                                payload
-                            )
-
-                    }
-                );
+            const infinitePayStartedAt = Date.now();
+            const response = await fetchWithTimeout(
+                INFINITEPAY_API,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json"
+                    },
+                    body: JSON.stringify(payload)
+                },
+                15000
+            );
+            console.log("📥 InfinitePay respondeu em", Date.now() - infinitePayStartedAt, "ms");
 
 
             /* =================================================
