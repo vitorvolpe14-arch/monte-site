@@ -1596,9 +1596,8 @@ async function checkout() {
         if(!response.ok)throw new Error(data?.message||("Erro do servidor ("+response.status+")."));
 
         if(paymentMethod==="pix"&&data?.direct_pix&&data?.pix_payload){
-            renderDirectPixPayment(data);
-            if(checkoutButton){checkoutButton.disabled=true;checkoutButton.textContent="PIX GERADO";}
-            showToast("QR Code Pix gerado. Confira o valor antes de pagar.");
+            closeCart();
+            window.location.href="/pagamento-sucesso?order_nsu="+encodeURIComponent(data.order_nsu)+"&payment_method=pix";
             return;
         }
 
