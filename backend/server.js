@@ -258,35 +258,32 @@ async function sendOrderConfirmationEmail(order) {
     const total = Number(order.total || 0);
     const purchasesUrl = SITE_URL.replace(/\/$/, "") + "/minhas-compras.html?order_nsu=" + encodeURIComponent(orderCode);
     const html = "<html><body style=\"margin:0;background:#f7f5f2;font-family:Arial,Helvetica,sans-serif;color:#171717;\">" +
-      "<div style=\"max-width:620px;margin:0 auto;padding:40px 20px;\">" +
-      "<div style=\"background:#111;color:#fff;text-align:center;padding:24px 20px;letter-spacing:6px;font-size:24px;\">MONTÊ</div>" +
-      "<div style=\"background:#fff;padding:38px 30px;\">" +
-      "<p style=\"margin:0 0 12px;font-size:12px;letter-spacing:2px;color:#777;\">COMPRA CONFIRMADA</p>" +
+      "<div style=\"max-width:620px;margin:0 auto;padding:40px 20px;\"><div style=\"background:#111;color:#fff;text-align:center;padding:24px 20px;letter-spacing:6px;font-size:24px;\">MONTÊ</div>" +
+      "<div style=\"background:#fff;padding:38px 30px;\"><p style=\"margin:0 0 12px;font-size:12px;letter-spacing:2px;color:#777;\">COMPRA CONFIRMADA</p>" +
       "<h1 style=\"margin:0 0 18px;font-size:28px;font-weight:500;\">Obrigada pela sua compra, " + escapeEmailHtml(customerName) + ".</h1>" +
       "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Seu pagamento foi confirmado e seu pedido já está registrado na MONTÊ.</p>" +
       "<div style=\"margin:28px 0;padding:20px;background:#f7f5f2;\"><p style=\"margin:0 0 8px;font-size:11px;letter-spacing:1.5px;color:#777;\">NÚMERO DO PEDIDO</p><strong style=\"font-size:20px;\">" + escapeEmailHtml(orderCode) + "</strong><p style=\"margin:14px 0 0;font-size:14px;color:#555;\">Total: <strong>R$ " + total.toFixed(2).replace(".", ",") + "</strong></p></div>" +
-      "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Acompanhe o status do seu pedido, o código de rastreio e o link de entrega pela área <strong>Minhas Compras</strong>.</p>" +
-      "<div style=\"text-align:center;margin:30px 0;\"><a href=\"" + purchasesUrl + "\" style=\"display:inline-block;background:#111;color:#fff;text-decoration:none;padding:15px 26px;font-size:13px;letter-spacing:1.5px;\">ACESSAR MINHAS COMPRAS</a></div>" +
-      "<p style=\"font-size:13px;line-height:1.6;color:#777;\">Você também pode acessar o site da MONTÊ e entrar em <strong>Minhas Compras</strong> usando o número do pedido e o e-mail utilizado na compra.</p></div>" +
+      "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Acompanhe o status do seu pedido e novas atualizações pela área <strong>Minhas Compras</strong>.</p>" +
+      "<div style=\"text-align:center;margin:30px 0;\"><a href=\"" + purchasesUrl + "\" style=\"display:inline-block;background:#111;color:#fff;text-decoration:none;padding:15px 26px;font-size:13px;letter-spacing:1.5px;\">ACESSAR MINHAS COMPRAS</a></div></div>" +
       "<p style=\"text-align:center;font-size:11px;color:#999;margin:20px 0;\">MONTÊ — Bolsas e acessórios</p></div></body></html>";
+    const text = "Compra confirmada na MONTÊ\n\nPedido: " + orderCode + "\nTotal: R$ " + total.toFixed(2).replace(".", ",") + "\n\nAcesse: " + purchasesUrl;
+    const idempotencyKey = "monte-order-confirmation-" + String(order.order_nsu);
     const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify({
-            from: RESEND_FROM_NAME ? RESEND_FROM_NAME + " <" + RESEND_FROM_EMAIL + ">" : RESEND_FROM_EMAIL,
-            to: [email],
-            subject: "MONTÊ — Pedido " + orderCode + " confirmado",
-            html
+        method:"POST",
+        headers:{"Authorization":"Bearer "+RESEND_API_KEY,"Content-Type":"application/json","Accept":"application/json"},
+        body:JSON.stringify({
+            from:RESEND_FROM_NAME+" <"+RESEND_FROM_EMAIL+">",
+            to:[email],
+            subject:"MONTÊ — Pedido "+orderCode+" confirmado",
+            text, html,
+            tags:[{name:"type",value:"order_confirmation"},{name:"order_nsu",value:String(order.order_nsu)}]
         })
     });
-    const responseText = await response.text();
-    let data = {};
-    try { data = responseText ? JSON.parse(responseText) : {}; } catch { data = { raw: responseText }; }
-    if (!response.ok) throw new Error("Resend API " + response.status + ": " + JSON.stringify(data));
-    return { sent: true, status: "sent", message_id: data?.id || null };
+    const responseText=await response.text();
+    let data={}; try{data=responseText?JSON.parse(responseText):{}}catch{data={raw:responseText};}
+    if(!response.ok) throw new Error("Resend API "+response.status+": "+JSON.stringify(data));
+    return {sent:true,status:"sent",message_id:data?.id||null,idempotency_key:idempotencyKey};
 }
-
-
 function trackingStatusLabel(status) {
     return ({
         paid: "Pagamento confirmado",
