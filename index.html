@@ -901,6 +901,18 @@
         </label>
     </div>
 
+
+            <div id="directPixPayment" class="direct-pix-payment" hidden>
+                <div class="direct-pix-header"><span>PIX</span><strong>PAGUE COM PIX</strong></div>
+                <p class="direct-pix-order" id="directPixOrder"></p>
+                <div class="direct-pix-qr-wrap"><canvas id="directPixQr" aria-label="QR Code Pix"></canvas></div>
+                <strong class="direct-pix-amount" id="directPixAmount">R$ 0,00</strong>
+                <p class="direct-pix-instruction">Aponte a câmera do banco para o QR Code ou copie o código abaixo.</p>
+                <textarea id="directPixCopyPaste" class="direct-pix-copy" readonly></textarea>
+                <button type="button" class="direct-pix-copy-button" onclick="copyDirectPix()">COPIAR PIX COPIA E COLA</button>
+                <p class="direct-pix-note">O pedido ficará aguardando a confirmação do pagamento.</p>
+            </div>
+
     <div class="checkout-total">
         <span>TOTAL</span>
         <strong id="checkoutTotal">R$ 0,00</strong>
@@ -944,7 +956,8 @@
 
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="script.js?v=20260926-pix-discount-freight"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+<script src="script.js?v=20260926-direct-pix"></script>
 
 </body>
 </html>
