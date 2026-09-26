@@ -438,10 +438,6 @@ async function ensureOrderConfirmationEmail(order) {
         return { sent: false, status: "error", error: error.message };
     }
 }
-async function supabaseRequest(path, options = {}) {
-    if (!SUPABASE_SERVICE_ROLE_KEY) {
-        throw new Error("SUPABASE_SERVICE_ROLE_KEY não configurada no backend.");
-    }
 async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
