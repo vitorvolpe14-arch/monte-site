@@ -442,8 +442,23 @@ async function supabaseRequest(path, options = {}) {
     if (!SUPABASE_SERVICE_ROLE_KEY) {
         throw new Error("SUPABASE_SERVICE_ROLE_KEY não configurada no backend.");
     }
+async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+}
 
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+async function supabaseRequest(path, options = {}) {
+    if (!SUPABASE_SERVICE_ROLE_KEY) {
+        throw new Error("SUPABASE_SERVICE_ROLE_KEY não configurada no backend.");
+    }
+
+    const startedAt = Date.now();
+    const response = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/${path}`, {
         ...options,
         headers: {
             "apikey": SUPABASE_SERVICE_ROLE_KEY,
@@ -452,7 +467,7 @@ async function supabaseRequest(path, options = {}) {
             "Prefer": "return=representation",
             ...(options.headers || {})
         }
-    });
+    }, 12000);
 
     const text = await response.text();
     let data = null;
@@ -462,17 +477,9 @@ async function supabaseRequest(path, options = {}) {
         throw new Error(`Supabase ${response.status}: ${typeof data === "string" ? data : JSON.stringify(data)}`);
     }
 
+    console.log(`Supabase OK ${response.status} em ${Date.now() - startedAt}ms: ${String(path).slice(0, 140)}`);
     return data;
 }
-
-
-
-/* =====================================================
-
-
-/* =====================================================
-   FRETE — REGRAS LOCAIS + SUPERFRETE
-===================================================== */
 
 const METROPOLITAN_CITIES = new Set(["AQUIRAZ","CAUCAIA","EUSEBIO","GUAIUBA","ITAITINGA","MARACANAU"]);
 
