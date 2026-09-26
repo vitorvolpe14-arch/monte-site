@@ -1657,19 +1657,8 @@ app.post(
             const {
                 items,
                 customer,
-                payment_method: requestedPaymentMethod,
                 shipping_service_id: requestedShippingServiceId
             } = req.body || {};
-
-            const paymentMethod = String(requestedPaymentMethod || "pix").toLowerCase();
-
-            if (!["pix", "card"].includes(paymentMethod)) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Forma de pagamento inválida."
-                });
-            }
-
 
             /* =================================================
                VALIDAÇÃO DO CARRINHO
@@ -2165,13 +2154,10 @@ app.post(
                 (sum, item) => sum + Number(item.price) * Number(item.quantity), 0
             ).toFixed(2));
 
-            // Pix: 5% de desconto somente nos produtos. O frete permanece integral.
-            const discountedProductSubtotal = paymentMethod === "pix"
-                ? Number((subtotal * 0.95).toFixed(2))
-                : subtotal;
-
+            // O checkout da MONTÊ usa sempre o valor integral.
+            // A cliente escolhe Pix ou cartão somente dentro da InfinitePay.
             const checkoutTotal = Number(
-                (discountedProductSubtotal + shippingValue).toFixed(2)
+                (subtotal + shippingValue).toFixed(2)
             );
 
             const savedOrders = await supabaseRequest("orders", {
@@ -2192,7 +2178,7 @@ app.post(
                     shipping_delivery_days: shippingOption.delivery_days || shippingOption.delivery_max_days || null,
                     total: checkoutTotal,
                     status: "pending",
-                    payment_method: paymentMethod === "pix" ? "pix" : "credit_card",
+                    payment_method: null,
                     whatsapp_tracking_opt_in: customer.whatsapp_updates === true,
                     whatsapp_tracking_status: customer.whatsapp_updates === true ? "pending" : "opted_out",
                     items: productItems
@@ -2226,17 +2212,11 @@ app.post(
             ================================================= */
 
             const infinitePayItems =
-                productItems.map((item) => {
-                    const checkoutUnitPrice = paymentMethod === "pix"
-                        ? Number((item.price * 0.95).toFixed(2))
-                        : item.price;
-
-                    return {
-                        quantity: item.quantity,
-                        price: Math.round(checkoutUnitPrice * 100),
-                        description: item.description
-                    };
-                });
+                productItems.map((item) => ({
+                    quantity: item.quantity,
+                    price: Math.round(item.price * 100),
+                    description: item.description
+                }));
 
             if (shippingValue > 0) {
                 infinitePayItems.push({
