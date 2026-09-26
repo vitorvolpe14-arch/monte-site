@@ -1542,380 +1542,106 @@ async function lookupAddressByCep() {
 ===================================================== */
 
 async function checkout() {
+    if (!Array.isArray(cart) || cart.length === 0) { showToast("Seu carrinho está vazio."); return; }
+    const name=document.getElementById("customerName")?.value.trim();
+    const email=document.getElementById("customerEmail")?.value.trim();
+    const phone=document.getElementById("customerPhone")?.value.trim();
+    const cpf=document.getElementById("customerCpf")?.value.trim();
+    const cep=document.getElementById("customerCep")?.value.trim();
+    const street=document.getElementById("customerStreet")?.value.trim();
+    const number=document.getElementById("customerNumber")?.value.trim();
+    const complement=document.getElementById("customerComplement")?.value.trim();
+    const neighborhood=document.getElementById("customerNeighborhood")?.value.trim();
+    const city=document.getElementById("customerCity")?.value.trim();
+    const state=document.getElementById("customerState")?.value.trim().toUpperCase();
 
-    // 1. Verifica carrinho
-    if (!Array.isArray(cart) || cart.length === 0) {
-
-        showToast("Seu carrinho está vazio.");
-
-        return;
+    if(!name||!email||!phone||!cpf||!cep||!street||!number||!neighborhood||!city||!state){
+        showToast("Preencha todos os dados do cliente e da entrega."); return;
     }
-
-
-    // 2. Captura os dados
-    const name =
-        document.getElementById("customerName")?.value.trim();
-
-    const email =
-        document.getElementById("customerEmail")?.value.trim();
-
-    const phone =
-        document.getElementById("customerPhone")?.value.trim();
-
-    const cpf =
-        document.getElementById("customerCpf")?.value.trim();
-
-    const cep =
-        document.getElementById("customerCep")?.value.trim();
-
-    const street =
-        document.getElementById("customerStreet")?.value.trim();
-
-    const number =
-        document.getElementById("customerNumber")?.value.trim();
-
-    const complement =
-        document.getElementById("customerComplement")?.value.trim();
-
-    const neighborhood =
-        document.getElementById("customerNeighborhood")?.value.trim();
-
-    const city =
-        document.getElementById("customerCity")?.value.trim();
-
-    const state =
-        document.getElementById("customerState")?.value.trim().toUpperCase();
-
-    const isOutsideLocalArea =
-        state !== "CE" ||
-        !["FORTALEZA", ...metropolitanCities].includes(normalizeCity(city));
-
-
-    // 3. Validação
-    if (
-        !name ||
-        !email ||
-        !phone ||
-        !cpf ||
-        !cep ||
-        !street ||
-        !number ||
-        !neighborhood ||
-        !city ||
-        !state
-    ) {
-
-        showToast(
-            "Preencha todos os dados do cliente e da entrega."
-        );
-
-        return;
-    }
-
-
-    const cpfDigits = cpf.replace(/\D/g, "");
-    const whatsappNumber = phone.replace(/\D/g, "");
-
-    if (cpfDigits.length !== 11) {
-        showToast("Informe um CPF válido com 11 dígitos.");
-        return;
-    }
-
-    // 4. Frete
-    // Fortaleza capital: R$ 15,00.
-    // Outras localidades aguardam cotação de transportadora no backend.
-    const shipping = getShippingValue();
-
-
-    // 5. Monta os produtos
-    const items = cart
-        .map(item => {
-
-            const price =
-                Number(item.price);
-
-            const quantity =
-                Number(item.quantity) || 1;
-
-
-            if (
-                !Number.isFinite(price) ||
-                price <= 0
-            ) {
-                return null;
-            }
-
-
-            return {
-
-                quantity: quantity,
-
-                price: price,
-
-                description: String(
-                    item.name || "Produto MONTÊ"
-                ),
-
-                sku: item.variant_sku || item.sku ? String(item.variant_sku || item.sku) : null,
-                id: item.id || item.product_id || null,
-                product_id: item.id || item.product_id || null,
-                variant_id: item.variant_id || null,
-                variant_color: item.variant_color || null
-
-            };
-
-        })
-        .filter(Boolean);
-
-
-    // 6. O backend valida novamente a modalidade e o valor do frete.
-    if (!selectedShippingOption) {
-        showToast("Selecione uma opção de frete antes de finalizar a compra.");
-        return;
-    }
-    const shippingServiceId = String(selectedShippingOption.id || "");
-
-    // Segurança
-    if (items.length === 0) {
-
-        showToast(
-            "Não foi possível identificar os produtos do carrinho."
-        );
-
-        return;
-    }
-
-
-    const paymentMethod =
-        document.querySelector('input[name="paymentMethod"]:checked')?.value ||
-        selectedPaymentMethod ||
-        "pix";
-
-    if (!["pix", "credit_card"].includes(paymentMethod)) {
-        showToast("Selecione uma forma de pagamento válida.");
-        return;
-    }
-
-    // 7. Desabilita o botão durante o processamento
-    const checkoutButton =
-        document.querySelector(".checkout-button");
-
-
-    if (checkoutButton) {
-
-        checkoutButton.disabled = true;
-
-        checkoutButton.textContent =
-            "PREPARANDO PAGAMENTO...";
-
-    }
-
-
-    showToast(
-        "Preparando seu pagamento..."
-    );
-
-
-    try {
-
-        // 8. Envia para o backend do Render
-        const response =
-            await fetch(
-                "/api/criar-checkout",
-                {
-
-                    method: "POST",
-
-                    headers: {
-
-                        "Content-Type":
-                            "application/json",
-
-                        "Accept":
-                            "application/json"
-
-                    },
-
-                    body: JSON.stringify({
-
-                        items: items,
-
-                        shipping_service_id: shippingServiceId,
-
-                        payment_method: paymentMethod,
-
-                        customer: {
-
-                            name: name,
-
-                            email: email,
-
-                            phone: phone,
-
-                            whatsapp_phone: whatsappNumber,
-
-                            whatsapp_updates: true,
-
-                            cpf: cpfDigits,
-
-                            address: {
-
-                                cep: cep,
-
-                                street: street,
-
-                                number: number,
-
-                                complement:
-                                    complement || "",
-
-                                neighborhood:
-                                    neighborhood,
-
-                                city: city,
-
-                                state: state
-
-                            }
-
-                        }
-
-                    })
-
-                }
-            );
-
-
-        // 9. Tenta ler a resposta como texto primeiro
-        // Isso evita quebrar quando o Render retorna HTML
-        const responseText =
-            await response.text();
-
-
-        let data = null;
-
-
-        try {
-
-            data =
-                JSON.parse(responseText);
-
-        } catch (jsonError) {
-
-            console.error(
-                "Resposta não é JSON:",
-                responseText
-            );
-
+    const cpfDigits=cpf.replace(/\D/g,"");
+    const whatsappNumber=phone.replace(/\D/g,"");
+    if(cpfDigits.length!==11){showToast("Informe um CPF válido com 11 dígitos.");return;}
+
+    const items=cart.map(item=>{
+        const price=Number(item.price), quantity=Number(item.quantity)||1;
+        if(!Number.isFinite(price)||price<=0)return null;
+        return {quantity,price,description:String(item.name||"Produto MONTÊ"),
+            sku:item.variant_sku||item.sku?String(item.variant_sku||item.sku):null,
+            id:item.id||item.product_id||null,product_id:item.id||item.product_id||null,
+            variant_id:item.variant_id||null,variant_color:item.variant_color||null};
+    }).filter(Boolean);
+
+    if(!selectedShippingOption){showToast("Selecione uma opção de frete antes de finalizar a compra.");return;}
+    const shippingServiceId=String(selectedShippingOption.id||"");
+    if(!items.length){showToast("Não foi possível identificar os produtos do carrinho.");return;}
+
+    const paymentMethod=document.querySelector('input[name="paymentMethod"]:checked')?.value||selectedPaymentMethod||"pix";
+    if(!["pix","credit_card"].includes(paymentMethod)){showToast("Selecione uma forma de pagamento válida.");return;}
+
+    const checkoutButton=document.querySelector(".checkout-button");
+    if(checkoutButton){checkoutButton.disabled=true;checkoutButton.textContent="PREPARANDO PAGAMENTO...";}
+    showToast("Preparando seu pagamento...");
+
+    try{
+        const response=await fetch("/api/criar-checkout",{
+            method:"POST",
+            headers:{"Content-Type":"application/json","Accept":"application/json"},
+            body:JSON.stringify({items,shipping_service_id:shippingServiceId,payment_method:paymentMethod,
+                customer:{name,email,phone,whatsapp_phone:whatsappNumber,whatsapp_updates:true,cpf:cpfDigits,
+                    address:{cep,street,number,complement:complement||"",neighborhood,city,state}}})
+        });
+        const responseText=await response.text();
+        let data=null;
+        try{data=JSON.parse(responseText);}catch{console.error("Resposta não é JSON:",responseText);}
+        if(!response.ok)throw new Error(data?.message||("Erro do servidor ("+response.status+")."));
+
+        if(paymentMethod==="pix"&&data?.direct_pix&&data?.pix_payload){
+            renderDirectPixPayment(data);
+            if(checkoutButton){checkoutButton.disabled=true;checkoutButton.textContent="PIX GERADO";}
+            showToast("QR Code Pix gerado. Confira o valor antes de pagar.");
+            return;
         }
 
-
-        // 10. Se o servidor respondeu erro
-        if (!response.ok) {
-
-            console.error(
-                "Erro HTTP do backend:",
-                response.status,
-                responseText
-            );
-
-
-            throw new Error(
-                data?.message ||
-                `Erro do servidor (${response.status}).`
-            );
-        }
-
-
-        // 11. Procura a URL do checkout
-        const checkoutUrl =
-            data?.url ||
-            data?.checkoutUrl ||
-            data?.paymentUrl ||
-            data?.redirectUrl;
-
-
-        if (!checkoutUrl) {
-
-            console.error(
-                "Backend não retornou URL:",
-                data
-            );
-
-
-            throw new Error(
-                data?.message ||
-                "O servidor não retornou o link da InfinitePay."
-            );
-        }
-
-
-        // 12. Confirma que parece ser uma URL válida
+        const checkoutUrl=data?.url||data?.checkoutUrl||data?.paymentUrl||data?.redirectUrl;
+        if(!checkoutUrl)throw new Error(data?.message||"O servidor não retornou o link da InfinitePay.");
         let validUrl;
+        try{validUrl=new URL(checkoutUrl);}catch{throw new Error("O servidor retornou um link de pagamento inválido.");}
 
-        try {
-
-            validUrl =
-                new URL(checkoutUrl);
-
-        } catch {
-
-            throw new Error(
-                "O servidor retornou um link de pagamento inválido."
-            );
-        }
-
-
-        // 13. Fecha o carrinho
         closeCart();
-
-
-        // 14. Mantém dois fluxos de navegação:
-        // DESKTOP: abre a InfinitePay diretamente.
-        // MOBILE: passa primeiro pelo nosso domínio e o backend responde
-        // com HTTP 302 para a InfinitePay, evitando bloqueios de Safari/iOS
-        // e navegadores embutidos sem alterar o checkout.
-        const isMobileDevice =
-            /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-            (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-
-        if (isMobileDevice) {
-            const mobileRedirectUrl =
-                "/pagamento-infinitepay?url=" +
-                encodeURIComponent(validUrl.href);
-
-            window.location.href = mobileRedirectUrl;
-        } else {
-            window.location.href = validUrl.href;
-        }
-
-
-    } catch (error) {
-
-        console.error(
-            "ERRO COMPLETO NO CHECKOUT:",
-            error
-        );
-
-
-        showToast(
-            error.message ||
-            "Não foi possível abrir o pagamento."
-        );
-
-
-        // Reativa o botão
-        if (checkoutButton) {
-
-            checkoutButton.disabled = false;
-
-            checkoutButton.textContent =
-                "FINALIZAR COMPRA";
-
-        }
-
+        const isMobileDevice=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+        if(isMobileDevice)window.location.href="/pagamento-infinitepay?url="+encodeURIComponent(validUrl.href);
+        else window.location.href=validUrl.href;
+    }catch(error){
+        console.error("ERRO COMPLETO NO CHECKOUT:",error);
+        showToast(error.message||"Não foi possível abrir o pagamento.");
+        if(checkoutButton){checkoutButton.disabled=false;checkoutButton.textContent="FINALIZAR COMPRA";}
     }
+}
 
+function renderDirectPixPayment(data){
+    const panel=document.getElementById("directPixPayment");
+    const canvas=document.getElementById("directPixQr");
+    const copy=document.getElementById("directPixCopyPaste");
+    const amount=document.getElementById("directPixAmount");
+    const order=document.getElementById("directPixOrder");
+    if(!panel||!canvas||!copy||!amount||!order)throw new Error("Área do Pix não encontrada.");
+    panel.hidden=false;
+    order.textContent="Pedido #"+String(data.order_code||"").padStart(4,"0");
+    amount.textContent=formatPrice(Number(data.amount||0));
+    copy.value=data.pix_payload;
+    if(!window.QRCode?.toCanvas)throw new Error("Não foi possível carregar o gerador de QR Code.");
+    window.QRCode.toCanvas(canvas,data.pix_payload,{width:240,margin:2,errorCorrectionLevel:"M"},error=>{
+        if(error)console.error("Erro ao gerar QR Code Pix:",error);
+    });
+    panel.scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+
+async function copyDirectPix(){
+    const copy=document.getElementById("directPixCopyPaste");
+    if(!copy?.value)return;
+    try{await navigator.clipboard.writeText(copy.value);}
+    catch{copy.focus();copy.select();document.execCommand("copy");}
+    showToast("Pix Copia e Cola copiado.");
 }
 
 
