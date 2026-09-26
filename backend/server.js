@@ -2921,6 +2921,47 @@ app.get("/api/minhas-compras", orderStatusRateLimit, async (req, res) => {
 /* =====================================================
    STATUS DO PEDIDO PARA A PÁGINA DE SUCESSO
 ===================================================== */
+app.get("/api/pedido-confirmacao", orderStatusRateLimit, async (req, res) => {
+    try {
+        const orderNsu = safeString(req.query.order_nsu);
+        if (!orderNsu) return res.status(400).json({ success: false, message: "Pedido não informado." });
+
+        const rows = await supabaseRequest(
+            "orders?order_nsu=eq." + encodeURIComponent(orderNsu) +
+            "&select=id,order_nsu,order_code,customer_name,status,total,subtotal,shipping,payment_method,created_at,order_items(product_name,variant_color,sku,quantity,unit_price,total_price)",
+            { method: "GET" }
+        );
+        const order = Array.isArray(rows) ? rows[0] : null;
+        if (!order) return res.status(404).json({ success: false, message: "Pedido não encontrado." });
+
+        return res.json({
+            success: true,
+            order: {
+                order_nsu: order.order_nsu,
+                order_code: formatOrderCode(order.order_code || order.order_nsu),
+                customer_name: order.customer_name,
+                status: order.status,
+                payment_method: order.payment_method,
+                subtotal: Number(order.subtotal || 0),
+                shipping: Number(order.shipping || 0),
+                total: Number(order.total || 0),
+                created_at: order.created_at,
+                items: (order.order_items || []).map(item => ({
+                    product_name: item.product_name,
+                    variant_color: item.variant_color,
+                    sku: item.sku,
+                    quantity: Number(item.quantity || 0),
+                    unit_price: Number(item.unit_price || 0),
+                    total_price: Number(item.total_price || 0)
+                }))
+            }
+        });
+    } catch (error) {
+        console.error("❌ Erro na confirmação do pedido:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível carregar o pedido." });
+    }
+});
+
 app.get("/api/pedido-status", orderStatusRateLimit, async (req, res) => {
     try {
         const orderNsu = safeString(req.query.order_nsu);
