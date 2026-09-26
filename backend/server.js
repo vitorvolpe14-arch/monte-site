@@ -2248,21 +2248,35 @@ app.post(
                 pendingOrder
             );
 
+            /* =================================================
+               PIX DIRETO NO SITE MONTÊ
+               Pix não passa pela InfinitePay. O QR Code e o
+               Pix Copia e Cola são gerados aqui com o valor final
+               (5% de desconto somente nos produtos + frete integral).
+            ================================================= */
+            if (paymentMethod === "pix") {
+                const pixPayload = buildPixPayload(checkoutTotal, String(orderCode));
+
+                console.log("🟢 Pix direto gerado no site:", orderNsu, checkoutTotal);
+
+                return res.status(200).json({
+                    success: true,
+                    direct_pix: true,
+                    pix_payload: pixPayload,
+                    amount: checkoutTotal,
+                    order_nsu: orderNsu,
+                    order_code: String(orderCode),
+                    status: "pending"
+                });
+            }
 
             /* =================================================
-               INFINITEPAY PARA PIX E CARTÃO
-               O Pix direto por chave foi removido do checkout.
-               Agora os dois métodos passam pelo Checkout Integrado
-               da InfinitePay, permitindo confirmação automática via
-               webhook e disparo das notificações após o pagamento.
-            ================================================= */
+               INFINITEPAY SOMENTE PARA CARTÃO
 
             const infinitePayItems =
                 productItems.map((item) => ({
                     quantity: item.quantity,
-                    price: Math.round(
-                        item.price * (paymentMethod === "pix" ? 0.95 : 1) * 100
-                    ),
+                    price: Math.round(item.price * 100),
                     description: item.description
                 }));
 
