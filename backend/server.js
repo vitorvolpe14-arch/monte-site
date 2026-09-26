@@ -73,6 +73,45 @@ async function asaasRequest(endpoint, options = {}) {
     return data;
 }
 
+async function ensureAsaasWebhook() {
+    if (!ASAAS_API_KEY || !ASAAS_WEBHOOK_TOKEN) {
+        console.log("ℹ️ Asaas Pix: aguardando ASAAS_API_KEY/ASAAS_WEBHOOK_TOKEN.");
+        return;
+    }
+
+    const webhookUrl = SITE_URL.replace(/\\/$/, "") + "/webhook-asaas";
+    try {
+        const existing = await asaasRequest("/webhooks");
+        const found = Array.isArray(existing?.data)
+            ? existing.data.find(item => safeString(item.url) === webhookUrl && item.enabled !== false)
+            : null;
+
+        if (found) {
+            console.log("✅ Webhook Asaas já configurado:", found.id);
+            return;
+        }
+
+        const created = await asaasRequest("/webhooks", {
+            method: "POST",
+            body: JSON.stringify({
+                name: "MONTÊ — Pix",
+                url: webhookUrl,
+                email: ASAAS_WEBHOOK_EMAIL,
+                enabled: true,
+                interrupted: false,
+                apiVersion: 3,
+                authToken: ASAAS_WEBHOOK_TOKEN,
+                sendType: "SEQUENTIALLY",
+                events: ["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"]
+            })
+        });
+
+        console.log("✅ Webhook Asaas criado:", created?.id || "sem id");
+    } catch (error) {
+        console.error("❌ Não foi possível configurar o webhook Asaas:", error.message);
+    }
+}
+
 async function createAsaasPixPayment({ orderNsu, orderCode, customer, amount }) {
     const cpfCnpj = String(customer.cpf || "").replace(/\\D/g, "");
     const email = safeString(customer.email).toLowerCase();
@@ -3220,5 +3259,9 @@ app.listen(
         console.log(
             `💳 InfinitePay configurada para: ${INFINITEPAY_HANDLE}`
         );
+
+        ensureAsaasWebhook().catch(error => {
+            console.error("❌ Inicialização Asaas:", error.message);
+        });
 }
 );
