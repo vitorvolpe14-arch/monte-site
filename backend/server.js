@@ -2308,9 +2308,6 @@ app.post(
                 order_nsu:
                     orderNsu,
 
-                order_code:
-                    String(orderCode),
-
                 redirect_url:
                     `${SITE_URL}/pagamento-sucesso`,
 
