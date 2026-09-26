@@ -64,11 +64,11 @@ function renderOrder(o){
   const cardPending=o.payment_method==="credit_card"&&!paid;
 
   document.getElementById("title").textContent=paid
-    ?"Compra realizada"
+    ?"Pagamento recebido"
     :(pixPending?"Finalize o pagamento":"Pagamento em processamento");
 
   document.getElementById("subtitle").textContent=paid
-    ?"Obrigada pela sua compra. Seu pagamento foi confirmado e seu pedido está registrado na MONTÊ."
+    ?"Pagamento confirmado. Recebemos seu pagamento e seu pedido está registrado na MONTÊ."
     :(pixPending
       ?"Seu pedido foi criado, mas a compra ainda não foi concluída. Faça o pagamento via Pix abaixo."
       :"Seu pedido foi criado, mas ainda estamos aguardando a confirmação do pagamento.");
