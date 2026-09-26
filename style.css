@@ -6045,3 +6045,8 @@ canvas {
         gap: 4px !important;
     }
 }
+
+
+/* Banner clicável — leva às novidades */
+#carouselSlides { cursor: pointer; }
+#carouselSlides:focus-visible { outline: 2px solid #111; outline-offset: -2px; }
