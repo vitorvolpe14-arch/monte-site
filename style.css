@@ -1359,6 +1359,22 @@ a {
 
 }
 
+.footer-credit a {
+
+    color: #fff;
+
+    font-family: "Courier New", Courier, monospace;
+
+    font-weight: 500;
+
+    letter-spacing: -1.4px;
+
+    text-decoration: none;
+
+    font-variant-ligatures: none;
+
+}
+
 .footer-credit strong {
 
     color: #aaa;
