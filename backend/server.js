@@ -51,6 +51,76 @@ const ORDER_NOTIFICATION_EMAILS = safeString(process.env.ORDER_NOTIFICATION_EMAI
 const PIX_KEY = safeString(process.env.PIX_KEY).replace(/[^0-9A-Za-z@._+\-]/g, "");
 const PIX_MERCHANT_NAME = safeString(process.env.PIX_MERCHANT_NAME || "MONTE").slice(0, 25);
 const PIX_MERCHANT_CITY = safeString(process.env.PIX_MERCHANT_CITY || "FORTALEZA").slice(0, 15);
+const ASAAS_API_KEY = safeString(process.env.ASAAS_API_KEY);
+const ASAAS_API_URL = safeString(process.env.ASAAS_API_URL || "https://api.asaas.com/v3").replace(/\\/$/, "");
+const ASAAS_WEBHOOK_TOKEN = safeString(process.env.ASAAS_WEBHOOK_TOKEN);
+const ASAAS_WEBHOOK_EMAIL = safeString(process.env.ASAAS_WEBHOOK_EMAIL || RESEND_FROM_EMAIL);
+async function asaasRequest(endpoint, options = {}) {
+    if (!ASAAS_API_KEY) throw new Error("ASAAS_API_KEY não configurada no Render.");
+    const response = await fetchWithTimeout(ASAAS_API_URL + endpoint, {
+        ...options,
+        headers: {
+            "access_token": ASAAS_API_KEY,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            ...(options.headers || {})
+        }
+    }, 15000);
+    const responseText = await response.text();
+    let data = {};
+    try { data = responseText ? JSON.parse(responseText) : {}; } catch { data = { raw: responseText }; }
+    if (!response.ok) throw new Error("Asaas API " + response.status + ": " + JSON.stringify(data));
+    return data;
+}
+
+async function createAsaasPixPayment({ orderNsu, orderCode, customer, amount }) {
+    const cpfCnpj = String(customer.cpf || "").replace(/\\D/g, "");
+    const email = safeString(customer.email).toLowerCase();
+    const phone = String(customer.phone || "").replace(/\\D/g, "");
+    const cep = String(customer.address?.cep || "").replace(/\\D/g, "");
+
+    const existing = await asaasRequest("/customers?cpfCnpj=" + encodeURIComponent(cpfCnpj) + "&limit=1");
+    let asaasCustomer = Array.isArray(existing?.data) ? existing.data[0] : null;
+
+    if (!asaasCustomer?.id) {
+        asaasCustomer = await asaasRequest("/customers", {
+            method: "POST",
+            body: JSON.stringify({
+                name: safeString(customer.name),
+                cpfCnpj,
+                email,
+                mobilePhone: phone,
+                address: safeString(customer.address?.street),
+                addressNumber: safeString(customer.address?.number),
+                complement: safeString(customer.address?.complement),
+                province: safeString(customer.address?.neighborhood),
+                postalCode: cep,
+                externalReference: orderNsu,
+                notificationDisabled: true
+            })
+        });
+    }
+
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + 1);
+    const dueDateText = dueDate.toISOString().slice(0, 10);
+
+    const payment = await asaasRequest("/payments", {
+        method: "POST",
+        body: JSON.stringify({
+            customer: asaasCustomer.id,
+            billingType: "PIX",
+            value: Number(amount.toFixed(2)),
+            dueDate: dueDateText,
+            description: "Pedido MONTÊ " + formatOrderCode(orderCode),
+            externalReference: orderNsu
+        })
+    });
+
+    const qr = await asaasRequest("/payments/" + encodeURIComponent(payment.id) + "/pixQrCode");
+    return { payment, qr };
+}
+
 function pixField(id, value) { const str = String(value ?? ""); return String(id).padStart(2, "0") + String(str.length).padStart(2, "0") + str; }
 function crc16Pix(payload) {
     let crc = 0xFFFF;
@@ -2248,9 +2318,44 @@ app.post(
                 pendingOrder
             );
 
+            if (paymentMethod === "pix") {
+                if (!ASAAS_API_KEY) {
+                    return res.status(503).json({
+                        success: false,
+                        message: "Pix ainda não está configurado no servidor. Configure a integração Pix antes de receber pagamentos."
+                    });
+                }
+
+                const asaas = await createAsaasPixPayment({
+                    orderNsu,
+                    orderCode,
+                    customer: pendingOrder.customer,
+                    amount: checkoutTotal
+                });
+
+                await supabaseRequest("orders?id=eq." + encodeURIComponent(savedOrder.id), {
+                    method: "PATCH",
+                    body: JSON.stringify({
+                        invoice_slug: asaas.payment.id,
+                        updated_at: new Date().toISOString()
+                    })
+                });
+
+                return res.status(200).json({
+                    success: true,
+                    direct_pix: true,
+                    order_nsu: orderNsu,
+                    order_code: String(orderCode),
+                    payment_id: asaas.payment.id,
+                    amount: checkoutTotal,
+                    pix_payload: asaas.qr.payload,
+                    pix_qr_base64: asaas.qr.encodedImage,
+                    pix_expires_at: asaas.qr.expirationDate || null
+                });
+            }
 
             /* =================================================
-               INFINITEPAY PARA PIX E CARTÃO
+               INFINITEPAY PARA CARTÃO
                O Pix direto por chave foi removido do checkout.
                Agora os dois métodos passam pelo Checkout Integrado
                da InfinitePay, permitindo confirmação automática via
@@ -2575,6 +2680,127 @@ app.post(
 
     }
 );
+/* =====================================================
+   ASAAS PIX
+   WEBHOOK DE PAGAMENTO
+===================================================== */
+
+async function finalizeAsaasPixPayment(payment, webhookEventId) {
+    const orderNsu = safeString(payment?.externalReference);
+    const paymentId = safeString(payment?.id);
+    if (!orderNsu || !paymentId) throw new Error("Webhook Pix sem externalReference ou payment.id.");
+
+    const persistedOrders = await supabaseRequest(
+        "orders?order_nsu=eq." + encodeURIComponent(orderNsu) + "&select=*",
+        { method: "GET" }
+    );
+    const order = Array.isArray(persistedOrders) ? persistedOrders[0] : null;
+    if (!order) throw new Error("Pedido não encontrado para o Pix: " + orderNsu);
+
+    if (Number(payment.value) !== Number(order.total)) {
+        throw new Error("Valor Pix divergente para " + orderNsu + ".");
+    }
+
+    if (order.status === "paid" && order.transaction_nsu === paymentId) {
+        const confirmationEmail = await ensureOrderConfirmationEmail(order);
+        const adminSaleEmail = await ensureAdminSaleNotificationEmail(order);
+        const adminWhatsApp = await ensureWhatsAppAdminNewOrderNotification(order);
+        return { already_processed: true, confirmationEmail, adminSaleEmail, adminWhatsApp };
+    }
+
+    const verification = await asaasRequest("/payments/" + encodeURIComponent(paymentId));
+    if (safeString(verification.billingType).toUpperCase() !== "PIX" ||
+        safeString(verification.status).toUpperCase() !== "RECEIVED") {
+        return { paid: false, status: verification.status || payment.status };
+    }
+
+    const stockResult = await supabaseRequest("rpc/decrement_order_stock", {
+        method: "POST",
+        body: JSON.stringify({ p_order_id: order.id })
+    });
+
+    const existingPayments = await supabaseRequest(
+        "payments?transaction_nsu=eq." + encodeURIComponent(paymentId) + "&select=id",
+        { method: "GET" }
+    );
+
+    if (!Array.isArray(existingPayments) || !existingPayments[0]?.id) {
+        try {
+            await supabaseRequest("payments", {
+                method: "POST",
+                body: JSON.stringify({
+                    order_id: order.id,
+                    order_nsu: orderNsu,
+                    transaction_nsu: paymentId,
+                    invoice_slug: paymentId,
+                    amount: Number(verification.value || 0),
+                    paid_amount: Number(verification.value || 0),
+                    installments: null,
+                    capture_method: "pix",
+                    receipt_url: verification.invoiceUrl || null,
+                    status: "paid",
+                    webhook_data: { asaas_event_id: webhookEventId, payment: verification }
+                })
+            });
+        } catch (paymentError) {
+            if (!String(paymentError.message || "").includes("409")) throw paymentError;
+        }
+    }
+
+    await supabaseRequest(
+        "orders?order_nsu=eq." + encodeURIComponent(orderNsu),
+        {
+            method: "PATCH",
+            body: JSON.stringify({
+                status: "paid",
+                payment_method: "pix",
+                invoice_slug: paymentId,
+                transaction_nsu: paymentId,
+                receipt_url: verification.invoiceUrl || null,
+                paid_amount: Number(verification.value || 0),
+                paid_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            })
+        }
+    );
+
+    const paidOrder = {
+        ...order,
+        status: "paid",
+        payment_method: "pix",
+        invoice_slug: paymentId,
+        transaction_nsu: paymentId,
+        paid_amount: Number(verification.value || 0)
+    };
+
+    const confirmationEmail = await ensureOrderConfirmationEmail(paidOrder);
+    const adminSaleEmail = await ensureAdminSaleNotificationEmail(paidOrder);
+    const adminWhatsApp = await ensureWhatsAppAdminNewOrderNotification(paidOrder);
+
+    console.log("✅ Pix Asaas confirmado:", orderNsu, stockResult);
+    return { paid: true, confirmationEmail, adminSaleEmail, adminWhatsApp };
+}
+
+app.post("/webhook-asaas", async (req, res) => {
+    try {
+        const token = safeString(req.headers["asaas-access-token"]);
+        if (!ASAAS_WEBHOOK_TOKEN || token !== ASAAS_WEBHOOK_TOKEN) {
+            return res.status(401).json({ success: false, message: "Webhook não autorizado." });
+        }
+
+        const event = req.body || {};
+        if (!["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"].includes(safeString(event.event).toUpperCase())) {
+            return res.status(200).json({ success: true, ignored: true });
+        }
+
+        const result = await finalizeAsaasPixPayment(event.payment || {}, event.id || null);
+        return res.status(200).json({ success: true, ...result });
+    } catch (error) {
+        console.error("❌ ERRO NO WEBHOOK ASAAS:", error);
+        return res.status(500).json({ success: false, message: "Erro interno no webhook Pix." });
+    }
+});
+
 /* =====================================================
    INFINITEPAY
    WEBHOOK DE PAGAMENTO
