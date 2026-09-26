@@ -2272,6 +2272,7 @@ app.post(
 
             /* =================================================
                INFINITEPAY SOMENTE PARA CARTÃO
+            ================================================= */
 
             const infinitePayItems =
                 productItems.map((item) => ({
