@@ -2680,6 +2680,7 @@ app.post(
 
             const payment = verification.data;
             const paidAmount = Number(payment.paid_amount ?? webhook.paid_amount ?? 0);
+            const resolvedPaymentMethod = payment.capture_method === "pix" ? "pix" : "credit_card";
 
             // Baixa atômica e idempotente. A função bloqueia o pedido e usa
             // stock_decremented para impedir duas baixas do mesmo pedido.
@@ -2735,6 +2736,7 @@ app.post(
                     method: "PATCH",
                     body: JSON.stringify({
                         status: "paid",
+                        payment_method: resolvedPaymentMethod,
                         invoice_slug: invoiceSlug,
                         transaction_nsu: transactionNsu,
                         receipt_url: webhook.receipt_url || null,
@@ -2748,6 +2750,8 @@ app.post(
                     })
                 }
             );
+
+            order.payment_method = resolvedPaymentMethod;
 
             const confirmationEmail = await ensureOrderConfirmationEmail({
                 ...order,
