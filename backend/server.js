@@ -1660,8 +1660,18 @@ app.post(
             const {
                 items,
                 customer,
-                shipping_service_id: requestedShippingServiceId
+                shipping_service_id: requestedShippingServiceId,
+                payment_method: requestedPaymentMethod
             } = req.body || {};
+
+            const paymentMethod = safeString(requestedPaymentMethod || "pix").toLowerCase();
+
+            if (!["pix", "credit_card"].includes(paymentMethod)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Forma de pagamento inválida."
+                });
+            }
 
             /* =================================================
                VALIDAÇÃO DO CARRINHO
@@ -2157,10 +2167,18 @@ app.post(
                 (sum, item) => sum + Number(item.price) * Number(item.quantity), 0
             ).toFixed(2));
 
-            // O checkout da MONTÊ usa sempre o valor integral.
-            // A cliente escolhe Pix ou cartão somente dentro da InfinitePay.
+            // O desconto de 5% do Pix incide somente sobre os produtos.
+            // O frete permanece integral.
+            const pixDiscount = paymentMethod === "pix"
+                ? Number((subtotal * 0.05).toFixed(2))
+                : 0;
+
+            const checkoutProductSubtotal = Number(
+                (subtotal - pixDiscount).toFixed(2)
+            );
+
             const checkoutTotal = Number(
-                (subtotal + shippingValue).toFixed(2)
+                (checkoutProductSubtotal + shippingValue).toFixed(2)
             );
 
             const savedOrders = await supabaseRequest("orders", {
@@ -2181,7 +2199,7 @@ app.post(
                     shipping_delivery_days: shippingOption.delivery_days || shippingOption.delivery_max_days || null,
                     total: checkoutTotal,
                     status: "pending",
-                    payment_method: null,
+                    payment_method: paymentMethod,
                     whatsapp_tracking_opt_in: customer.whatsapp_updates === true,
                     whatsapp_tracking_status: customer.whatsapp_updates === true ? "pending" : "opted_out",
                     items: productItems
@@ -2217,7 +2235,9 @@ app.post(
             const infinitePayItems =
                 productItems.map((item) => ({
                     quantity: item.quantity,
-                    price: Math.round(item.price * 100),
+                    price: Math.round(
+                        item.price * (paymentMethod === "pix" ? 0.95 : 1) * 100
+                    ),
                     description: item.description
                 }));
 
