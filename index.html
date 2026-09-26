@@ -699,6 +699,45 @@
 
 
 <!-- =====================================================
+     ZOOM DA GALERIA DO PRODUTO
+===================================================== -->
+<div id="productImageLightbox"
+     class="product-image-lightbox"
+     aria-hidden="true"
+     role="dialog"
+     aria-label="Visualização ampliada das fotos do produto">
+
+    <button type="button"
+            class="product-lightbox-close"
+            onclick="closeProductImageLightbox()"
+            aria-label="Fechar">
+        ×
+    </button>
+
+    <button type="button"
+            class="product-lightbox-arrow product-lightbox-prev"
+            onclick="navigateProductLightbox(-1)"
+            aria-label="Foto anterior">
+        ‹
+    </button>
+
+    <div class="product-lightbox-stage">
+        <img id="productLightboxImage"
+             src=""
+             alt="">
+        <span id="productLightboxCounter"
+              class="product-lightbox-counter"></span>
+    </div>
+
+    <button type="button"
+            class="product-lightbox-arrow product-lightbox-next"
+            onclick="navigateProductLightbox(1)"
+            aria-label="Próxima foto">
+        ›
+    </button>
+</div>
+
+<!-- =====================================================
      CARRINHO
 ===================================================== -->
 
