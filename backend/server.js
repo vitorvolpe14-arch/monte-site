@@ -2250,29 +2250,11 @@ app.post(
 
 
             /* =================================================
-               PIX DIRETO MONTÊ
-            ================================================= */
-            if (paymentMethod === "pix") {
-                let pixPayload;
-                try {
-                    pixPayload = buildPixPayload(checkoutTotal, "MONTE" + String(orderCode));
-                } catch (pixError) {
-                    console.error("Erro ao gerar Pix direto:", pixError);
-                    return res.status(500).json({ success: false, message: "Não foi possível gerar o Pix desta compra." });
-                }
-                return res.status(200).json({
-                    success: true,
-                    payment_method: "pix",
-                    direct_pix: true,
-                    order_nsu: orderNsu,
-                    order_code: String(orderCode),
-                    amount: checkoutTotal,
-                    pix_payload: pixPayload
-                });
-            }
-
-            /* =================================================
-               CONVERTE PRODUTOS PARA INFINITEPAY
+               INFINITEPAY PARA PIX E CARTÃO
+               O Pix direto por chave foi removido do checkout.
+               Agora os dois métodos passam pelo Checkout Integrado
+               da InfinitePay, permitindo confirmação automática via
+               webhook e disparo das notificações após o pagamento.
             ================================================= */
 
             const infinitePayItems =
@@ -2291,7 +2273,6 @@ app.post(
                     description: shippingOption.name
                 });
             }
-
 
             /* =================================================
                PAYLOAD INFINITEPAY
