@@ -1608,9 +1608,25 @@ async function checkout() {
         try{validUrl=new URL(checkoutUrl);}catch{throw new Error("O servidor retornou um link de pagamento inválido.");}
 
         closeCart();
-        const isMobileDevice=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
-        if(isMobileDevice)window.location.href="/pagamento-infinitepay?url="+encodeURIComponent(validUrl.href);
-        else window.location.href=validUrl.href;
+        // Navega diretamente para o checkout da InfinitePay em qualquer dispositivo.
+        // Mantém fallback para Safari/iOS e navegadores embutidos.
+        try{
+            window.top.location.replace(validUrl.href);
+        }catch(navigationError){
+            window.location.replace(validUrl.href);
+        }
+        setTimeout(()=>{
+            if(document.visibilityState==="visible"){
+                const paymentLink=document.createElement("a");
+                paymentLink.href=validUrl.href;
+                paymentLink.target="_self";
+                paymentLink.rel="noopener";
+                paymentLink.style.display="none";
+                document.body.appendChild(paymentLink);
+                paymentLink.click();
+                paymentLink.remove();
+            }
+        },1200);
     }catch(error){
         console.error("ERRO COMPLETO NO CHECKOUT:",error);
         showToast(error.message||"Não foi possível abrir o pagamento.");
