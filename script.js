@@ -1341,35 +1341,15 @@ function normalizeCity(city) {
 }
 
 
-function getSelectedPaymentMethod() {
-    return document.querySelector('input[name="paymentMethod"]:checked')?.value || "pix";
-}
-
-function selectPaymentMethod(method) {
-    selectedPaymentMethod = method === "card" ? "card" : "pix";
-
-    document.querySelectorAll(".payment-option").forEach(option => {
-        const input = option.querySelector('input[name="paymentMethod"]');
-        option.classList.toggle("selected", input?.value === selectedPaymentMethod);
-    });
-
-    updatePaymentSummary();
-}
-
 function getCartSubtotal() {
     return cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
 }
 
 function updatePaymentSummary(subtotal = getCartSubtotal()) {
     const shipping = getShippingValue();
-    const pixTotal = Number((subtotal * 0.95 + shipping).toFixed(2));
-    const cardTotal = Number((subtotal + shipping).toFixed(2));
-    const pixElement = document.getElementById("pixTotal");
-    const cardElement = document.getElementById("cardTotal");
+    const checkoutTotal = Number((subtotal + shipping).toFixed(2));
     const checkoutElement = document.getElementById("checkoutTotal");
-    if (pixElement) pixElement.textContent = formatPrice(pixTotal);
-    if (cardElement) cardElement.textContent = formatPrice(cardTotal);
-    if (checkoutElement) checkoutElement.textContent = formatPrice(selectedPaymentMethod === "pix" ? pixTotal : cardTotal);
+    if (checkoutElement) checkoutElement.textContent = formatPrice(checkoutTotal);
 }
 
 function getShippingValue() {
@@ -1712,8 +1692,6 @@ async function checkout() {
                     body: JSON.stringify({
 
                         items: items,
-
-                        payment_method: getSelectedPaymentMethod(),
 
                         shipping_service_id: shippingServiceId,
 
