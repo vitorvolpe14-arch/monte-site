@@ -1360,6 +1360,26 @@ a {
 
     font-family: "DM Sans", sans-serif;
 
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 7px;
+
+}
+
+.footer-credit-logo {
+
+    width: 14px;
+
+    height: 25px;
+
+    flex: 0 0 auto;
+
+    display: block;
+
+    object-fit: contain;
+
 }
 
 .footer-credit a {
