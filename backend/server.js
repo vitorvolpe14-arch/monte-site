@@ -2946,6 +2946,7 @@ app.get("/api/pedido-confirmacao", orderStatusRateLimit, async (req, res) => {
                 shipping: Number(order.shipping || 0),
                 total: Number(order.total || 0),
                 created_at: order.created_at,
+                pix_payload: order.payment_method === "pix" ? buildPixPayload(Number(order.total || 0), String(order.order_code || order.order_nsu)) : null,
                 items: (order.order_items || []).map(item => ({
                     product_name: item.product_name,
                     variant_color: item.variant_color,
