@@ -52,7 +52,7 @@ const PIX_KEY = safeString(process.env.PIX_KEY).replace(/[^0-9A-Za-z@._+\-]/g, "
 const PIX_MERCHANT_NAME = safeString(process.env.PIX_MERCHANT_NAME || "MONTE").slice(0, 25);
 const PIX_MERCHANT_CITY = safeString(process.env.PIX_MERCHANT_CITY || "FORTALEZA").slice(0, 15);
 const ASAAS_API_KEY = safeString(process.env.ASAAS_API_KEY);
-const ASAAS_API_URL = safeString(process.env.ASAAS_API_URL || "https://api.asaas.com/v3").replace(/\\/$/, "");
+const ASAAS_API_URL = safeString(process.env.ASAAS_API_URL || "https://api.asaas.com/v3").replace(/\/$/, "");
 const ASAAS_WEBHOOK_TOKEN = safeString(process.env.ASAAS_WEBHOOK_TOKEN);
 const ASAAS_WEBHOOK_EMAIL = safeString(process.env.ASAAS_WEBHOOK_EMAIL || RESEND_FROM_EMAIL);
 async function asaasRequest(endpoint, options = {}) {
@@ -79,7 +79,7 @@ async function ensureAsaasWebhook() {
         return;
     }
 
-    const webhookUrl = SITE_URL.replace(/\\/$/, "") + "/webhook-asaas";
+    const webhookUrl = SITE_URL.replace(/\/$/, "") + "/webhook-asaas";
     try {
         const existing = await asaasRequest("/webhooks");
         const found = Array.isArray(existing?.data)
@@ -113,10 +113,10 @@ async function ensureAsaasWebhook() {
 }
 
 async function createAsaasPixPayment({ orderNsu, orderCode, customer, amount }) {
-    const cpfCnpj = String(customer.cpf || "").replace(/\\D/g, "");
+    const cpfCnpj = String(customer.cpf || "").replace(/\D/g, "");
     const email = safeString(customer.email).toLowerCase();
-    const phone = String(customer.phone || "").replace(/\\D/g, "");
-    const cep = String(customer.address?.cep || "").replace(/\\D/g, "");
+    const phone = String(customer.phone || "").replace(/\D/g, "");
+    const cep = String(customer.address?.cep || "").replace(/\D/g, "");
 
     const existing = await asaasRequest("/customers?cpfCnpj=" + encodeURIComponent(cpfCnpj) + "&limit=1");
     let asaasCustomer = Array.isArray(existing?.data) ? existing.data[0] : null;
