@@ -1,4 +1,5 @@
 // MONTÊ backend — alterações de frontend acompanham este serviço.
+// Fluxo de confirmação: somente pedidos pagos podem exibir compra concluída.
 const express = require("express");
 const crypto = require("crypto");
 const path = require("path");
