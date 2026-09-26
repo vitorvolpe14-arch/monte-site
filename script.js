@@ -1347,30 +1347,10 @@ function getCartSubtotal() {
 
 function updatePaymentSummary(subtotal = getCartSubtotal()) {
     const shipping = getShippingValue();
-    const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked')?.value || selectedPaymentMethod;
-    selectedPaymentMethod = paymentMethod;
-    const productTotal = Number(subtotal.toFixed(2));
-    const pixDiscount = paymentMethod === "pix" ? Number((productTotal * 0.05).toFixed(2)) : 0;
-    const checkoutTotal = Number((productTotal - pixDiscount + shipping).toFixed(2));
+    const checkoutTotal = Number((subtotal + shipping).toFixed(2));
     const checkoutElement = document.getElementById("checkoutTotal");
     if (checkoutElement) checkoutElement.textContent = formatPrice(checkoutTotal);
-    document.querySelectorAll('input[name="paymentMethod"]').forEach(input => {
-        const option = input.closest(".payment-option");
-        if (option) option.classList.toggle("selected", input.checked);
-    });
 }
-
-function initPaymentMethods() {
-    document.querySelectorAll('input[name="paymentMethod"]').forEach(input => {
-        input.addEventListener("change", () => {
-            selectedPaymentMethod = input.value;
-            updatePaymentSummary();
-        });
-    });
-    updatePaymentSummary();
-}
-
-document.addEventListener("DOMContentLoaded", initPaymentMethods);
 
 function getShippingValue() {
     return Number(selectedShippingOption?.price || 0);
@@ -1609,18 +1589,6 @@ async function checkout() {
     // Outras localidades aguardam cotação de transportadora no backend.
     const shipping = getShippingValue();
 
-    const paymentMethod =
-        document.querySelector('input[name="paymentMethod"]:checked')?.value ||
-        selectedPaymentMethod ||
-        "pix";
-
-    if (!["pix", "credit_card"].includes(paymentMethod)) {
-        showToast("Selecione uma forma de pagamento.");
-        return;
-    }
-
-    selectedPaymentMethod = paymentMethod;
-
 
     // 5. Monta os produtos
     const items = cart
@@ -1726,8 +1694,6 @@ async function checkout() {
                         items: items,
 
                         shipping_service_id: shippingServiceId,
-
-                        payment_method: paymentMethod,
 
                         customer: {
 
