@@ -48,6 +48,30 @@ const RESEND_FROM_EMAIL = safeString(process.env.RESEND_FROM_EMAIL || "contato@o
 const RESEND_MARKETING_FROM_EMAIL = safeString(process.env.RESEND_MARKETING_FROM_EMAIL || "mkt@oficialmontee.com.br");
 const RESEND_FROM_NAME = safeString(process.env.RESEND_FROM_NAME || "MONTÊ");
 const ORDER_NOTIFICATION_EMAILS = safeString(process.env.ORDER_NOTIFICATION_EMAILS);
+const PIX_KEY = safeString(process.env.PIX_KEY).replace(/[^0-9A-Za-z@._+\-]/g, "");
+const PIX_MERCHANT_NAME = safeString(process.env.PIX_MERCHANT_NAME || "MONTE").slice(0, 25);
+const PIX_MERCHANT_CITY = safeString(process.env.PIX_MERCHANT_CITY || "FORTALEZA").slice(0, 15);
+function pixField(id, value) { const str = String(value ?? ""); return String(id).padStart(2, "0") + String(str.length).padStart(2, "0") + str; }
+function crc16Pix(payload) {
+    let crc = 0xFFFF;
+    for (let i = 0; i < payload.length; i++) {
+        crc ^= payload.charCodeAt(i) << 8;
+        for (let bit = 0; bit < 8; bit++) crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xFFFF : (crc << 1) & 0xFFFF;
+    }
+    return crc.toString(16).toUpperCase().padStart(4, "0");
+}
+function buildPixPayload(amount, txid = "***") {
+    if (!PIX_KEY) throw new Error("PIX_KEY não configurada no servidor.");
+    const merchantAccount = pixField(0, "BR.GOV.BCB.PIX") + pixField(1, PIX_KEY);
+    const additionalData = pixField(5, String(txid).replace(/[^A-Za-z0-9*]/g, "").slice(0, 25) || "***");
+    const body = [
+        pixField(0, "01"), pixField(26, merchantAccount), pixField(52, "0000"),
+        pixField(53, "986"), pixField(54, Number(amount).toFixed(2)), pixField(58, "BR"),
+        pixField(59, PIX_MERCHANT_NAME), pixField(60, PIX_MERCHANT_CITY), pixField(62, additionalData)
+    ].join("") + "6304";
+    return body + crc16Pix(body);
+}
+
 
 async function sendWhatsAppTrackingNotification(order) {
     if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
@@ -2227,6 +2251,28 @@ app.post(
                 pendingOrder
             );
 
+
+            /* =================================================
+               PIX DIRETO MONTÊ
+            ================================================= */
+            if (paymentMethod === "pix") {
+                let pixPayload;
+                try {
+                    pixPayload = buildPixPayload(checkoutTotal, "MONTE" + String(orderCode));
+                } catch (pixError) {
+                    console.error("Erro ao gerar Pix direto:", pixError);
+                    return res.status(500).json({ success: false, message: "Não foi possível gerar o Pix desta compra." });
+                }
+                return res.status(200).json({
+                    success: true,
+                    payment_method: "pix",
+                    direct_pix: true,
+                    order_nsu: orderNsu,
+                    order_code: String(orderCode),
+                    amount: checkoutTotal,
+                    pix_payload: pixPayload
+                });
+            }
 
             /* =================================================
                CONVERTE PRODUTOS PARA INFINITEPAY
