@@ -1392,15 +1392,22 @@ a {
 
     .footer-bottom {
 
-        align-items: flex-start;
+        align-items: center;
 
-        flex-direction: column;
+        flex-direction: row;
 
-        gap: 8px;
+        justify-content: space-between;
+
+        gap: 12px;
+
+        flex-wrap: nowrap;
 
     }
 
+    .footer-bottom > span:first-child,
     .footer-credit {
+
+        white-space: nowrap;
 
         margin-left: 0;
 
