@@ -103,8 +103,8 @@ function renderOrder(o){
     }
   }
 
-  if(cardPending){
-    startCardPolling();
+  if(cardPending || pixPending){
+    startPaymentPolling();
   } else {
     stopPolling();
   }
@@ -119,14 +119,14 @@ async function loadOrder(){
   }
 }
 
-function startCardPolling(){
-  if(pollTimer||pollCount>=15)return;
+function startPaymentPolling(){
+  if(pollTimer||pollCount>=30)return;
   pollTimer=setInterval(async()=>{
     pollCount++;
     try{
       const o=await fetchOrder();
       renderOrder(o);
-      if(o.status==="paid"||pollCount>=15)stopPolling();
+      if(o.status==="paid"||pollCount>=30)stopPolling();
     }catch(e){
       if(pollCount>=15)stopPolling();
     }
