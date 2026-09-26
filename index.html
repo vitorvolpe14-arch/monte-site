@@ -884,6 +884,23 @@
         <div id="shippingOptions" class="shipping-options"></div>
     </div>
 
+    <div class="payment-methods" aria-label="Forma de pagamento">
+        <label class="payment-option selected" id="paymentOptionPix">
+            <input type="radio" name="paymentMethod" value="pix" checked>
+            <span class="payment-option-content">
+                <strong>PIX — 5% OFF</strong>
+                <small>Desconto aplicado somente nos produtos. O frete permanece integral.</small>
+            </span>
+        </label>
+        <label class="payment-option" id="paymentOptionCard">
+            <input type="radio" name="paymentMethod" value="credit_card">
+            <span class="payment-option-content">
+                <strong>CARTÃO DE CRÉDITO</strong>
+                <small>Pagamento seguro pela InfinitePay.</small>
+            </span>
+        </label>
+    </div>
+
     <div class="checkout-total">
         <span>TOTAL</span>
         <strong id="checkoutTotal">R$ 0,00</strong>
@@ -927,7 +944,7 @@
 
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="script.js?v=20260925-infinitepay-dual-flow"></script>
+<script src="script.js?v=20260926-pix-discount-freight"></script>
 
 </body>
 </html>
