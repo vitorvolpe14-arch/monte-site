@@ -1595,9 +1595,19 @@ async function checkout() {
         try{data=JSON.parse(responseText);}catch{console.error("Resposta não é JSON:",responseText);}
         if(!response.ok)throw new Error(data?.message||("Erro do servidor ("+response.status+")."));
 
-        if(paymentMethod==="pix"&&data?.direct_pix&&data?.pix_payload){
+        if(paymentMethod==="pix"&&data?.pix_checkout&&data?.url){
             closeCart();
-            window.location.href="/pagamento-sucesso?order_nsu="+encodeURIComponent(data.order_nsu)+"&payment_method=pix";
+            let pixCheckoutUrl;
+            try{
+                pixCheckoutUrl=new URL(data.url);
+            }catch{
+                throw new Error("O servidor retornou um link Pix inválido.");
+            }
+            try{
+                window.top.location.replace(pixCheckoutUrl.href);
+            }catch(navigationError){
+                window.location.replace(pixCheckoutUrl.href);
+            }
             return;
         }
 
