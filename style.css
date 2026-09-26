@@ -5425,3 +5425,174 @@ img {
     font-style: normal !important;
     font-synthesis: none !important;
 }
+
+
+/* =====================================================
+   ZOOM + NAVEGAÇÃO DA GALERIA DO PRODUTO
+===================================================== */
+
+.gallery-main {
+    position: relative;
+}
+
+.gallery-main img {
+    cursor: zoom-in;
+}
+
+.product-image-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 30px 80px;
+    background: rgba(0, 0, 0, .92);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity .2s ease, visibility .2s ease;
+    box-sizing: border-box;
+}
+
+.product-image-lightbox.active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.product-lightbox-stage {
+    width: min(90vw, 1200px);
+    height: min(90vh, 900px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.product-lightbox-stage img {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+.product-lightbox-close,
+.product-lightbox-arrow {
+    position: absolute;
+    z-index: 2;
+    border: 0;
+    color: #fff;
+    background: rgba(0, 0, 0, .35);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background .2s ease, opacity .2s ease;
+}
+
+.product-lightbox-close:hover,
+.product-lightbox-arrow:hover {
+    background: rgba(0, 0, 0, .65);
+}
+
+.product-lightbox-close {
+    top: 18px;
+    right: 22px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    font-size: 30px;
+    line-height: 1;
+}
+
+.product-lightbox-arrow {
+    top: 50%;
+    transform: translateY(-50%);
+    width: 52px;
+    height: 72px;
+    font-size: 46px;
+    line-height: 1;
+    font-family: Arial, sans-serif;
+}
+
+.product-lightbox-prev {
+    left: 18px;
+}
+
+.product-lightbox-next {
+    right: 18px;
+}
+
+.product-lightbox-counter {
+    position: absolute;
+    left: 50%;
+    bottom: -34px;
+    transform: translateX(-50%);
+    color: #fff;
+    font-size: 11px;
+    letter-spacing: 2px;
+    white-space: nowrap;
+}
+
+.product-image-lightbox.single-image .product-lightbox-prev,
+.product-image-lightbox.single-image .product-lightbox-next {
+    display: none;
+}
+
+body.product-lightbox-open {
+    overflow: hidden !important;
+}
+
+@media (max-width: 700px) {
+    .product-image-lightbox {
+        padding: 55px 48px 40px;
+    }
+
+    .product-lightbox-stage {
+        width: 100%;
+        height: 78vh;
+    }
+
+    .product-lightbox-stage img {
+        max-width: 100%;
+        max-height: 100%;
+    }
+
+    .product-lightbox-close {
+        top: 10px;
+        right: 10px;
+        width: 40px;
+        height: 40px;
+        font-size: 27px;
+    }
+
+    .product-lightbox-arrow {
+        width: 38px;
+        height: 56px;
+        font-size: 36px;
+        background: rgba(0, 0, 0, .28);
+    }
+
+    .product-lightbox-prev {
+        left: 5px;
+    }
+
+    .product-lightbox-next {
+        right: 5px;
+    }
+
+    .product-lightbox-counter {
+        bottom: -27px;
+        font-size: 9px;
+    }
+
+    /* Mantém a foto inteira no produto, sem corte, inclusive no celular. */
+    .gallery-main img {
+        object-fit: contain !important;
+    }
+}
