@@ -2302,7 +2302,7 @@ app.post(
                     orderNsu,
 
                 redirect_url:
-                    `${SITE_URL}/pagamento-sucesso`,
+                    `${SITE_URL}/pagamento-sucesso?order_nsu=${encodeURIComponent(orderNsu)}`,
 
                 webhook_url:
                     `${SITE_URL}/webhook-infinitepay`,
