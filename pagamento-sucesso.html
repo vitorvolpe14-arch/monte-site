@@ -3,73 +3,67 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Compra concluída — MONTÊ</title>
+<title>Pedido — MONTÊ</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
 *{box-sizing:border-box}
-body{margin:0;background:#fff;color:#111;font-family:"DM Sans",Arial,sans-serif}
-.page{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:40px 20px}
-.card{width:min(680px,100%);border:1px solid #e8e8e8;padding:44px;background:#fff}
-.logo{font-weight:800;letter-spacing:5px;text-align:center;font-size:25px;margin-bottom:42px}
-.check{width:52px;height:52px;border:1px solid #111;border-radius:50%;display:grid;place-items:center;margin:0 auto 24px;font-size:25px}
-h1{text-align:center;font-size:30px;font-weight:500;margin:0 0 10px}
-.subtitle{text-align:center;color:#666;margin:0 auto 32px;line-height:1.6}
-.order{background:#f7f7f7;padding:22px;margin:24px 0}
-.row{display:flex;justify-content:space-between;gap:20px;padding:9px 0;border-bottom:1px solid #e4e4e4}
+body{margin:0;background:#f8f7f5;color:#111;font-family:Arial,Helvetica,sans-serif}
+.page{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px 16px}
+.card{width:min(720px,100%);background:#fff;padding:42px;border:1px solid #e7e4df}
+.logo{text-align:center;letter-spacing:6px;font-size:25px;font-weight:700;margin-bottom:38px}
+.check{width:54px;height:54px;border:1px solid #111;border-radius:50%;display:grid;place-items:center;margin:0 auto 20px;font-size:25px}
+h1{text-align:center;font-size:29px;font-weight:500;margin:0 0 10px}
+.subtitle{text-align:center;color:#666;line-height:1.6;margin:0 auto 30px}
+.order{background:#f7f5f2;padding:20px;margin:24px 0}
+.row{display:flex;justify-content:space-between;gap:20px;padding:10px 0;border-bottom:1px solid #e4e1dc}
 .row:last-child{border-bottom:0}
-.label{color:#666}
-.value{font-weight:600;text-align:right}
-.items{margin:28px 0}
-.item{display:flex;justify-content:space-between;gap:20px;padding:13px 0;border-bottom:1px solid #eee}
-.item-name{font-weight:500}.item-meta{color:#777;font-size:13px;margin-top:4px}
+.label{color:#666}.value{font-weight:600;text-align:right}
+.items{margin:28px 0}.item{display:flex;justify-content:space-between;gap:20px;padding:15px 0;border-bottom:1px solid #eee}
+.item-name{font-weight:500}.item-meta{color:#777;font-size:13px;margin-top:5px}
 .total{display:flex;justify-content:space-between;font-size:18px;font-weight:600;padding-top:20px}
-.receipt{display:block;text-align:center;border:1px solid #111;color:#111;text-decoration:none;padding:14px;margin-top:28px}
-.back{display:block;text-align:center;color:#555;text-decoration:none;margin-top:18px}
+.pix{display:none;margin-top:28px;padding:24px;background:#f7f5f2;text-align:center}
+.pix h2{font-size:16px;letter-spacing:1.5px;margin:0 0 8px}.pix p{color:#666;line-height:1.5;font-size:14px}
+#pixQr{display:block;margin:18px auto;background:#fff;padding:8px}
+.pix-code{width:100%;min-height:92px;resize:none;border:1px solid #ddd;background:#fff;padding:12px;font-size:12px}
+.copy{width:100%;padding:14px;background:#111;color:#fff;border:0;margin-top:10px;cursor:pointer;letter-spacing:1px}
+.back{display:block;text-align:center;color:#555;text-decoration:none;margin-top:24px}
 .error{text-align:center;color:#555;line-height:1.6}
-@media(max-width:600px){.card{padding:30px 20px}.page{padding:20px 12px}h1{font-size:25px}.row,.item{font-size:14px}}
+@media(max-width:600px){.card{padding:28px 18px}.page{padding:16px 10px}h1{font-size:25px}.item{font-size:14px}}
 </style>
 </head>
 <body>
-<main class="page">
-<section class="card">
+<main class="page"><section class="card">
 <div class="logo">MONTÊ</div>
-<div id="content">
-<div class="check">✓</div>
-<h1>Compra concluída</h1>
-<p class="subtitle">Seu pagamento foi confirmado. Estamos preparando seu pedido.</p>
-<div id="orderBox" class="order">Carregando pedido...</div>
-<div id="items" class="items"></div>
-<div id="receipt"></div>
-<a class="back" href="/">Voltar para a MONTÊ</a>
-</div>
-</section>
-</main>
+<div id="content"><div class="check">✓</div><h1 id="title">Pedido recebido</h1><p class="subtitle" id="subtitle">Estamos carregando os detalhes do seu pedido.</p>
+<div id="orderBox" class="order">Carregando pedido...</div><div id="items" class="items"></div><div id="pix" class="pix">
+<h2>PAGAMENTO VIA PIX</h2><p>Seu pedido foi criado. Para concluir, pague pelo QR Code ou copie o Pix Copia e Cola.</p>
+<canvas id="pixQr" width="240" height="240"></canvas><strong id="pixAmount"></strong>
+<textarea id="pixCode" class="pix-code" readonly></textarea><button class="copy" onclick="copyPix()">COPIAR PIX COPIA E COLA</button>
+</div><a class="back" href="/">Voltar para a MONTÊ</a></div>
+</section></main>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
 <script>
 const money=v=>new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(v||0));
 const params=new URLSearchParams(location.search);
-const orderNsu=params.get("order_nsu");
-const transactionNsu=params.get("transaction_nsu");
+const orderNsu=params.get("order_nsu"); const method=params.get("payment_method");
 async function loadOrder(){
-  const content=document.getElementById("content");
-  if(!orderNsu||!transactionNsu){
-    content.innerHTML='<div class="error"><h1>Pagamento recebido</h1><p>Não foi possível localizar os dados do pedido nesta página. Se o pagamento foi concluído, seu pedido continua sendo processado.</p><a class="back" href="/">Voltar para a MONTÊ</a></div>';
-    return;
+ if(!orderNsu){showError("Não foi possível localizar o pedido.");return;}
+ try{
+  const r=await fetch("/api/pedido-confirmacao?order_nsu="+encodeURIComponent(orderNsu));
+  const d=await r.json(); if(!r.ok||!d.success)throw new Error(d.message);
+  const o=d.order; const paid=o.status==="paid";
+  document.getElementById("title").textContent=paid?"Pagamento confirmado":"Pedido recebido";
+  document.getElementById("subtitle").textContent=paid?"Obrigada pela sua compra. Seu pedido foi confirmado e já está registrado na MONTÊ.":"Seu pedido foi registrado. Confira os detalhes abaixo.";
+  document.getElementById("orderBox").innerHTML='<div class="row"><span class="label">Pedido</span><span class="value">'+esc(o.order_code)+'</span></div><div class="row"><span class="label">Status</span><span class="value">'+(paid?"PAGO":"AGUARDANDO PAGAMENTO")+'</span></div><div class="row"><span class="label">Frete</span><span class="value">'+money(o.shipping)+'</span></div><div class="total"><span>Total</span><span>'+money(o.total)+'</span></div>';
+  document.getElementById("items").innerHTML=(o.items||[]).map(i=>'<div class="item"><div><div class="item-name">'+esc(i.product_name)+'</div><div class="item-meta">'+(i.variant_color?esc(i.variant_color)+" · ":"")+"Qtd. "+i.quantity+'</div></div><strong>'+money(i.total_price)+'</strong></div>').join("");
+  if(o.payment_method==="pix"&&o.pix_payload&&!paid){
+    const p=document.getElementById("pix");p.style.display="block";document.getElementById("pixAmount").textContent=money(o.total);document.getElementById("pixCode").value=o.pix_payload;
+    if(window.QRCode)QRCode.toCanvas(document.getElementById("pixQr"),o.pix_payload,{width:240,margin:2,errorCorrectionLevel:"M"});
   }
-  try{
-    const response=await fetch('/api/pedido-status?order_nsu='+encodeURIComponent(orderNsu)+'&transaction_nsu='+encodeURIComponent(transactionNsu));
-    const data=await response.json();
-    if(!response.ok||!data.success) throw new Error(data.message||'Pedido não encontrado.');
-    const o=data.order;
-    document.getElementById("orderBox").innerHTML='<div class="row"><span class="label">Pedido</span><span class="value">'+(o.order_code?"MONTÊ-"+o.order_code:o.order_nsu)+'</span></div><div class="row"><span class="label">Status</span><span class="value">PAGO</span></div><div class="row"><span class="label">Frete</span><span class="value">'+money(o.shipping)+'</span></div><div class="total"><span>Total</span><span>'+money(o.total)+'</span></div>';
-    document.getElementById("items").innerHTML=(o.items||[]).map(i=>'<div class="item"><div><div class="item-name">'+escapeHtml(i.product_name)+'</div><div class="item-meta">'+(i.variant_color?escapeHtml(i.variant_color)+' · ':'')+'Qtd. '+i.quantity+(i.sku?' · SKU '+escapeHtml(i.sku):'')+'</div></div><strong>'+money(i.total_price)+'</strong></div>').join('');
-    if(o.receipt_url) document.getElementById("receipt").innerHTML='<a class="receipt" href="'+escapeAttr(o.receipt_url)+'" target="_blank" rel="noopener noreferrer">VER COMPROVANTE</a>';
-  }catch(error){
-    document.getElementById("orderBox").innerHTML='<div class="error">Pagamento confirmado, mas ainda estamos carregando os detalhes do pedido. Aguarde alguns segundos e atualize a página.</div>';
-  }
+ }catch(e){showError("Não foi possível carregar os dados do pedido agora. Atualize a página para tentar novamente.");}
 }
-function escapeHtml(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m]));}
-function escapeAttr(v){return String(v??"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function copyPix(){const el=document.getElementById("pixCode");navigator.clipboard.writeText(el.value).then(()=>alert("Pix Copia e Cola copiado."));}
+function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m]));}
+function showError(msg){document.getElementById("content").innerHTML='<div class="error"><div class="check">!</div><h1>Pedido</h1><p>'+esc(msg)+'</p><a class="back" href="/">Voltar para a MONTÊ</a></div>';}
 loadOrder();
 </script>
-</body>
-</html>
+</body></html>
