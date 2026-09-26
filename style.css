@@ -5685,10 +5685,17 @@ body.product-lightbox-open {
 .direct-pix-header span{font-size:9px;letter-spacing:2px;color:#666}
 .direct-pix-header strong{font-size:14px;letter-spacing:1px}
 .direct-pix-order{font-size:11px;color:#666;margin:0 0 14px}
-.direct-pix-qr-wrap{display:flex;justify-content:center;margin:8px auto 14px}
-.direct-pix-qr-wrap canvas{display:block;width:240px;height:240px;max-width:240px}.direct-pix-qr-image{display:block;width:240px;height:240px;max-width:240px;object-fit:contain}
+.direct-pix-qr-wrap{width:100%;display:flex;justify-content:center;align-items:center;box-sizing:border-box;margin:8px auto 14px;overflow:hidden}
+.direct-pix-qr-wrap canvas,.direct-pix-qr-wrap .direct-pix-qr-image{display:block;width:min(280px,70vw);height:auto;aspect-ratio:1/1;max-width:100%;object-fit:contain;flex:0 0 auto}
+.direct-pix-qr-wrap [hidden]{display:none!important}
 .direct-pix-amount{display:block;font-size:20px;margin-bottom:10px}
 .direct-pix-instruction{font-size:11px;line-height:1.5;color:#555;margin:0 auto 12px;max-width:330px}
 .direct-pix-copy{width:100%;min-height:90px;box-sizing:border-box;border:1px solid #ccc;padding:10px;font-size:10px;line-height:1.35;resize:none;word-break:break-all;background:#fafafa}
 .direct-pix-copy-button{width:100%;margin-top:9px;padding:13px 14px;border:0;background:#111;color:#fff;font-size:9px;letter-spacing:1.4px;cursor:pointer}
 .direct-pix-note{font-size:9px;line-height:1.45;color:#777;margin:12px 0 0}
+
+@media (max-width:650px){
+  .direct-pix-payment{width:100%;box-sizing:border-box;padding:18px 14px}
+  .direct-pix-qr-wrap canvas,.direct-pix-qr-wrap .direct-pix-qr-image{width:min(230px,68vw);max-width:100%}
+  .direct-pix-copy{font-size:9px}
+}
