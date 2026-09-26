@@ -57,6 +57,7 @@ let selectedVariant = null;
 let selectedQuantity = 1;
 
 let currentSlide = 0;
+let currentGalleryIndex = 0;
 
 const COLLECTION_VISIBLE_COUNT = 5;
 const COLLECTION_STEP = 4;
@@ -807,83 +808,167 @@ function openProductModal(productId) {
    GALERIA
 ===================================================== */
 
+function setGalleryImage(index) {
+    if (!selectedProduct || !Array.isArray(selectedProduct.images) || !selectedProduct.images.length) return;
+
+    const total = selectedProduct.images.length;
+    currentGalleryIndex = (index + total) % total;
+
+    const image = selectedProduct.images[currentGalleryIndex];
+    const mainImage = document.getElementById("modalMainImage");
+
+    if (mainImage) {
+        mainImage.src = image;
+        mainImage.alt = selectedProduct.name || "Produto MONTÊ";
+    }
+
+    document.querySelectorAll(".gallery-thumbnail").forEach((item, itemIndex) => {
+        item.classList.toggle("active", itemIndex === currentGalleryIndex);
+    });
+}
+
 function renderGallery() {
+    const mainImage = document.getElementById("modalMainImage");
+    const thumbnails = document.getElementById("galleryThumbnails");
 
-    const mainImage =
-        document.getElementById(
-            "modalMainImage"
-        );
+    if (!mainImage || !thumbnails || !selectedProduct) return;
 
-
-    const thumbnails =
-        document.getElementById(
-            "galleryThumbnails"
-        );
-
-
-    mainImage.src =
-        selectedProduct.images[0];
-
-
+    currentGalleryIndex = 0;
     thumbnails.innerHTML = "";
 
+    (selectedProduct.images || []).forEach((image, index) => {
+        const thumbnail = document.createElement("img");
 
-    selectedProduct.images.forEach(
-        (image, index) => {
+        thumbnail.src = image;
+        thumbnail.alt = (selectedProduct.name || "Produto MONTÊ") + " — foto " + (index + 1);
+        thumbnail.className = "gallery-thumbnail";
+        thumbnail.loading = "lazy";
 
-            const thumbnail =
-                document.createElement("img");
+        thumbnail.addEventListener("click", () => {
+            setGalleryImage(index);
+        });
 
+        thumbnails.appendChild(thumbnail);
+    });
 
-            thumbnail.src = image;
+    setGalleryImage(0);
 
-            thumbnail.className =
-                "gallery-thumbnail";
+    mainImage.onclick = () => openProductImageLightbox(currentGalleryIndex);
+    mainImage.setAttribute("role", "button");
+    mainImage.setAttribute("tabindex", "0");
+    mainImage.setAttribute("aria-label", "Ampliar foto do produto");
 
-
-            if (index === 0) {
-
-                thumbnail.classList.add(
-                    "active"
-                );
-
-            }
-
-
-            thumbnail.addEventListener(
-                "click",
-                () => {
-
-                    mainImage.src = image;
-
-
-                    document
-                        .querySelectorAll(
-                            ".gallery-thumbnail"
-                        )
-                        .forEach(
-                            item =>
-                                item.classList
-                                    .remove("active")
-                        );
-
-
-                    thumbnail.classList.add(
-                        "active"
-                    );
-
-                }
-            );
-
-
-            thumbnails.appendChild(
-                thumbnail
-            );
-
+    mainImage.onkeydown = (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openProductImageLightbox(currentGalleryIndex);
         }
-    );
-
+    };
 }
+
+function updateProductLightbox() {
+    if (!selectedProduct || !selectedProduct.images?.length) return;
+
+    const image = selectedProduct.images[currentGalleryIndex];
+    const lightboxImage = document.getElementById("productLightboxImage");
+    const counter = document.getElementById("productLightboxCounter");
+    const lightbox = document.getElementById("productImageLightbox");
+    const total = selectedProduct.images.length;
+
+    if (lightboxImage) {
+        lightboxImage.src = image;
+        lightboxImage.alt = (selectedProduct.name || "Produto MONTÊ") + " — foto " + (currentGalleryIndex + 1);
+    }
+
+    if (counter) {
+        counter.textContent = total > 1 ? (currentGalleryIndex + 1) + " / " + total : "";
+    }
+
+    if (lightbox) {
+        lightbox.classList.toggle("single-image", total <= 1);
+    }
+}
+
+function openProductImageLightbox(index = currentGalleryIndex) {
+    if (!selectedProduct || !selectedProduct.images?.length) return;
+
+    currentGalleryIndex = index;
+    updateProductLightbox();
+
+    const lightbox = document.getElementById("productImageLightbox");
+    if (!lightbox) return;
+
+    lightbox.classList.add("active");
+    lightbox.setAttribute("aria-hidden", "false");
+    document.body.classList.add("product-lightbox-open");
+}
+
+function closeProductImageLightbox() {
+    const lightbox = document.getElementById("productImageLightbox");
+    if (!lightbox) return;
+
+    lightbox.classList.remove("active");
+    lightbox.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("product-lightbox-open");
+}
+
+function navigateProductLightbox(direction) {
+    if (!selectedProduct || !selectedProduct.images?.length) return;
+
+    const total = selectedProduct.images.length;
+    currentGalleryIndex = (currentGalleryIndex + direction + total) % total;
+    updateProductLightbox();
+    setGalleryImage(currentGalleryIndex);
+}
+
+function handleProductLightboxKeydown(event) {
+    const lightbox = document.getElementById("productImageLightbox");
+    if (!lightbox?.classList.contains("active")) return;
+
+    if (event.key === "Escape") {
+        closeProductImageLightbox();
+    } else if (event.key === "ArrowLeft") {
+        navigateProductLightbox(-1);
+    } else if (event.key === "ArrowRight") {
+        navigateProductLightbox(1);
+    }
+}
+
+document.addEventListener("keydown", handleProductLightboxKeydown);
+
+function setupProductLightboxSwipe() {
+    const lightbox = document.getElementById("productImageLightbox");
+    if (!lightbox || lightbox.dataset.swipeReady === "true") return;
+
+    let startX = 0;
+    let startY = 0;
+
+    lightbox.addEventListener("touchstart", (event) => {
+        const touch = event.changedTouches[0];
+        startX = touch.clientX;
+        startY = touch.clientY;
+    }, { passive: true });
+
+    lightbox.addEventListener("touchend", (event) => {
+        const touch = event.changedTouches[0];
+        const deltaX = touch.clientX - startX;
+        const deltaY = touch.clientY - startY;
+
+        if (Math.abs(deltaX) > 45 && Math.abs(deltaX) > Math.abs(deltaY)) {
+            navigateProductLightbox(deltaX < 0 ? 1 : -1);
+        }
+    }, { passive: true });
+
+    lightbox.addEventListener("click", (event) => {
+        if (event.target === lightbox) {
+            closeProductImageLightbox();
+        }
+    });
+
+    lightbox.dataset.swipeReady = "true";
+}
+
+setupProductLightboxSwipe();
 
 
 /* =====================================================
