@@ -2250,20 +2250,89 @@ app.post(
             );
 
             /* =================================================
-               PIX DIRETO NO SITE MONTÊ
-               Pix não passa pela InfinitePay. O QR Code e o
-               Pix Copia e Cola são gerados aqui com o valor final
-               (5% de desconto somente nos produtos + frete integral).
+               PIX — CHECKOUT INDEPENDENTE DA INFINITEPAY
+               O Pix usa um checkout próprio da InfinitePay.
+               O desconto de 5% incide somente nos produtos;
+               o frete permanece com o valor integral.
             ================================================= */
             if (paymentMethod === "pix") {
-                const pixPayload = buildPixPayload(checkoutTotal, String(orderCode));
+                const pixItems = productItems.map((item) => ({
+                    quantity: item.quantity,
+                    price: Math.round(item.price * 0.95 * 100),
+                    description: item.description
+                }));
 
-                console.log("🟢 Pix direto gerado no site:", orderNsu, checkoutTotal);
+                if (shippingValue > 0) {
+                    pixItems.push({
+                        quantity: 1,
+                        price: Math.round(shippingValue * 100),
+                        description: shippingOption.name
+                    });
+                }
+
+                const pixPayload = {
+                    handle: INFINITEPAY_HANDLE,
+                    order_nsu: orderNsu,
+                    redirect_url:
+                        `${SITE_URL}/pagamento-sucesso?order_nsu=${encodeURIComponent(orderNsu)}&payment_method=pix`,
+                    webhook_url:
+                        `${SITE_URL}/webhook-infinitepay`,
+                    items: pixItems,
+                    customer: {
+                        name: String(customer.name),
+                        email: String(customer.email),
+                        phone_number: String(customer.phone)
+                    },
+                    address: {
+                        cep: customer.address.cep || "",
+                        street: customer.address.street || "",
+                        neighborhood: customer.address.neighborhood || "",
+                        number: customer.address.number || "",
+                        complement: customer.address.complement || ""
+                    }
+                };
+
+                console.log("PIX — criando checkout independente na InfinitePay:", {
+                    order_nsu: orderNsu,
+                    amount: checkoutTotal
+                });
+
+                const pixResponse = await fetchWithTimeout(
+                    INFINITEPAY_API,
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Accept": "application/json"
+                        },
+                        body: JSON.stringify(pixPayload)
+                    },
+                    15000
+                );
+
+                const pixResponseText = await pixResponse.text();
+                let pixData;
+                try {
+                    pixData = pixResponseText ? JSON.parse(pixResponseText) : {};
+                } catch {
+                    pixData = { raw: pixResponseText };
+                }
+
+                if (!pixResponse.ok || !pixData?.url) {
+                    console.error("PIX — erro ao criar checkout InfinitePay:", pixResponse.status, pixData);
+                    return res.status(pixResponse.ok ? 502 : pixResponse.status).json({
+                        success: false,
+                        message: "A InfinitePay não conseguiu criar o checkout Pix.",
+                        error: pixData
+                    });
+                }
+
+                console.log("PIX — checkout independente criado:", orderNsu);
 
                 return res.status(200).json({
                     success: true,
-                    direct_pix: true,
-                    pix_payload: pixPayload,
+                    pix_checkout: true,
+                    url: pixData.url,
                     amount: checkoutTotal,
                     order_nsu: orderNsu,
                     order_code: String(orderCode),
@@ -2272,7 +2341,7 @@ app.post(
             }
 
             /* =================================================
-               INFINITEPAY SOMENTE PARA CARTÃO
+               INFINITEPAY — CHECKOUT DE CARTÃO
             ================================================= */
 
             const infinitePayItems =
