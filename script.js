@@ -1904,6 +1904,12 @@ async function subscribeNewsletter(event) {
    MENU MOBILE
 ===================================================== */
 
+function goToNovidades(event){
+    if(event?.target?.closest?.("button")) return;
+    const section=document.getElementById("novidades");
+    if(section) section.scrollIntoView({behavior:"smooth",block:"start"});
+}
+
 function toggleMobileMenu() {
 
     document
