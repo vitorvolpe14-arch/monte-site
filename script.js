@@ -1621,18 +1621,48 @@ async function checkout() {
 function renderDirectPixPayment(data){
     const panel=document.getElementById("directPixPayment");
     const canvas=document.getElementById("directPixQr");
+    const qrImage=document.getElementById("directPixQrImage");
     const copy=document.getElementById("directPixCopyPaste");
     const amount=document.getElementById("directPixAmount");
     const order=document.getElementById("directPixOrder");
     if(!panel||!canvas||!copy||!amount||!order)throw new Error("Área do Pix não encontrada.");
+
     panel.hidden=false;
     order.textContent="Pedido #"+String(data.order_code||"").padStart(4,"0");
     amount.textContent=formatPrice(Number(data.amount||0));
     copy.value=data.pix_payload;
-    if(!window.QRCode?.toCanvas)throw new Error("Não foi possível carregar o gerador de QR Code.");
-    window.QRCode.toCanvas(canvas,data.pix_payload,{width:240,margin:2,errorCorrectionLevel:"M"},error=>{
-        if(error)console.error("Erro ao gerar QR Code Pix:",error);
-    });
+
+    if(qrImage){
+        qrImage.hidden=true;
+        qrImage.removeAttribute("src");
+    }
+
+    const showFallbackQr=()=>{
+        canvas.hidden=true;
+        if(!qrImage)return;
+        qrImage.hidden=false;
+        qrImage.src="https://quickchart.io/qr?size=280&margin=2&ecLevel=M&text="+encodeURIComponent(data.pix_payload);
+    };
+
+    canvas.hidden=false;
+
+    if(window.QRCode?.toCanvas){
+        window.QRCode.toCanvas(
+            canvas,
+            data.pix_payload,
+            {width:240,margin:2,errorCorrectionLevel:"M"},
+            error=>{
+                if(error){
+                    console.error("Erro ao gerar QR Code Pix:",error);
+                    showFallbackQr();
+                }
+            }
+        );
+    }else{
+        console.warn("Gerador local de QR Code não carregou. Usando fallback.");
+        showFallbackQr();
+    }
+
     panel.scrollIntoView({behavior:"smooth",block:"nearest"});
 }
 
