@@ -2715,6 +2715,24 @@ app.post(
             const paidAmount = Number(payment.paid_amount ?? webhook.paid_amount ?? 0);
             const resolvedPaymentMethod = payment.capture_method === "pix" ? "pix" : "credit_card";
 
+            // Para pedidos iniciados como PIX, a confirmação final precisa
+            // ser explicitamente PIX. Os e-mails só são disparados depois
+            // desta validação + payment_check aprovado.
+            if (order.payment_method === "pix" && payment.capture_method !== "pix") {
+                console.warn(
+                    "⚠️ Método de pagamento divergente para pedido PIX:",
+                    orderNsu,
+                    payment.capture_method
+                );
+                return res.status(200).json({
+                    success: true,
+                    paid: true,
+                    verified: true,
+                    payment_method_mismatch: true,
+                    message: "Pagamento recebido, mas o método confirmado não corresponde ao pedido PIX."
+                });
+            }
+
             // Baixa atômica e idempotente. A função bloqueia o pedido e usa
             // stock_decremented para impedir duas baixas do mesmo pedido.
             const stockResult = await supabaseRequest("rpc/decrement_order_stock", {
