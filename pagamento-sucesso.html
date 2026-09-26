@@ -44,26 +44,116 @@ h1{text-align:center;font-size:29px;font-weight:500;margin:0 0 10px}
 <script>
 const money=v=>new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(v||0));
 const params=new URLSearchParams(location.search);
-const orderNsu=params.get("order_nsu"); const method=params.get("payment_method");
-async function loadOrder(){
- if(!orderNsu){showError("Não foi possível localizar o pedido.");return;}
- try{
-  const r=await fetch("/api/pedido-confirmacao?order_nsu="+encodeURIComponent(orderNsu));
-  const d=await r.json(); if(!r.ok||!d.success)throw new Error(d.message);
-  const o=d.order; const paid=o.status==="paid";
-  document.getElementById("title").textContent=paid?"Pagamento confirmado":"Pedido recebido";
-  document.getElementById("subtitle").textContent=paid?"Obrigada pela sua compra. Seu pedido foi confirmado e já está registrado na MONTÊ.":"Seu pedido foi registrado. Confira os detalhes abaixo.";
-  document.getElementById("orderBox").innerHTML='<div class="row"><span class="label">Pedido</span><span class="value">'+esc(o.order_code)+'</span></div><div class="row"><span class="label">Status</span><span class="value">'+(paid?"PAGO":"AGUARDANDO PAGAMENTO")+'</span></div><div class="row"><span class="label">Frete</span><span class="value">'+money(o.shipping)+'</span></div><div class="total"><span>Total</span><span>'+money(o.total)+'</span></div>';
-  document.getElementById("items").innerHTML=(o.items||[]).map(i=>'<div class="item"><div><div class="item-name">'+esc(i.product_name)+'</div><div class="item-meta">'+(i.variant_color?esc(i.variant_color)+" · ":"")+"Qtd. "+i.quantity+'</div></div><strong>'+money(i.total_price)+'</strong></div>').join("");
-  if(o.payment_method==="pix"&&o.pix_payload&&!paid){
-    const p=document.getElementById("pix");p.style.display="block";document.getElementById("pixAmount").textContent=money(o.total);document.getElementById("pixCode").value=o.pix_payload;
-    if(window.QRCode)QRCode.toCanvas(document.getElementById("pixQr"),o.pix_payload,{width:240,margin:2,errorCorrectionLevel:"M"});
-  }
- }catch(e){showError("Não foi possível carregar os dados do pedido agora. Atualize a página para tentar novamente.");}
+const orderNsu=params.get("order_nsu");
+let lastOrder=null;
+let pollTimer=null;
+let pollCount=0;
+
+async function fetchOrder(){
+  if(!orderNsu) throw new Error("Não foi possível localizar o pedido.");
+  const r=await fetch("/api/pedido-confirmacao?order_nsu="+encodeURIComponent(orderNsu),{cache:"no-store"});
+  const d=await r.json();
+  if(!r.ok||!d.success) throw new Error(d.message||"Pedido não encontrado.");
+  return d.order;
 }
-function copyPix(){const el=document.getElementById("pixCode");navigator.clipboard.writeText(el.value).then(()=>alert("Pix Copia e Cola copiado."));}
-function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m]));}
-function showError(msg){document.getElementById("content").innerHTML='<div class="error"><div class="check">!</div><h1>Pedido</h1><p>'+esc(msg)+'</p><a class="back" href="/">Voltar para a MONTÊ</a></div>';}
+
+function renderOrder(o){
+  lastOrder=o;
+  const paid=o.status==="paid";
+  const pixPending=o.payment_method==="pix"&&!paid;
+  const cardPending=o.payment_method==="credit_card"&&!paid;
+
+  document.getElementById("title").textContent=paid
+    ?"Compra realizada"
+    :(pixPending?"Finalize o pagamento":"Pagamento em processamento");
+
+  document.getElementById("subtitle").textContent=paid
+    ?"Obrigada pela sua compra. Seu pagamento foi confirmado e seu pedido está registrado na MONTÊ."
+    :(pixPending
+      ?"Seu pedido foi criado, mas a compra ainda não foi concluída. Faça o pagamento via Pix abaixo."
+      :"Seu pedido foi criado, mas ainda estamos aguardando a confirmação do pagamento.");
+
+  document.getElementById("orderBox").innerHTML=
+    '<div class="row"><span class="label">Pedido</span><span class="value">'+esc(o.order_code)+'</span></div>'+
+    '<div class="row"><span class="label">Status</span><span class="value">'+(paid?"PAGO":"PAGAMENTO PENDENTE")+'</span></div>'+
+    '<div class="row"><span class="label">Frete</span><span class="value">'+money(o.shipping)+'</span></div>'+
+    '<div class="total"><span>Total</span><span>'+money(o.total)+'</span></div>';
+
+  document.getElementById("items").innerHTML=(o.items||[]).map(i=>
+    '<div class="item"><div><div class="item-name">'+esc(i.product_name)+'</div><div class="item-meta">'+
+    (i.variant_color?esc(i.variant_color)+" · ":"")+"Qtd. "+i.quantity+
+    '</div></div><strong>'+money(i.total_price)+'</strong></div>'
+  ).join("");
+
+  const pix=document.getElementById("pix");
+  pix.style.display="none";
+
+  if(pixPending&&o.pix_payload){
+    pix.style.display="block";
+    document.getElementById("pixAmount").textContent=money(o.total);
+    document.getElementById("pixCode").value=o.pix_payload;
+    if(window.QRCode){
+      QRCode.toCanvas(document.getElementById("pixQr"),o.pix_payload,{
+        width:240,margin:2,errorCorrectionLevel:"M"
+      });
+    }
+  }
+
+  if(cardPending){
+    startCardPolling();
+  } else {
+    stopPolling();
+  }
+}
+
+async function loadOrder(){
+  try{
+    const o=await fetchOrder();
+    renderOrder(o);
+  }catch(e){
+    showError(e.message||"Não foi possível carregar o pedido agora.");
+  }
+}
+
+function startCardPolling(){
+  if(pollTimer||pollCount>=15)return;
+  pollTimer=setInterval(async()=>{
+    pollCount++;
+    try{
+      const o=await fetchOrder();
+      renderOrder(o);
+      if(o.status==="paid"||pollCount>=15)stopPolling();
+    }catch(e){
+      if(pollCount>=15)stopPolling();
+    }
+  },2000);
+}
+
+function stopPolling(){
+  if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
+}
+
+function copyPix(){
+  const el=document.getElementById("pixCode");
+  if(!el?.value)return;
+  navigator.clipboard.writeText(el.value)
+    .then(()=>alert("Pix Copia e Cola copiado."))
+    .catch(()=>{el.focus();el.select();document.execCommand("copy");alert("Pix Copia e Cola copiado.");});
+}
+
+function esc(v){
+  return String(v??"").replace(/[&<>"']/g,m=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"
+  }[m]));
+}
+
+function showError(msg){
+  stopPolling();
+  document.getElementById("content").innerHTML=
+    '<div class="error"><div class="check">!</div><h1>Pedido</h1><p>'+
+    esc(msg)+'</p><a class="back" href="/">Voltar para a MONTÊ</a></div>';
+}
+
 loadOrder();
 </script>
 </body></html>
