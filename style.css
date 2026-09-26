@@ -5675,3 +5675,20 @@ body.product-lightbox-open {
         object-fit: contain !important;
     }
 }
+
+
+/* =====================================================
+   PIX DIRETO — MONTÊ
+===================================================== */
+.direct-pix-payment{margin:18px 0 4px;padding:20px;border:1px solid #111;background:#fff;text-align:center}
+.direct-pix-header{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.direct-pix-header span{font-size:9px;letter-spacing:2px;color:#666}
+.direct-pix-header strong{font-size:14px;letter-spacing:1px}
+.direct-pix-order{font-size:11px;color:#666;margin:0 0 14px}
+.direct-pix-qr-wrap{display:flex;justify-content:center;margin:8px auto 14px}
+.direct-pix-qr-wrap canvas{display:block;max-width:240px;height:auto}
+.direct-pix-amount{display:block;font-size:20px;margin-bottom:10px}
+.direct-pix-instruction{font-size:11px;line-height:1.5;color:#555;margin:0 auto 12px;max-width:330px}
+.direct-pix-copy{width:100%;min-height:90px;box-sizing:border-box;border:1px solid #ccc;padding:10px;font-size:10px;line-height:1.35;resize:none;word-break:break-all;background:#fafafa}
+.direct-pix-copy-button{width:100%;margin-top:9px;padding:13px 14px;border:0;background:#111;color:#fff;font-size:9px;letter-spacing:1.4px;cursor:pointer}
+.direct-pix-note{font-size:9px;line-height:1.45;color:#777;margin:12px 0 0}
