@@ -2861,6 +2861,98 @@ app.post(
     }
 );
 
+
+/* =====================================================
+   WEBHOOK PIX — CHECKOUT INDEPENDENTE INFINITEPAY
+   Recebe somente pagamentos Pix do checkout independente.
+   A confirmação é validada pelo payment_check da InfinitePay.
+===================================================== */
+app.post("/webhook-pix", infinitePayWebhookRateLimit, async (req, res) => {
+    try {
+        const webhook = req.body || {};
+        const orderNsu = safeString(webhook.order_nsu);
+        const transactionNsu = safeString(webhook.transaction_nsu);
+        const invoiceSlug = safeString(webhook.invoice_slug || webhook.slug);
+        const captureMethod = safeString(webhook.capture_method).toLowerCase();
+
+        console.log("PIX — Webhook InfinitePay recebido:", orderNsu);
+
+        if (!orderNsu || !transactionNsu || !invoiceSlug) {
+            return res.status(400).json({
+                success: false,
+                paid: false,
+                message: "Webhook Pix sem order_nsu, transaction_nsu ou invoice_slug."
+            });
+        }
+
+        if (captureMethod && captureMethod !== "pix") {
+            return res.status(400).json({
+                success: false,
+                paid: false,
+                message: "Este endpoint aceita somente pagamentos Pix."
+            });
+        }
+
+        const webhookAmount = Number(webhook.amount);
+        if (!Number.isFinite(webhookAmount) || webhookAmount <= 0) {
+            return res.status(400).json({
+                success: false,
+                paid: false,
+                message: "Valor do pagamento não informado."
+            });
+        }
+
+        const verification = await verifyInfinitePayPayment({
+            orderNsu,
+            transactionNsu,
+            invoiceSlug,
+            expectedAmount: webhookAmount / 100
+        });
+
+        if (!verification.verified) {
+            console.warn("PIX — pagamento ainda não confirmado:", orderNsu);
+            return res.status(400).json({
+                success: false,
+                paid: false,
+                message: "Pagamento Pix ainda não confirmado pela InfinitePay."
+            });
+        }
+
+        const payment = verification.data;
+        if (safeString(payment.capture_method).toLowerCase() !== "pix") {
+            return res.status(400).json({
+                success: false,
+                paid: false,
+                message: "A confirmação da InfinitePay não corresponde a Pix."
+            });
+        }
+
+        console.log("PIX — pagamento confirmado pela InfinitePay:", {
+            order_nsu: orderNsu,
+            transaction_nsu: transactionNsu,
+            amount: Number(payment.amount || 0) / 100
+        });
+
+        return res.status(200).json({
+            success: true,
+            paid: true,
+            payment_method: "pix",
+            order_nsu: orderNsu,
+            transaction_nsu: transactionNsu,
+            invoice_slug: invoiceSlug,
+            amount: Number(payment.amount || 0) / 100,
+            paid_amount: Number(payment.paid_amount || 0) / 100
+        });
+    } catch (error) {
+        console.error("PIX — erro no webhook independente:", error);
+        return res.status(500).json({
+            success: false,
+            paid: false,
+            message: "Erro interno na confirmação do Pix."
+        });
+    }
+});
+
 /* =====================================================
    MINHAS COMPRAS — CONSULTA SEGURA POR PEDIDO + E-MAIL
 ===================================================== */
