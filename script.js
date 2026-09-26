@@ -1347,9 +1347,46 @@ function getCartSubtotal() {
 
 function updatePaymentSummary(subtotal = getCartSubtotal()) {
     const shipping = getShippingValue();
-    const checkoutTotal = Number((subtotal + shipping).toFixed(2));
+    const paymentMethod =
+        document.querySelector('input[name="paymentMethod"]:checked')?.value ||
+        selectedPaymentMethod ||
+        "pix";
+
+    selectedPaymentMethod = paymentMethod;
+
+    const pixDiscount = paymentMethod === "pix"
+        ? Number((subtotal * 0.05).toFixed(2))
+        : 0;
+
+    const checkoutTotal = Number(
+        (subtotal - pixDiscount + shipping).toFixed(2)
+    );
+
     const checkoutElement = document.getElementById("checkoutTotal");
     if (checkoutElement) checkoutElement.textContent = formatPrice(checkoutTotal);
+
+    const discountElement = document.getElementById("checkoutDiscount");
+    if (discountElement) {
+        discountElement.textContent = pixDiscount > 0
+            ? `Desconto Pix: -${formatPrice(pixDiscount)}`
+            : "";
+        discountElement.style.display = pixDiscount > 0 ? "block" : "none";
+    }
+
+    document.querySelectorAll(".payment-option").forEach(option => {
+        const input = option.querySelector('input[name="paymentMethod"]');
+        option.classList.toggle("selected", !!input?.checked);
+    });
+}
+
+function setupPaymentMethodSelector() {
+    document.querySelectorAll('input[name="paymentMethod"]').forEach(input => {
+        input.addEventListener("change", () => {
+            selectedPaymentMethod = input.value;
+            updatePaymentSummary();
+        });
+    });
+    updatePaymentSummary();
 }
 
 function getShippingValue() {
@@ -1649,6 +1686,16 @@ async function checkout() {
     }
 
 
+    const paymentMethod =
+        document.querySelector('input[name="paymentMethod"]:checked')?.value ||
+        selectedPaymentMethod ||
+        "pix";
+
+    if (!["pix", "credit_card"].includes(paymentMethod)) {
+        showToast("Selecione uma forma de pagamento válida.");
+        return;
+    }
+
     // 7. Desabilita o botão durante o processamento
     const checkoutButton =
         document.querySelector(".checkout-button");
@@ -1694,6 +1741,8 @@ async function checkout() {
                         items: items,
 
                         shipping_service_id: shippingServiceId,
+
+                        payment_method: paymentMethod,
 
                         customer: {
 
@@ -2276,3 +2325,9 @@ document.addEventListener("DOMContentLoaded", () => {
         start();
     }
 })();
+
+
+/* =====================================================
+   FORMA DE PAGAMENTO
+===================================================== */
+document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
