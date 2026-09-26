@@ -1598,7 +1598,7 @@ async function checkout() {
         if(paymentMethod==="pix"&&data?.direct_pix&&data?.pix_payload){
             renderDirectPixPayment(data);
             if(checkoutButton){checkoutButton.disabled=true;checkoutButton.textContent="PIX GERADO";}
-            showToast("QR Code Pix gerado. Após o pagamento, a confirmação será automática.");
+            showToast("QR Code Pix gerado. Confira o valor antes de pagar.");
             return;
         }
 
@@ -1649,14 +1649,8 @@ function renderDirectPixPayment(data){
     copy.value=data.pix_payload;
 
     if(qrImage){
-        if(data.pix_qr_base64){
-            qrImage.hidden=false;
-            qrImage.src="data:image/png;base64,"+data.pix_qr_base64;
-            canvas.hidden=true;
-        }else{
-            qrImage.hidden=true;
-            qrImage.removeAttribute("src");
-        }
+        qrImage.hidden=true;
+        qrImage.removeAttribute("src");
     }
 
     const showFallbackQr=()=>{
@@ -1665,11 +1659,6 @@ function renderDirectPixPayment(data){
         qrImage.hidden=false;
         qrImage.src="https://quickchart.io/qr?size=280&margin=2&ecLevel=M&text="+encodeURIComponent(data.pix_payload);
     };
-
-    if(data.pix_qr_base64){
-        panel.scrollIntoView({behavior:"smooth",block:"nearest"});
-        return;
-    }
 
     canvas.hidden=false;
 
