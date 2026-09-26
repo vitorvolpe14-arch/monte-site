@@ -1660,8 +1660,17 @@ app.post(
             const {
                 items,
                 customer,
-                shipping_service_id: requestedShippingServiceId
+                shipping_service_id: requestedShippingServiceId,
+                payment_method: requestedPaymentMethod
             } = req.body || {};
+
+            const requestedPaymentMethodSafe = safeString(requestedPaymentMethod).toLowerCase();
+            if (!["pix", "credit_card"].includes(requestedPaymentMethodSafe)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Selecione uma forma de pagamento."
+                });
+            }
 
             /* =================================================
                VALIDAÇÃO DO CARRINHO
@@ -2159,8 +2168,12 @@ app.post(
 
             // O checkout da MONTÊ usa sempre o valor integral.
             // A cliente escolhe Pix ou cartão somente dentro da InfinitePay.
+            const pixDiscount = requestedPaymentMethodSafe === "pix"
+                ? Number((subtotal * 0.05).toFixed(2))
+                : 0;
+
             const checkoutTotal = Number(
-                (subtotal + shippingValue).toFixed(2)
+                (subtotal - pixDiscount + shippingValue).toFixed(2)
             );
 
             const savedOrders = await supabaseRequest("orders", {
@@ -2181,7 +2194,7 @@ app.post(
                     shipping_delivery_days: shippingOption.delivery_days || shippingOption.delivery_max_days || null,
                     total: checkoutTotal,
                     status: "pending",
-                    payment_method: null,
+                    payment_method: requestedPaymentMethodSafe,
                     whatsapp_tracking_opt_in: customer.whatsapp_updates === true,
                     whatsapp_tracking_status: customer.whatsapp_updates === true ? "pending" : "opted_out",
                     items: productItems
@@ -2217,7 +2230,11 @@ app.post(
             const infinitePayItems =
                 productItems.map((item) => ({
                     quantity: item.quantity,
-                    price: Math.round(item.price * 100),
+                    price: Math.round(
+                        item.price *
+                        (requestedPaymentMethodSafe === "pix" ? 0.95 : 1) *
+                        100
+                    ),
                     description: item.description
                 }));
 
