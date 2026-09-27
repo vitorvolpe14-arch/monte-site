@@ -1095,6 +1095,7 @@ document.getElementById(
 
         updateCart();
 
+        trackEcommerceEvent("add_to_cart", selectedProduct, selectedQuantity);
 
         closeProductModal();
 
