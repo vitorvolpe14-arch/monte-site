@@ -29,6 +29,321 @@ const INFINITEPAY_HANDLE =
     process.env.INFINITEPAY_HANDLE ||
     "monte-64839705-0z9";
 
+/* =====================================================
+   OLIST ERP — integração de pedidos e estoque
+   Olist é a fonte mestre do estoque.
+===================================================== */
+const OLIST_API_BASE = safeString(process.env.OLIST_API_BASE || "https://api.tiny.com.br/public-api/v3").replace(/\/$/, "");
+const OLIST_TOKEN = safeString(process.env.OLIST_TOKEN);
+const OLIST_CLIENT_ID = safeString(process.env.OLIST_CLIENT_ID);
+const OLIST_CLIENT_SECRET = safeString(process.env.OLIST_CLIENT_SECRET);
+const OLIST_REFRESH_TOKEN = safeString(process.env.OLIST_REFRESH_TOKEN);
+
+let olistAccessToken = OLIST_TOKEN || null;
+let olistAccessTokenExpiresAt = OLIST_TOKEN ? Number.MAX_SAFE_INTEGER : 0;
+let olistRefreshToken = OLIST_REFRESH_TOKEN || null;
+
+async function getOlistAccessToken() {
+    if (olistAccessToken && Date.now() < olistAccessTokenExpiresAt - 60000) {
+        return olistAccessToken;
+    }
+    if (!OLIST_CLIENT_ID || !OLIST_CLIENT_SECRET || !olistRefreshToken) {
+        throw new Error("OLIST_AUTH_REQUIRED");
+    }
+
+    const response = await fetch("https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect/token", {
+        method: "POST",
+        headers: {"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},
+        body: new URLSearchParams({
+            grant_type: "refresh_token",
+            client_id: OLIST_CLIENT_ID,
+            client_secret: OLIST_CLIENT_SECRET,
+            refresh_token: olistRefreshToken
+        })
+    });
+    const textResponse = await response.text();
+    let data = {};
+    try { data = textResponse ? JSON.parse(textResponse) : {}; } catch { data = {raw:textResponse}; }
+    if (!response.ok || !data.access_token) {
+        throw new Error("OLIST_AUTH_REFRESH_FAILED");
+    }
+    olistAccessToken = data.access_token;
+    olistRefreshToken = data.refresh_token || olistRefreshToken;
+    olistAccessTokenExpiresAt = Date.now() + (Number(data.expires_in) || 3600) * 1000;
+    return olistAccessToken;
+}
+
+async function olistRequest(endpoint, options = {}) {
+    const token = await getOlistAccessToken();
+    const response = await fetch(OLIST_API_BASE + endpoint, {
+        ...options,
+        headers: {
+            "Accept":"application/json",
+            "Content-Type":"application/json",
+            "Authorization":"Bearer " + token,
+            ...(options.headers || {})
+        }
+    });
+    const textResponse = await response.text();
+    let data = {};
+    try { data = textResponse ? JSON.parse(textResponse) : {}; } catch { data = {raw:textResponse}; }
+    if (!response.ok) {
+        const error = new Error("Olist API " + response.status);
+        error.status = response.status;
+        error.data = data;
+        throw error;
+    }
+    return data;
+}
+
+function olistItemsFromResponse(data) {
+    return Array.isArray(data?.itens) ? data.itens : (Array.isArray(data) ? data : []);
+}
+
+async function findOlistProductBySku(sku) {
+    const code = safeString(sku);
+    if (!code) throw new Error("OLIST_SKU_MISSING");
+    const data = await olistRequest("/produtos?codigo=" + encodeURIComponent(code) + "&limit=20");
+    const items = olistItemsFromResponse(data);
+    const exact = items.find(p => safeString(p.sku || p.codigo) === code) || items[0];
+    if (!exact?.id) throw new Error("OLIST_PRODUCT_NOT_FOUND:" + code);
+    return exact;
+}
+
+async function findOrCreateOlistContact(order) {
+    const cpf = safeString(order.customer_cpf).replace(/\D/g, "");
+    if (cpf) {
+        const existing = await olistRequest("/contatos?cpfCnpj=" + encodeURIComponent(cpf) + "&limit=20");
+        const contacts = olistItemsFromResponse(existing);
+        const match = contacts.find(c => safeString(c.cpfCnpj).replace(/\D/g, "") === cpf) || contacts[0];
+        if (match?.id) return match.id;
+    }
+
+    const address = order.customer_address && typeof order.customer_address === "object" ? order.customer_address : {};
+    const payload = {
+        nome: safeString(order.customer_name) || "Cliente MONTÊ",
+        tipoPessoa: cpf.length === 11 ? "F" : "J",
+        cpfCnpj: cpf || null,
+        celular: safeString(order.customer_whatsapp || order.customer_phone) || null,
+        telefone: safeString(order.customer_phone) || null,
+        email: safeString(order.customer_email) || null,
+        endereco: {
+            endereco: safeString(address.street) || null,
+            numero: safeString(address.number) || null,
+            complemento: safeString(address.complement) || null,
+            bairro: safeString(address.neighborhood) || null,
+            municipio: safeString(address.city) || null,
+            cep: safeString(address.cep).replace(/\D/g, "") || null,
+            uf: safeString(address.state) || null,
+            pais: "Brasil"
+        },
+        situacao: "B"
+    };
+
+    const created = await olistRequest("/contatos", {method:"POST", body:JSON.stringify(payload)});
+    if (!created?.id) throw new Error("OLIST_CONTACT_CREATE_FAILED");
+    return created.id;
+}
+
+async function findOlistPaymentIds(paymentMethod) {
+    const wanted = safeString(paymentMethod).toLowerCase();
+    const terms = wanted === "pix"
+        ? ["pix"]
+        : ["cartão de crédito", "cartao de credito", "cartão", "cartao"];
+
+    const [recebimentos, pagamentos] = await Promise.all([
+        olistRequest("/formas-recebimento?limit=100"),
+        olistRequest("/formas-pagamento?limit=100")
+    ]);
+
+    const received = olistItemsFromResponse(recebimentos);
+    const paid = olistItemsFromResponse(pagamentos);
+    const pick = (items) => {
+        for (const term of terms) {
+            const hit = items.find(x => safeString(x.nome).toLowerCase().includes(term));
+            if (hit?.id) return Number(hit.id);
+        }
+        return null;
+    };
+
+    return {formaRecebimentoId:pick(received), meioPagamentoId:pick(paid)};
+}
+
+function olistAddressFromOrder(order) {
+    const a = order.customer_address && typeof order.customer_address === "object" ? order.customer_address : {};
+    return {
+        endereco: safeString(a.street) || null,
+        enderecoNro: safeString(a.number) || null,
+        complemento: safeString(a.complement) || null,
+        bairro: safeString(a.neighborhood) || null,
+        municipio: safeString(a.city) || null,
+        cep: safeString(a.cep).replace(/\D/g, "") || null,
+        uf: safeString(a.state) || null,
+        fone: safeString(order.customer_phone || order.customer_whatsapp) || null,
+        nomeDestinatario: safeString(order.customer_name) || null,
+        cpfCnpj: safeString(order.customer_cpf).replace(/\D/g, "") || null,
+        tipoPessoa: "F"
+    };
+}
+
+async function createOrGetOlistOrder(order) {
+    const ecommerceNumber = safeString(order.order_nsu);
+    if (!ecommerceNumber) throw new Error("OLIST_ORDER_NUMBER_MISSING");
+
+    const existingResponse = await olistRequest("/pedidos?numeroPedidoEcommerce=" + encodeURIComponent(ecommerceNumber) + "&limit=20");
+    const existing = olistItemsFromResponse(existingResponse);
+    if (existing[0]?.id) {
+        return {id:Number(existing[0].id), numeroPedido:existing[0].numeroPedido || null, created:false};
+    }
+
+    const rawItems = Array.isArray(order.items) ? order.items : [];
+    const productCache = new Map();
+    const orderItems = [];
+
+    for (const item of rawItems) {
+        const sku = safeString(item.variant_sku || item.sku);
+        if (!sku) throw new Error("OLIST_SKU_MISSING_FOR_ORDER_ITEM");
+        let product = productCache.get(sku);
+        if (!product) {
+            product = await findOlistProductBySku(sku);
+            productCache.set(sku, product);
+        }
+        orderItems.push({
+            produto: {id:Number(product.id), tipo:"P"},
+            quantidade: Math.max(1, Number(item.quantity || 1)),
+            valorUnitario: Number(item.price || 0),
+            infoAdicional: safeString(item.variant_color || item.color)
+                ? "Cor: " + safeString(item.variant_color || item.color)
+                : null
+        });
+    }
+
+    if (!orderItems.length) throw new Error("OLIST_ORDER_WITHOUT_ITEMS");
+
+    const contactId = await findOrCreateOlistContact(order);
+    const paymentIds = await findOlistPaymentIds(order.payment_method);
+
+    const payload = {
+        idContato: Number(contactId),
+        situacao: 3,
+        data: new Date().toISOString().slice(0,10),
+        valorFrete: Number(order.shipping || 0),
+        observacoesInternas: "Pedido MONTÊ " + ecommerceNumber + " | InfinitePay " + safeString(order.transaction_nsu),
+        ecommerce: {numeroPedidoEcommerce:ecommerceNumber},
+        enderecoEntrega: olistAddressFromOrder(order),
+        itens: orderItems
+    };
+
+    if (paymentIds.formaRecebimentoId || paymentIds.meioPagamentoId) {
+        payload.pagamento = {};
+        if (paymentIds.formaRecebimentoId) payload.pagamento.formaRecebimento = {id:paymentIds.formaRecebimentoId};
+        if (paymentIds.meioPagamentoId) payload.pagamento.meioPagamento = {id:paymentIds.meioPagamentoId};
+    }
+
+    const created = await olistRequest("/pedidos", {method:"POST", body:JSON.stringify(payload)});
+    if (!created?.id) throw new Error("OLIST_ORDER_CREATE_FAILED");
+
+    return {id:Number(created.id), numeroPedido:created.numeroPedido || null, created:true};
+}
+
+async function launchOlistStock(orderId) {
+    await olistRequest("/pedidos/" + encodeURIComponent(orderId) + "/lancar-estoque", {method:"POST"});
+}
+
+async function syncOlistStockToMonte(order) {
+    const rawItems = Array.isArray(order.items) ? order.items : [];
+    const synced = [];
+    for (const item of rawItems) {
+        const sku = safeString(item.variant_sku || item.sku);
+        if (!sku) continue;
+
+        const variants = await supabaseRequest(
+            "product_variants?sku=eq." + encodeURIComponent(sku) + "&select=id,sku,stock&limit=10",
+            {method:"GET"}
+        );
+        const variant = Array.isArray(variants) ? variants[0] : null;
+        if (!variant?.id) continue;
+
+        const product = await findOlistProductBySku(sku);
+        const stockData = await olistRequest("/estoque/" + encodeURIComponent(product.id));
+        const available = Math.max(0, Math.floor(Number(stockData?.disponivel ?? stockData?.saldo ?? 0)));
+
+        const current = Number(variant.stock || 0);
+        const delta = available - current;
+        if (delta !== 0) {
+            await supabaseRequest("rpc/adjust_product_variant_stock", {
+                method:"POST",
+                body:JSON.stringify({
+                    p_variant_id:variant.id,
+                    p_delta:delta,
+                    p_movement_type:"adjustment",
+                    p_reason:"Sincronização automática de estoque com Olist após venda " + safeString(order.order_nsu),
+                    p_created_by:"olist-sync"
+                })
+            });
+        }
+        synced.push({sku,available});
+    }
+    return synced;
+}
+
+async function syncPaidOrderToOlist(order) {
+    if (!order) throw new Error("OLIST_ORDER_MISSING");
+    if (order.olist_order_id) {
+        return {id:Number(order.olist_order_id), created:false, stockSynced:false};
+    }
+
+    const result = await createOrGetOlistOrder(order);
+    await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
+        method:"PATCH",
+        body:JSON.stringify({
+            olist_order_id:result.id,
+            olist_sync_status:"order_created",
+            olist_sync_error:null,
+            olist_synced_at:new Date().toISOString()
+        })
+    });
+
+    await launchOlistStock(result.id);
+    let stockSync = [];
+    try {
+        stockSync = await syncOlistStockToMonte(order);
+        await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
+            method:"PATCH",
+            body:JSON.stringify({
+                olist_sync_status:"completed",
+                olist_stock_synced_at:new Date().toISOString(),
+                olist_sync_error:null
+            })
+        });
+    } catch (stockError) {
+        console.error("Olist estoque → MONTÊ:", stockError);
+        await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
+            method:"PATCH",
+            body:JSON.stringify({
+                olist_sync_status:"order_created_stock_sync_error",
+                olist_sync_error:String(stockError.message || stockError)
+            })
+        }).catch(()=>{});
+    }
+
+    return {...result, stockSynced:true, stockSync};
+}
+
+app.get("/api/olist/health", async (req,res) => {
+    try {
+        if (!OLIST_TOKEN && !(OLIST_CLIENT_ID && (olistRefreshToken || OLIST_REFRESH_TOKEN))) {
+            return res.status(503).json({success:false,configured:false,message:"Credenciais Olist não configuradas."});
+        }
+        const data = await olistRequest("/formas-pagamento?limit=1");
+        return res.json({success:true,configured:true,reachable:true,payment_forms:Array.isArray(data?.itens)?data.itens.length:null});
+    } catch (error) {
+        console.error("Olist health:", error);
+        return res.status(502).json({success:false,configured:true,reachable:false,message:String(error.message || "Olist indisponível")});
+    }
+});
+
+
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://uvrhougaurupvkxmezwy.supabase.co";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SUPERFRETE_API_URL = process.env.SUPERFRETE_API_URL || "https://api.superfrete.com";
@@ -2800,8 +3115,35 @@ app.post(
             const paidAmount = Number(payment.paid_amount ?? webhook.paid_amount ?? 0);
             const resolvedPaymentMethod = payment.capture_method === "pix" ? "pix" : "credit_card";
 
-            // Baixa atômica e idempotente. A função bloqueia o pedido e usa
-            // stock_decremented para impedir duas baixas do mesmo pedido.
+            // Primeiro registramos a venda no Olist e lançamos o estoque lá.
+            // Só depois sincronizamos o estoque local, evitando que o MONTÊ venda
+            // um item que não foi registrado no ERP.
+            order.payment_method = resolvedPaymentMethod;
+            try {
+                const olistResult = await syncPaidOrderToOlist({
+                    ...order,
+                    payment_method: resolvedPaymentMethod,
+                    transaction_nsu: transactionNsu,
+                    customer_cpf: order.customer_cpf,
+                    customer_whatsapp: order.customer_whatsapp
+                });
+                console.log("🟢 Venda Olist sincronizada:", olistResult);
+            } catch (olistError) {
+                console.error("🔴 Falha na sincronização Olist:", olistError);
+                await supabaseRequest(
+                    "orders?id=eq." + encodeURIComponent(order.id),
+                    {method:"PATCH",body:JSON.stringify({
+                        olist_sync_status:"error",
+                        olist_sync_error:String(olistError.message || olistError)
+                    })}
+                ).catch(()=>{});
+                return res.status(500).json({
+                    success:false,
+                    message:"Pagamento confirmado, mas a venda ainda não foi sincronizada com o ERP. O webhook será processado novamente."
+                });
+            }
+
+            // Baixa atômica e idempotente no estoque local.
             const stockResult = await supabaseRequest("rpc/decrement_order_stock", {
                 method: "POST",
                 body: JSON.stringify({ p_order_id: order.id })
