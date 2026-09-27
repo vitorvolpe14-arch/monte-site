@@ -38,6 +38,10 @@ const OLIST_TOKEN = safeString(process.env.OLIST_TOKEN);
 const OLIST_CLIENT_ID = safeString(process.env.OLIST_CLIENT_ID);
 const OLIST_CLIENT_SECRET = safeString(process.env.OLIST_CLIENT_SECRET);
 const OLIST_REFRESH_TOKEN = safeString(process.env.OLIST_REFRESH_TOKEN);
+const OLIST_REDIRECT_URI = safeString(process.env.OLIST_REDIRECT_URI || (SITE_URL.replace(/\/$/, "") + "/api/olist/callback"));
+const OLIST_OAUTH_AUTH_URL = "https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect/auth";
+const OLIST_OAUTH_TOKEN_URL = "https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect/token";
+const olistOAuthStates = new Map();
 
 let olistAccessToken = OLIST_TOKEN || null;
 let olistAccessTokenExpiresAt = OLIST_TOKEN ? Number.MAX_SAFE_INTEGER : 0;
@@ -338,6 +342,66 @@ async function syncPaidOrderToOlist(order) {
 
     return {...result, stockSynced:true, stockSync};
 }
+
+app.get("/api/olist/auth", (req, res) => {
+    if (!OLIST_CLIENT_ID || !OLIST_CLIENT_SECRET) {
+        return res.status(503).send("Olist OAuth não está configurado no servidor.");
+    }
+    const state = crypto.randomBytes(32).toString("hex");
+    olistOAuthStates.set(state, Date.now() + 10 * 60 * 1000);
+    for (const [key, expiresAt] of olistOAuthStates.entries()) {
+        if (expiresAt < Date.now()) olistOAuthStates.delete(key);
+    }
+    const params = new URLSearchParams({
+        client_id: OLIST_CLIENT_ID,
+        redirect_uri: OLIST_REDIRECT_URI,
+        response_type: "code",
+        scope: "openid",
+        state
+    });
+    return res.redirect(OLIST_OAUTH_AUTH_URL + "?" + params.toString());
+});
+
+app.get("/api/olist/callback", async (req, res) => {
+    const state = safeString(req.query.state);
+    const code = safeString(req.query.code);
+    const oauthError = safeString(req.query.error);
+    const expiresAt = olistOAuthStates.get(state);
+    olistOAuthStates.delete(state);
+
+    if (oauthError) return res.status(400).send("Autorização Olist não concluída.");
+    if (!state || !expiresAt || expiresAt < Date.now()) return res.status(400).send("Solicitação de autorização expirada.");
+    if (!code) return res.status(400).send("Código de autorização ausente.");
+
+    try {
+        const response = await fetch(OLIST_OAUTH_TOKEN_URL, {
+            method: "POST",
+            headers: {"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},
+            body: new URLSearchParams({
+                grant_type: "authorization_code",
+                client_id: OLIST_CLIENT_ID,
+                client_secret: OLIST_CLIENT_SECRET,
+                code,
+                redirect_uri: OLIST_REDIRECT_URI
+            })
+        });
+        const responseText = await response.text();
+        let data = {};
+        try { data = responseText ? JSON.parse(responseText) : {}; } catch { data = {}; }
+        if (!response.ok || !data.access_token || !data.refresh_token) {
+            console.error("Olist OAuth callback: token exchange failed", response.status);
+            return res.status(502).send("A Olist não retornou as credenciais OAuth esperadas.");
+        }
+        olistAccessToken = data.access_token;
+        olistRefreshToken = data.refresh_token;
+        olistAccessTokenExpiresAt = Date.now() + (Number(data.expires_in) || 3600) * 1000;
+        await olistRequest("/formas-pagamento?limit=1", {method:"GET"});
+        return res.send("<h2>Olist autorizado com sucesso.</h2><p>A conexão OAuth foi validada. Agora teste a saúde da integração.</p>");
+    } catch (error) {
+        console.error("Olist OAuth callback:", error.message);
+        return res.status(502).send("A autorização foi recebida, mas a validação da API falhou.");
+    }
+});
 
 app.get("/api/olist/health", async (req,res) => {
     try {
