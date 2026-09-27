@@ -40,6 +40,31 @@ function normalizeImages(value) {
     }).filter(Boolean);
 }
 
+function normalizeComparableName(value) {
+    return text(value)
+        .normalize("NFD")
+        .replace(/[\\u0300-\\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9 ]+/g, " ")
+        .replace(/\\s+/g, " ")
+        .trim();
+}
+
+function findNameCandidate(existingProducts, name) {
+    const target = normalizeComparableName(name);
+    if (!target) return null;
+
+    const candidates = (Array.isArray(existingProducts) ? existingProducts : []).filter(product => {
+        const current = normalizeComparableName(product?.name);
+        if (!current || current === target) return true;
+        if (current.length < 8 || target.length < 8) return false;
+        return target.startsWith(current + " ") || current.startsWith(target + " ");
+    });
+
+    if (candidates.length === 1) return candidates[0];
+    return null;
+}
+
 function normalizeCategory(product) {
     const raw = text(
         product?.categoria?.nome ||
@@ -240,7 +265,7 @@ async function getOlistStock(olistRequest, productId) {
     }
 }
 
-async function findExistingProduct(supabaseRequest, summary, detail) {
+async function findExistingProduct(supabaseRequest, summary, detail, existingProducts = []) {
     const olistId = Number(detail?.id || summary?.id);
     if (olistId) {
         const byOlist = await supabaseRequest(
@@ -256,6 +281,15 @@ async function findExistingProduct(supabaseRequest, summary, detail) {
         );
         if (Array.isArray(bySku) && bySku[0]) return bySku[0];
     }
+
+    // Safety guard: if an Olist product has the same base name as an existing
+    // MONTÊ product but a different SKU, do not create a duplicate automatically.
+    // The Olist documentation recommends SKU as the primary relationship key.
+    const nameCandidate = findNameCandidate(
+        existingProducts,
+        detail?.descricao || detail?.nome || summary?.descricao || summary?.nome
+    );
+    if (nameCandidate) return {...nameCandidate, _name_candidate:true};
 
     return null;
 }
@@ -293,7 +327,7 @@ async function upsertVariant(supabaseRequest, productId, variant, parentProductI
     return {action:"created",sku};
 }
 
-async function syncOneOlistProduct({olistRequest, supabaseRequest, summary, dryRun = false}) {
+async function syncOneOlistProduct({olistRequest, supabaseRequest, summary, dryRun = false, existingProducts = []}) {
     const detail = await getOlistProductDetail(olistRequest, summary);
     const id = Number(detail?.id || summary?.id);
     if (!id) return {action:"skipped",reason:"missing_id"};
@@ -303,8 +337,20 @@ async function syncOneOlistProduct({olistRequest, supabaseRequest, summary, dryR
         return {action:"skipped",reason:"inactive",olist_product_id:id};
     }
 
-    const existing = await findExistingProduct(supabaseRequest, summary, detail);
+    const existing = await findExistingProduct(supabaseRequest, summary, detail, existingProducts);
     const sku = text(detail?.sku || detail?.codigo || summary?.sku || summary?.codigo);
+
+    if (existing?._name_candidate && !existing.olist_product_id) {
+        return {
+            action:"conflict",
+            reason:"similar_name_different_sku",
+            sku,
+            olist_product_id:id,
+            product_id:existing.id,
+            existing_sku:existing.sku || null,
+            existing_name:existing.name || null
+        };
+    }
 
     // Safety rule: never merge two different products just because the SKU
     // collides. Report the collision and leave the MONTÊ product untouched.
@@ -388,6 +434,9 @@ async function syncOneOlistProduct({olistRequest, supabaseRequest, summary, dryR
 async function syncOlistCatalog({olistRequest, supabaseRequest, dryRun = false, maxProducts = 500} = {}) {
     const startedAt = Date.now();
     const summaries = await fetchAllOlistProducts(olistRequest, maxProducts);
+    const existingProducts = await supabaseRequest(
+        "products?select=id,name,sku,olist_product_id,images&limit=1000"
+    );
     const results = [];
     const errors = [];
 
@@ -397,7 +446,8 @@ async function syncOlistCatalog({olistRequest, supabaseRequest, dryRun = false, 
                 olistRequest,
                 supabaseRequest,
                 summary,
-                dryRun
+                dryRun,
+                existingProducts
             });
             results.push(result);
         } catch (error) {
