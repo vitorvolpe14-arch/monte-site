@@ -343,6 +343,15 @@ async function syncPaidOrderToOlist(order) {
     return {...result, stockSynced:true, stockSync};
 }
 
+app.get("/api/olist/config-check", (req, res) => {
+    return res.json({
+        configured: Boolean(OLIST_CLIENT_ID && OLIST_CLIENT_SECRET),
+        client_id_suffix: safeString(OLIST_CLIENT_ID).slice(-6) || null,
+        redirect_uri: OLIST_REDIRECT_URI,
+        oauth_token_url: OLIST_OAUTH_TOKEN_URL
+    });
+});
+
 app.get("/api/olist/auth", (req, res) => {
     if (!OLIST_CLIENT_ID || !OLIST_CLIENT_SECRET) {
         return res.status(503).send("Olist OAuth não está configurado no servidor.");
@@ -356,7 +365,7 @@ app.get("/api/olist/auth", (req, res) => {
         client_id: OLIST_CLIENT_ID,
         redirect_uri: OLIST_REDIRECT_URI,
         response_type: "code",
-        scope: "openid email profile",
+        scope: "openid",
         state
     });
     return res.redirect(OLIST_OAUTH_AUTH_URL + "?" + params.toString());
@@ -387,10 +396,33 @@ app.get("/api/olist/callback", async (req, res) => {
         });
         const responseText = await response.text();
         let data = {};
-        try { data = responseText ? JSON.parse(responseText) : {}; } catch { data = {}; }
+        try { data = responseText ? JSON.parse(responseText) : {}; } catch { data = { raw: responseText }; }
+
         if (!response.ok || !data.access_token || !data.refresh_token) {
-            console.error("Olist OAuth callback: token exchange failed", response.status);
-            return res.status(502).send("A Olist não retornou as credenciais OAuth esperadas.");
+            const oauthCode = safeString(data.error);
+            const oauthDescription = safeString(data.error_description || data.message);
+            console.error("Olist OAuth callback: token exchange failed", {
+                status: response.status,
+                error: oauthCode || null,
+                description: oauthDescription || null,
+                clientIdSuffix: safeString(OLIST_CLIENT_ID).slice(-6),
+                redirectUri: OLIST_REDIRECT_URI
+            });
+
+            if (response.status === 401 && (oauthCode === "invalid_client" || !oauthCode)) {
+                return res.status(502).send(
+                    "A Olist rejeitou as credenciais do aplicativo (HTTP 401). " +
+                    "O Client Secret configurado no Render precisa ser o último Client Secret gerado no aplicativo MONTÊ E-commerce. " +
+                    "Após gerar novas chaves na Olist, a chave antiga é invalidada. " +
+                    (oauthDescription ? "Detalhe: " + oauthDescription : "")
+                );
+            }
+
+            return res.status(502).send(
+                "Falha OAuth da Olist (HTTP " + response.status + "). " +
+                (oauthCode ? oauthCode + ". " : "") +
+                (oauthDescription || "A Olist não retornou um token OAuth válido.")
+            );
         }
         olistAccessToken = data.access_token;
         olistRefreshToken = data.refresh_token;
