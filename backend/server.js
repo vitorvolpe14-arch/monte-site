@@ -3065,7 +3065,8 @@ app.post(
             if (
                 order.status === "paid" &&
                 order.transaction_nsu === transactionNsu &&
-                order.stock_decremented === true
+                order.stock_decremented === true &&
+                order.olist_sync_status === "completed"
             ) {
                 processedPayments.add(orderNsu);
                 const confirmationEmail = await ensureOrderConfirmationEmail(order);
