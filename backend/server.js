@@ -449,11 +449,11 @@ app.get("/api/olist/health", async (req,res) => {
 });
 
 
-// TESTE TEMPORÁRIO — somente leitura. Aceita apenas os SKUs de teste MUNCK01/MUNCK02.
+// TESTE TEMPORÁRIO — somente leitura. Aceita apenas o SKU real de teste MUNCH1.
 app.get("/api/olist/test-product", async (req, res) => {
     try {
         const sku = safeString(req.query.sku).toUpperCase();
-        if (!["MUNCK01", "MUNCK02"].includes(sku)) {
+        if (!["MUNCH1"].includes(sku)) {
             return res.status(400).json({success:false,message:"SKU de teste não permitido."});
         }
         const product = await findOlistProductBySku(sku);
