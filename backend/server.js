@@ -356,7 +356,7 @@ app.get("/api/olist/auth", (req, res) => {
         client_id: OLIST_CLIENT_ID,
         redirect_uri: OLIST_REDIRECT_URI,
         response_type: "code",
-        scope: "openid",
+        scope: "openid email profile",
         state
     });
     return res.redirect(OLIST_OAUTH_AUTH_URL + "?" + params.toString());
