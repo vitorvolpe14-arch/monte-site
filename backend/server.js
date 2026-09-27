@@ -73,9 +73,9 @@ async function getOlistAccessToken() {
     return olistAccessToken;
 }
 
-async function olistRequest(endpoint, options = {}) {
+async function olistRequest(endpoint, options = {}, allowRefresh = true) {
     const token = await getOlistAccessToken();
-    const response = await fetch(OLIST_API_BASE + endpoint, {
+    let response = await fetchWithTimeout(OLIST_API_BASE + endpoint, {
         ...options,
         headers: {
             "Accept":"application/json",
@@ -83,7 +83,15 @@ async function olistRequest(endpoint, options = {}) {
             "Authorization":"Bearer " + token,
             ...(options.headers || {})
         }
-    });
+    }, 15000);
+
+    if (response.status === 401 && allowRefresh && OLIST_CLIENT_ID && OLIST_CLIENT_SECRET && olistRefreshToken) {
+        olistAccessToken = null;
+        olistAccessTokenExpiresAt = 0;
+        await getOlistAccessToken();
+        return olistRequest(endpoint, options, false);
+    }
+
     const textResponse = await response.text();
     let data = {};
     try { data = textResponse ? JSON.parse(textResponse) : {}; } catch { data = {raw:textResponse}; }
@@ -105,7 +113,7 @@ async function findOlistProductBySku(sku) {
     if (!code) throw new Error("OLIST_SKU_MISSING");
     const data = await olistRequest("/produtos?codigo=" + encodeURIComponent(code) + "&limit=20");
     const items = olistItemsFromResponse(data);
-    const exact = items.find(p => safeString(p.sku || p.codigo) === code) || items[0];
+    const exact = items.find(p => safeString(p.sku || p.codigo) === code);
     if (!exact?.id) throw new Error("OLIST_PRODUCT_NOT_FOUND:" + code);
     return exact;
 }
@@ -264,7 +272,10 @@ async function syncOlistStockToMonte(order) {
         const variant = Array.isArray(variants) ? variants[0] : null;
         if (!variant?.id) continue;
 
-        const product = await findOlistProductBySku(sku);
+        let product = variant.olist_product_id ? {id:Number(variant.olist_product_id)} : await findOlistProductBySku(sku);
+        if (!variant.olist_product_id) {
+            await supabaseRequest("product_variants?id=eq."+encodeURIComponent(variant.id),{method:"PATCH",body:JSON.stringify({olist_product_id:Number(product.id)})});
+        }
         const stockData = await olistRequest("/estoque/" + encodeURIComponent(product.id));
         const available = Math.max(0, Math.floor(Number(stockData?.disponivel ?? stockData?.saldo ?? 0)));
 
@@ -306,31 +317,24 @@ async function syncPaidOrderToOlist(order) {
         });
     }
 
-    // Se a tentativa anterior criou o pedido mas falhou antes da baixa,
-    // uma nova entrega do webhook continua o mesmo pedido e tenta novamente.
-    await launchOlistStock(result.id);
-
-    let stockSync = [];
-    try {
-        stockSync = await syncOlistStockToMonte(order);
+    if (!order.olist_stock_launched_at) {
+        await launchOlistStock(result.id);
         await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
             method:"PATCH",
-            body:JSON.stringify({
-                olist_sync_status:"completed",
-                olist_stock_synced_at:new Date().toISOString(),
-                olist_sync_error:null
-            })
+            body:JSON.stringify({olist_stock_launched_at:new Date().toISOString()})
         });
-    } catch (stockError) {
-        console.error("Olist estoque → MONTÊ:", stockError);
-        await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
-            method:"PATCH",
-            body:JSON.stringify({
-                olist_sync_status:"order_created_stock_sync_error",
-                olist_sync_error:String(stockError.message || stockError)
-            })
-        }).catch(()=>{});
     }
+
+    const stockSync = await syncOlistStockToMonte(order);
+
+    await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
+        method:"PATCH",
+        body:JSON.stringify({
+            olist_sync_status:"completed",
+            olist_stock_synced_at:new Date().toISOString(),
+            olist_sync_error:null
+        })
+    });
 
     return {...result, stockSynced:true, stockSync};
 }
@@ -1282,7 +1286,7 @@ async function validateImageBuffer(buffer, declaredContentType) {
     if (buffer.length > 20 * 1024 * 1024) {
         throw new Error("Cada imagem pode ter no máximo 20 MB.");
     }
-    const metadata = await sharp(buffer).metadata();
+    const metadata = await sharp(buffer, { limitInputPixels: 40_000_000, sequentialRead: true }).metadata();
     const detected = metadata?.format === "jpeg" ? "image/jpeg"
         : metadata?.format === "png" ? "image/png"
         : metadata?.format === "webp" ? "image/webp"
@@ -2410,7 +2414,7 @@ app.post(
                ORDER NSU
             ================================================= */
 
-            const orderNsu = `MONTE-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
+            const orderNsu = `MONTE-${Date.now()}-${crypto.randomBytes(12).toString("hex")}`;
 
             const orderCodeRows = await supabaseRequest("rpc/next_monte_order_code", { method: "POST" });
             const orderCode = Array.isArray(orderCodeRows) ? orderCodeRows[0] : orderCodeRows;
