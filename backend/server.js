@@ -339,7 +339,7 @@ async function syncPaidOrderToOlist(order) {
     return {...result, stockSynced:true, stockSync};
 }
 
-app.post("/api/olist/test-order", async (req,res) => {
+app.get("/api/olist/test-order", async (req,res) => {
     try {
         const key = safeString(process.env.OLIST_TEST_KEY);
         if (!key || safeString(req.get("x-olist-test-key")) !== key) {
