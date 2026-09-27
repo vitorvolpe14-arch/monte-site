@@ -67,11 +67,11 @@ async function runOlistCatalogSync(options = {}) {
 
 let olistAccessToken = OLIST_TOKEN || null;
 let olistAccessTokenExpiresAt = OLIST_TOKEN ? Number.MAX_SAFE_INTEGER : 0;
-let olistRefreshToken = OLIST_REFRESH_TOKEN || null;
+let olistRefreshToken = null;
 
 async function loadPersistedOlistRefreshToken() {
     if (olistRefreshToken) return olistRefreshToken;
-    if (!SUPABASE_SERVICE_ROLE_KEY) return null;
+    if (!SUPABASE_SERVICE_ROLE_KEY) return OLIST_REFRESH_TOKEN || null;
 
     try {
         const rows = await supabaseRequest(
@@ -79,8 +79,12 @@ async function loadPersistedOlistRefreshToken() {
             {method:"GET"}
         );
         const token = safeString(rows?.[0]?.value?.refresh_token);
-        if (token) olistRefreshToken = token;
-        return token || null;
+        if (token) {
+            olistRefreshToken = token;
+            return token;
+        }
+        olistRefreshToken = OLIST_REFRESH_TOKEN || null;
+        return olistRefreshToken;
     } catch (error) {
         console.warn("Olist refresh token persistido indisponível:", error.message);
         return null;
