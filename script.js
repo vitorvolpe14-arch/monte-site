@@ -181,30 +181,20 @@ function createProductCard(product) {
         <div class="product-image">
 
             ${
-                product.sale
-                ?
-                `<span class="product-badge">
-                    SALE
-                </span>`
-                :
-                ""
-            }
-
-            ${
-                product.newProduct
-                ?
-                `<span class="product-badge">
-                    NOVO
-                </span>`
-                :
-                ""
-            }
-
-            ${
                 isOutOfStock
                 ?
                 `<span class="product-badge product-badge-stock">
                     ESGOTADO
+                </span>`
+                : product.newProduct
+                ?
+                `<span class="product-badge">
+                    NOVO
+                </span>`
+                : product.sale
+                ?
+                `<span class="product-badge">
+                    SALE
                 </span>`
                 :
                 ""
