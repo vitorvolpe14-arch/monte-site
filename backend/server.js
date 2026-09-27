@@ -289,22 +289,27 @@ async function syncOlistStockToMonte(order) {
 
 async function syncPaidOrderToOlist(order) {
     if (!order) throw new Error("OLIST_ORDER_MISSING");
+
+    let result;
     if (order.olist_order_id) {
-        return {id:Number(order.olist_order_id), created:false, stockSynced:false};
+        result = {id:Number(order.olist_order_id), created:false};
+    } else {
+        result = await createOrGetOlistOrder(order);
+        await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
+            method:"PATCH",
+            body:JSON.stringify({
+                olist_order_id:result.id,
+                olist_sync_status:"order_created",
+                olist_sync_error:null,
+                olist_synced_at:new Date().toISOString()
+            })
+        });
     }
 
-    const result = await createOrGetOlistOrder(order);
-    await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
-        method:"PATCH",
-        body:JSON.stringify({
-            olist_order_id:result.id,
-            olist_sync_status:"order_created",
-            olist_sync_error:null,
-            olist_synced_at:new Date().toISOString()
-        })
-    });
-
+    // Se a tentativa anterior criou o pedido mas falhou antes da baixa,
+    // uma nova entrega do webhook continua o mesmo pedido e tenta novamente.
     await launchOlistStock(result.id);
+
     let stockSync = [];
     try {
         stockSync = await syncOlistStockToMonte(order);
