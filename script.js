@@ -100,28 +100,6 @@ function formatPrice(value) {
    CRIAR CARD
 ===================================================== */
 
-function trackGoogleEvent(eventName, params = {}) {
-    if (typeof window.gtag === "function") {
-        window.gtag("event", eventName, params);
-    }
-}
-
-function trackEcommerceEvent(eventName, product, quantity = 1) {
-    if (!product) return;
-    const item = {
-        item_id: String(product.sku || product.id || ""),
-        item_name: String(product.name || ""),
-        item_category: String(product.category || ""),
-        price: Number(product.price || 0),
-        quantity: Number(quantity || 1)
-    };
-    trackGoogleEvent(eventName, {
-        currency: "BRL",
-        value: item.price * item.quantity,
-        items: [item]
-    });
-}
-
 function createProductCard(product) {
 
     const card = document.createElement("article");
@@ -181,20 +159,30 @@ function createProductCard(product) {
         <div class="product-image">
 
             ${
-                isOutOfStock
+                product.sale
                 ?
-                `<span class="product-badge product-badge-stock">
-                    ESGOTADO
+                `<span class="product-badge">
+                    SALE
                 </span>`
-                : product.newProduct
+                :
+                ""
+            }
+
+            ${
+                product.newProduct
                 ?
                 `<span class="product-badge">
                     NOVO
                 </span>`
-                : product.sale
+                :
+                ""
+            }
+
+            ${
+                isOutOfStock
                 ?
-                `<span class="product-badge">
-                    SALE
+                `<span class="product-badge product-badge-stock">
+                    ESGOTADO
                 </span>`
                 :
                 ""
@@ -244,10 +232,7 @@ function createProductCard(product) {
 
     card.addEventListener(
         "click",
-        () => {
-            trackEcommerceEvent("view_item", product, 1);
-            openProductModal(product.id);
-        }
+        () => openProductModal(product.id)
     );
 
     return card;
@@ -782,8 +767,6 @@ function openProductModal(productId) {
     }
     document.getElementById("modalPrice").innerHTML = priceHTML;
 
-    trackEcommerceEvent("select_item", selectedProduct, 1);
-
     const variantSelector = document.getElementById("variantSelector");
     const variantOptions = document.getElementById("variantOptions");
     if (variantSelector && variantOptions) {
@@ -1085,7 +1068,6 @@ document.getElementById(
 
         updateCart();
 
-        trackEcommerceEvent("add_to_cart", selectedProduct, selectedQuantity);
 
         closeProductModal();
 
