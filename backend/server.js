@@ -496,7 +496,16 @@ app.get("/api/olist/callback", async (req, res) => {
         olistAccessTokenExpiresAt = Date.now() + (Number(data.expires_in) || 3600) * 1000;
         await persistOlistRefreshToken(olistRefreshToken);
         await olistRequest("/formas-pagamento?limit=1", {method:"GET"});
-        return res.send("<h2>Olist autorizado com sucesso.</h2><p>A conexão OAuth foi validada. Agora teste a saúde da integração.</p>");
+
+        // Após a primeira autorização, dispara uma sincronização de catálogo
+        // em segundo plano. O navegador não precisa aguardar a importação.
+        setTimeout(() => {
+            runOlistCatalogSync({dryRun:false, maxProducts:500})
+                .then(result => console.log("🟢 Olist catálogo após autorização:", result))
+                .catch(syncError => console.error("🔴 Olist catálogo após autorização:", syncError));
+        }, 1000);
+
+        return res.send("<h2>Olist autorizado com sucesso.</h2><p>A conexão OAuth foi validada. A sincronização do catálogo foi iniciada em segundo plano.</p>");
     } catch (error) {
         console.error("Olist OAuth callback:", error.message);
         return res.status(502).send("A autorização foi recebida, mas a validação da API falhou.");
