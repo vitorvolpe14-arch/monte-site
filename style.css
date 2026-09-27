@@ -148,7 +148,7 @@ img{max-width:100%}
 .institutional-page h2{font-size:18px;margin:38px 0 10px}.institutional-page p{font-size:14px;color:#333}
 .institutional-note{margin-top:45px;padding-top:25px;border-top:1px solid var(--border);font-size:12px!important;color:#777!important}
 .institutional-back{display:inline-block;margin-top:45px;font-size:11px;letter-spacing:1.5px;border-bottom:1px solid #111;padding-bottom:5px}
-.product-badge-stock{top:auto;bottom:14px;background:#111}
+.product-badge-stock{top:auto;left:auto;right:12px;bottom:12px;background:#111}
 .header-purchases-link{font-size:9px;letter-spacing:1.4px;white-space:nowrap}
 .whatsapp-optin{display:flex;gap:9px;align-items:flex-start;margin:-3px 0 18px;font-size:11px;line-height:1.45;color:#555}
 .whatsapp-optin input{width:auto;margin-top:2px;flex:0 0 auto}
@@ -195,7 +195,7 @@ html,body{max-width:100%;overflow-x:hidden}
   .carousel-dots{bottom:17px;gap:5px}.carousel-dot{width:25px}
   .product-section,.sale-section{padding:52px 16px}.section-heading{margin-bottom:27px}.section-heading h2{font-size:clamp(29px,9vw,36px);line-height:1}
   .section-heading>a{font-size:8px}.products-grid{gap:20px 9px}.product-image{aspect-ratio:3/4}.product-card:hover .product-image img{transform:none}
-  .product-info{padding-top:10px}.product-name{font-size:10px;line-height:1.35;margin-bottom:5px}.product-price{font-size:10px}.product-badge{top:8px;left:8px;padding:5px 7px;font-size:7px}
+  .product-info{padding-top:10px}.product-name{font-size:10px;line-height:1.35;margin-bottom:5px}.product-price{font-size:10px}.product-badge{top:8px;left:8px;padding:5px 7px;font-size:7px}.product-badge-stock{left:auto;right:8px;top:auto;bottom:8px}
   .collection-products-carousel,.new-products-carousel,.sale-products-carousel{grid-template-columns:26px minmax(0,1fr) 26px;gap:5px}
   .collection-carousel-arrow,.new-carousel-arrow,.sale-carousel-arrow{width:26px;height:26px;font-size:18px}
   .collection-products-grid,.new-products-grid,.sale-products-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
