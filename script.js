@@ -792,6 +792,8 @@ function openProductModal(productId) {
     }
     document.getElementById("modalPrice").innerHTML = priceHTML;
 
+    trackEcommerceEvent("select_item", selectedProduct, 1);
+
     const variantSelector = document.getElementById("variantSelector");
     const variantOptions = document.getElementById("variantOptions");
     if (variantSelector && variantOptions) {
