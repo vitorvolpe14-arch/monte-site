@@ -449,6 +449,22 @@ app.get("/api/olist/health", async (req,res) => {
 });
 
 
+// TESTE TEMPORÁRIO — somente leitura. Aceita apenas os SKUs de teste MUNCK01/MUNCK02.
+app.get("/api/olist/test-product", async (req, res) => {
+    try {
+        const sku = safeString(req.query.sku).toUpperCase();
+        if (!["MUNCK01", "MUNCK02"].includes(sku)) {
+            return res.status(400).json({success:false,message:"SKU de teste não permitido."});
+        }
+        const product = await findOlistProductBySku(sku);
+        return res.json({success:true,sku,product});
+    } catch (error) {
+        console.error("Olist test product:", error);
+        return res.status(502).json({success:false,message:String(error.message || "Falha ao consultar produto na Olist.")});
+    }
+});
+
+
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://uvrhougaurupvkxmezwy.supabase.co";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SUPERFRETE_API_URL = process.env.SUPERFRETE_API_URL || "https://api.superfrete.com";
