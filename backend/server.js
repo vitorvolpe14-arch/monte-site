@@ -3182,6 +3182,185 @@ app.get("/api/pedido-status", orderStatusRateLimit, async (req, res) => {
 });
 
 /* =====================================================
+   SEO — SITEMAP, ROBOTS E PÁGINAS DE PRODUTO
+===================================================== */
+
+function xmlEscape(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+}
+
+function slugify(value) {
+    return safeString(value)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 80);
+}
+
+function publicImageUrl(value) {
+    const raw = safeString(value);
+    if (!raw) return "";
+    if (/^https?:\/\//i.test(raw)) return raw;
+    return new URL("/" + raw.replace(/^\/+/, ""), SITE_URL).href;
+}
+
+function productSeoUrl(product) {
+    return new URL("/produto/" + encodeURIComponent(product.id) + "/" + encodeURIComponent(slugify(product.name)), SITE_URL).href;
+}
+
+function productAvailabilityForSchema(product) {
+    return Number(product.stock_total || 0) > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock";
+}
+
+async function getPublicProductsForSeo() {
+    const rows = await supabaseRequest(
+        "products?active=eq.true&select=id,name,category,description,price,sale_price,is_sale,images,updated_at,product_variants(stock,active)",
+        { method: "GET" }
+    );
+
+    return (Array.isArray(rows) ? rows : []).map(product => ({
+        ...product,
+        stock_total: Array.isArray(product.product_variants)
+            ? product.product_variants.filter(v => v.active !== false).reduce((sum, v) => sum + Number(v.stock || 0), 0)
+            : 0
+    }));
+}
+
+function productSchema(product) {
+    const price = Number(product.is_sale && product.sale_price != null ? product.sale_price : product.price || 0);
+    const image = Array.isArray(product.images) ? product.images.map(publicImageUrl).filter(Boolean) : [];
+    const categoryLabel = product.category === "bolsas" ? "Bolsas" : product.category === "cintos" ? "Cintos" : "Acessórios";
+
+    return {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": safeString(product.name),
+        "description": safeString(product.description) || safeString(product.name) + " — MONTÊ.",
+        "image": image,
+        "category": categoryLabel,
+        "brand": { "@type": "Brand", "name": "MONTÊ" },
+        "url": productSeoUrl(product),
+        "offers": {
+            "@type": "Offer",
+            "url": productSeoUrl(product),
+            "priceCurrency": "BRL",
+            "price": price.toFixed(2),
+            "availability": productAvailabilityForSchema(product),
+            "itemCondition": "https://schema.org/NewCondition"
+        }
+    };
+}
+
+app.get("/produto/:id/:slug", async (req, res) => {
+    try {
+        const id = safeString(req.params.id);
+        const rows = await supabaseRequest(
+            "products?id=eq." + encodeURIComponent(id) + "&active=eq.true&select=id,name,category,description,price,sale_price,is_sale,images,updated_at,product_variants(stock,active)",
+            { method: "GET" }
+        );
+        const product = Array.isArray(rows) ? rows[0] : null;
+
+        if (!product) return res.status(404).send("Produto não encontrado.");
+
+        const stockTotal = Array.isArray(product.product_variants)
+            ? product.product_variants.filter(v => v.active !== false).reduce((sum, v) => sum + Number(v.stock || 0), 0)
+            : 0;
+        const price = Number(product.is_sale && product.sale_price != null ? product.sale_price : product.price || 0);
+        const image = Array.isArray(product.images) && product.images.length ? publicImageUrl(product.images[0]) : "";
+        const canonical = productSeoUrl(product);
+        const description = safeString(product.description) || safeString(product.name) + " — Bolsa e acessórios MONTÊ.";
+        const title = safeString(product.name) + " | MONTÊ";
+        const schema = productSchema({ ...product, stock_total: stockTotal });
+
+        const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${xmlEscape(title)}</title>
+<meta name="description" content="${xmlEscape(description.slice(0, 160))}">
+<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
+<link rel="canonical" href="${xmlEscape(canonical)}">
+<meta property="og:type" content="product">
+<meta property="og:site_name" content="MONTÊ">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:title" content="${xmlEscape(title)}">
+<meta property="og:description" content="${xmlEscape(description.slice(0, 200))}">
+<meta property="og:url" content="${xmlEscape(canonical)}">
+${image ? `<meta property="og:image" content="${xmlEscape(image)}">` : ""}
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${xmlEscape(title)}">
+<meta name="twitter:description" content="${xmlEscape(description.slice(0, 200))}">
+${image ? `<meta name="twitter:image" content="${xmlEscape(image)}">` : ""}
+<script type="application/ld+json">${JSON.stringify(schema)}</script>
+</head>
+<body>
+<main style="max-width:900px;margin:40px auto;padding:20px;font-family:Arial,sans-serif">
+<h1>${xmlEscape(product.name)}</h1>
+${image ? `<img src="${xmlEscape(image)}" alt="${xmlEscape(product.name)}" style="max-width:100%;height:auto">` : ""}
+<p>${xmlEscape(description).replace(/\n/g, "<br>")}</p>
+<p><strong>Preço: R$ ${price.toFixed(2).replace(".", ",")}</strong></p>
+<p>${stockTotal > 0 ? "Disponível para compra." : "Produto esgotado."}</p>
+<p><a href="/">Voltar para a MONTÊ</a></p>
+</main>
+</body>
+</html>`;
+        return res.status(200).type("html").send(html);
+    } catch (error) {
+        console.error("❌ SEO produto:", error);
+        return res.status(500).send("Não foi possível carregar o produto.");
+    }
+});
+
+app.get("/sitemap.xml", async (req, res) => {
+    try {
+        const products = await getPublicProductsForSeo();
+        const urls = [
+            { loc: new URL("/", SITE_URL).href },
+            { loc: new URL("/trocas-devolucoes.html", SITE_URL).href },
+            { loc: new URL("/politica-privacidade.html", SITE_URL).href },
+            { loc: new URL("/entrega-frete.html", SITE_URL).href },
+            { loc: new URL("/termos-de-compra.html", SITE_URL).href },
+            ...products.map(product => ({ loc: productSeoUrl(product), lastmod: product.updated_at }))
+        ];
+        const xml = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+            ...urls.map(url => '<url><loc>' + xmlEscape(url.loc) + '</loc>' + (url.lastmod ? '<lastmod>' + xmlEscape(new Date(url.lastmod).toISOString()) + '</lastmod>' : "") + '</url>'),
+            '</urlset>'
+        ].join("");
+        res.set("Content-Type", "application/xml; charset=utf-8");
+        res.set("Cache-Control", "public, max-age=900");
+        return res.status(200).send(xml);
+    } catch (error) {
+        console.error("❌ Sitemap:", error);
+        return res.status(500).type("application/xml").send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
+    }
+});
+
+app.get("/robots.txt", (req, res) => {
+    const body = [
+        "User-agent: *",
+        "Allow: /",
+        "Disallow: /admin",
+        "Disallow: /admin/",
+        "Disallow: /backend/",
+        "Disallow: /minhas-compras.html",
+        "Disallow: /pagamento-sucesso.html",
+        "Sitemap: " + new URL("/sitemap.xml", SITE_URL).href
+    ].join("\n") + "\n";
+    res.set("Content-Type", "text/plain; charset=utf-8");
+    return res.status(200).send(body);
+});
+
+/* =====================================================
    PÁGINA DE SUCESSO
 ===================================================== */
 app.get(
