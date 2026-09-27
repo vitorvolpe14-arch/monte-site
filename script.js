@@ -100,6 +100,28 @@ function formatPrice(value) {
    CRIAR CARD
 ===================================================== */
 
+function trackGoogleEvent(eventName, params = {}) {
+    if (typeof window.gtag === "function") {
+        window.gtag("event", eventName, params);
+    }
+}
+
+function trackEcommerceEvent(eventName, product, quantity = 1) {
+    if (!product) return;
+    const item = {
+        item_id: String(product.sku || product.id || ""),
+        item_name: String(product.name || ""),
+        item_category: String(product.category || ""),
+        price: Number(product.price || 0),
+        quantity: Number(quantity || 1)
+    };
+    trackGoogleEvent(eventName, {
+        currency: "BRL",
+        value: item.price * item.quantity,
+        items: [item]
+    });
+}
+
 function createProductCard(product) {
 
     const card = document.createElement("article");
@@ -232,7 +254,10 @@ function createProductCard(product) {
 
     card.addEventListener(
         "click",
-        () => openProductModal(product.id)
+        () => {
+            trackEcommerceEvent("view_item", product, 1);
+            openProductModal(product.id);
+        }
     );
 
     return card;
