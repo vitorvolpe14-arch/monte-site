@@ -69,10 +69,54 @@ let olistAccessToken = OLIST_TOKEN || null;
 let olistAccessTokenExpiresAt = OLIST_TOKEN ? Number.MAX_SAFE_INTEGER : 0;
 let olistRefreshToken = OLIST_REFRESH_TOKEN || null;
 
+async function loadPersistedOlistRefreshToken() {
+    if (olistRefreshToken) return olistRefreshToken;
+    if (!SUPABASE_SERVICE_ROLE_KEY) return null;
+
+    try {
+        const rows = await supabaseRequest(
+            "kv_store_48db9b7e?key=eq.olist_oauth_tokens&select=value&limit=1",
+            {method:"GET"}
+        );
+        const token = safeString(rows?.[0]?.value?.refresh_token);
+        if (token) olistRefreshToken = token;
+        return token || null;
+    } catch (error) {
+        console.warn("Olist refresh token persistido indisponível:", error.message);
+        return null;
+    }
+}
+
+async function persistOlistRefreshToken(refreshToken) {
+    const token = safeString(refreshToken);
+    if (!token || !SUPABASE_SERVICE_ROLE_KEY) return;
+
+    try {
+        await supabaseRequest(
+            "kv_store_48db9b7e?on_conflict=key",
+            {
+                method:"POST",
+                headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},
+                body:JSON.stringify({
+                    key:"olist_oauth_tokens",
+                    value:{refresh_token:token,updated_at:new Date().toISOString()}
+                })
+            }
+        );
+    } catch (error) {
+        console.error("Olist refresh token não pôde ser persistido:", error.message);
+    }
+}
+
 async function getOlistAccessToken() {
     if (olistAccessToken && Date.now() < olistAccessTokenExpiresAt - 60000) {
         return olistAccessToken;
     }
+
+    if (!olistRefreshToken) {
+        await loadPersistedOlistRefreshToken();
+    }
+
     if (!OLIST_CLIENT_ID || !OLIST_CLIENT_SECRET || !olistRefreshToken) {
         throw new Error("OLIST_AUTH_REQUIRED");
     }
@@ -96,6 +140,7 @@ async function getOlistAccessToken() {
     olistAccessToken = data.access_token;
     olistRefreshToken = data.refresh_token || olistRefreshToken;
     olistAccessTokenExpiresAt = Date.now() + (Number(data.expires_in) || 3600) * 1000;
+    await persistOlistRefreshToken(olistRefreshToken);
     return olistAccessToken;
 }
 
@@ -449,6 +494,7 @@ app.get("/api/olist/callback", async (req, res) => {
         olistAccessToken = data.access_token;
         olistRefreshToken = data.refresh_token;
         olistAccessTokenExpiresAt = Date.now() + (Number(data.expires_in) || 3600) * 1000;
+        await persistOlistRefreshToken(olistRefreshToken);
         await olistRequest("/formas-pagamento?limit=1", {method:"GET"});
         return res.send("<h2>Olist autorizado com sucesso.</h2><p>A conexão OAuth foi validada. Agora teste a saúde da integração.</p>");
     } catch (error) {
