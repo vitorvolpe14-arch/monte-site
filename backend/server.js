@@ -1,7 +1,6 @@
 // MONTÊ backend — alterações de frontend acompanham este serviço.
 // Fluxo de confirmação: somente pedidos pagos podem exibir compra concluída.
 const express = require("express");
-const { syncOlistCatalog } = require("./olist-catalog-sync");
 const crypto = require("crypto");
 const path = require("path");
 const cors = require("cors");
@@ -31,8 +30,8 @@ const INFINITEPAY_HANDLE =
     "monte-64839705-0z9";
 
 /* =====================================================
-   OLIST ERP — integração de pedidos e estoque
-   Olist é a fonte mestre do estoque.
+   OLIST ERP — integração somente de pedidos
+   Olist NÃO sincroniza catálogo nem estoque do MONTÊ.
 ===================================================== */
 const OLIST_API_BASE = safeString(process.env.OLIST_API_BASE || "https://api.tiny.com.br/public-api/v3").replace(/\/$/, "");
 const OLIST_TOKEN = safeString(process.env.OLIST_TOKEN);
@@ -43,27 +42,6 @@ const OLIST_REDIRECT_URI = safeString(process.env.OLIST_REDIRECT_URI || (SITE_UR
 const OLIST_OAUTH_AUTH_URL = "https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect/auth";
 const OLIST_OAUTH_TOKEN_URL = "https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect/token";
 const olistOAuthStates = new Map();
-const OLIST_CATALOG_SYNC_ENABLED = safeString(process.env.OLIST_CATALOG_SYNC_ENABLED).toLowerCase() === "true";
-const OLIST_CATALOG_SYNC_INTERVAL_MINUTES = Math.max(10, Number(process.env.OLIST_CATALOG_SYNC_INTERVAL_MINUTES || 15));
-let olistCatalogSyncRunning = false;
-
-async function runOlistCatalogSync(options = {}) {
-    if (olistCatalogSyncRunning) {
-        return { skipped: true, reason: "already_running" };
-    }
-    olistCatalogSyncRunning = true;
-    try {
-        return await syncOlistCatalog({
-            olistRequest,
-            supabaseRequest,
-            ...options
-        });
-    } finally {
-        olistCatalogSyncRunning = false;
-    }
-}
-
-
 
 let olistAccessToken = OLIST_TOKEN || null;
 let olistAccessTokenExpiresAt = OLIST_TOKEN ? Number.MAX_SAFE_INTEGER : 0;
@@ -547,27 +525,7 @@ app.get("/api/olist/health", async (req,res) => {
 
 // OLIST CATALOG — preview and manual synchronization.
 // Preview is read-only against both Olist and MONTÊ.
-app.get("/api/admin/olist/catalog-preview", requireAdmin, async (req, res) => {
-    try {
-        const result = await runOlistCatalogSync({dryRun:true, maxProducts:200});
-        return res.json({success:true,...result});
-    } catch (error) {
-        console.error("Olist catalog preview:", error);
-        return res.status(502).json({success:false,message:String(error.message || "Falha ao consultar o catálogo Olist.")});
-    }
-});
-
-app.post("/api/admin/olist/catalog-sync", requireAdmin, async (req, res) => {
-    try {
-        const result = await runOlistCatalogSync({dryRun:false, maxProducts:500});
-        return res.json({success:true,...result});
-    } catch (error) {
-        console.error("Olist catalog sync:", error);
-        return res.status(502).json({success:false,message:String(error.message || "Falha ao sincronizar o catálogo Olist.")});
-    }
-});
-
-// OLIST — reprocessa uma venda já paga no MONTÊ.
+// Catálogo Olist desativado: MONTÊ não importa, cria ou atualiza produtos via Olist.\n// OLIST — reprocessa uma venda já paga no MONTÊ.
 // Não cria cobrança nem altera o pagamento. A operação é idempotente:
 // se o pedido já tiver sido criado na Olist, reutiliza o olist_order_id salvo.
 app.post("/api/admin/olist/sync-paid-order", requireAdmin, async (req, res) => {
