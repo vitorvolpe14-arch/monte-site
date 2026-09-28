@@ -30,11 +30,11 @@
     <meta name="twitter:description" content="Conheça a coleção MONTÊ e compre online.">
     <meta name="twitter:image" content="https://monte-site-itjk.onrender.com/backend/assets/carousel-photo-1.webp">
 
-    <link rel="stylesheet" href="style.css?v=20260925-lovelo-final">
+    <link rel="stylesheet" href="style.css?v=20260928-editorial">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Montserrat:wght@600;700;800&family=Playfair+Display:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet">
 
     <script>
       window.MONTÊ_GA_ID = "G-RCG5BX64FG";
@@ -281,9 +281,10 @@
 
 <section id="colecao" class="product-section collection-section">
 
-    <div class="section-heading">
+    <div class="section-heading reveal">
         <div>
-            <h2>BOLSAS</h2>
+            <p class="eyebrow">COLEÇÃO MONTÊ</p>
+            <h2>Bolsas</h2>
         </div>
     </div>
 
@@ -297,16 +298,46 @@
 
 </section>
 
+
+<!-- =====================================================
+     EDITORIAL — BANNER DE FOTOS
+     Fotos em camadas com parallax (data-parallax = velocidade).
+===================================================== -->
+
+<section class="editorial-banner" id="editorial" aria-labelledby="editorialTitle">
+
+    <div class="editorial-media" aria-hidden="true">
+        <span class="editorial-watermark" data-parallax="-0.12">MONTÊ</span>
+        <div class="editorial-photo editorial-photo-back" data-parallax="0.14">
+            <img src="assets/louvre-baby1.JPG.jpeg" alt="" loading="lazy">
+        </div>
+        <div class="editorial-photo editorial-photo-main" data-parallax="-0.05">
+            <img src="assets/vienna4.JPG.jpeg" alt="" loading="lazy">
+        </div>
+        <div class="editorial-photo editorial-photo-front" data-parallax="0.24">
+            <img src="assets/cannes7.JPG.jpeg" alt="" loading="lazy">
+        </div>
+        <span class="editorial-tag">MONTÊ / 01</span>
+    </div>
+
+    <div class="editorial-copy reveal">
+        <p class="eyebrow">MONTÊ / 01</p>
+        <h2 id="editorialTitle">Mais que<br><em>bolsas.</em></h2>
+        <p>Peças que acompanham seus dias e permanecem na memória.</p>
+        <a class="editorial-button" href="#novidades">DESCOBRIR</a>
+    </div>
+
+</section>
+
+
 <section id="novidades"
          class="product-section">
 
-    <div class="section-heading">
+    <div class="section-heading reveal">
 
         <div>
-        <h2>
-                NOVIDADES
-            </h2>
-
+            <p class="eyebrow">RECÉM-CHEGADAS</p>
+            <h2>Novidades</h2>
         </div>
 
         <a href="#colecao">
@@ -355,9 +386,10 @@
 ===================================================== -->
 
 <section id="cintos-acessorios" class="product-section category-section">
-    <div class="section-heading">
+    <div class="section-heading reveal">
         <div>
-            <h2>CINTOS &amp; ACESSÓRIOS</h2>
+            <p class="eyebrow">COMPLETE O LOOK</p>
+            <h2>Cintos &amp; <em>acessórios</em></h2>
         </div>
     </div>
 
@@ -377,9 +409,9 @@
 <section id="sale"
          class="sale-section">
 
-    <div class="sale-heading">
+    <div class="sale-heading reveal">
         <h2>
-            SALE
+            <em>Sale</em>
         </h2>
 
         <span>
@@ -429,10 +461,11 @@
 
 <section class="newsletter">
 
-    <div>
+    <div class="reveal">
 
-<h2>
-            ENTRE PARA A NOSSA LISTA
+        <p class="eyebrow">FIQUE POR PERTO</p>
+        <h2>
+            Entre para a nossa <em>lista</em>.
         </h2>
 
         <p>
@@ -1006,7 +1039,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
-<script src="script.js?v=20260928-fixes"></script>
+<script src="script.js?v=20260928-editorial"></script>
 
 </body>
 </html>

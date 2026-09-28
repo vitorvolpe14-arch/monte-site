@@ -2173,3 +2173,69 @@ document.addEventListener("DOMContentLoaded", () => {
    FORMA DE PAGAMENTO
 ===================================================== */
 document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
+
+
+/* =====================================================
+   PARALLAX E ENTRADA SUAVE
+   Elementos com data-parallax="velocidade" se deslocam conforme a
+   posição do bloco na tela (camadas em profundidades diferentes).
+   Usa a propriedade CSS "translate" para não conflitar com rotações.
+   Desligado para quem pede menos movimento no sistema.
+===================================================== */
+(function setupParallaxAndReveal() {
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    const start = () => {
+        const reveals = [...document.querySelectorAll(".reveal")];
+        if ("IntersectionObserver" in window && !reduceMotion.matches) {
+            document.documentElement.classList.add("js-motion");
+            const observer = new IntersectionObserver(entries => {
+                entries.forEach(entry => {
+                    if (!entry.isIntersecting) return;
+                    entry.target.classList.add("is-visible");
+                    observer.unobserve(entry.target);
+                });
+            }, { threshold: 0.15, rootMargin: "0px 0px -40px 0px" });
+            reveals.forEach(element => observer.observe(element));
+        }
+
+        const layers = [...document.querySelectorAll("[data-parallax]")];
+        if (!layers.length) return;
+
+        let scheduled = false;
+        const update = () => {
+            scheduled = false;
+            const viewportHeight = window.innerHeight;
+            const strength = window.innerWidth <= 760 ? 0.5 : 1;
+
+            layers.forEach(layer => {
+                if (reduceMotion.matches) {
+                    layer.style.translate = "";
+                    return;
+                }
+                const rect = layer.parentElement.getBoundingClientRect();
+                if (rect.bottom < -200 || rect.top > viewportHeight + 200) return;
+                const distanceFromCenter = rect.top + rect.height / 2 - viewportHeight / 2;
+                const offset = distanceFromCenter * Number(layer.dataset.parallax || 0) * strength;
+                layer.style.translate = "0 " + offset.toFixed(1) + "px";
+            });
+        };
+
+        const requestUpdate = () => {
+            if (scheduled) return;
+            scheduled = true;
+            requestAnimationFrame(update);
+        };
+
+        window.addEventListener("scroll", requestUpdate, { passive: true });
+        window.addEventListener("resize", requestUpdate);
+        reduceMotion.addEventListener?.("change", requestUpdate);
+        update();
+    };
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", start, { once: true });
+    } else {
+        start();
+    }
+})();
