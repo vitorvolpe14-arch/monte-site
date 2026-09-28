@@ -6459,3 +6459,22 @@ canvas {
         font-size: 20px;
     }
 }
+
+
+/* =====================================================
+   CARROSSEL — CORES FIÉIS ÀS FOTOS
+   O carrossel mostra só a foto, sem texto por cima, então a película
+   escura antiga (.slide::after) só escurecia o banner. Sem ela, o bordô
+   do banner fica igual ao da seção Novidades (#6D2234), que também é o
+   fundo do carrossel enquanto a foto carrega.
+===================================================== */
+
+#carouselSlides .slide::after {
+    content: none;
+    display: none;
+}
+
+.hero,
+.carousel {
+    background: #6D2234;
+}

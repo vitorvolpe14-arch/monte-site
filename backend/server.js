@@ -192,13 +192,36 @@ async function findOlistProductBySku(sku) {
     return exact;
 }
 
+function formatCpfCnpj(digits) {
+    if (digits.length === 11) return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+    if (digits.length === 14) return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+    return digits;
+}
+
+function findContactWithCpf(contacts, cpf) {
+    return contacts.find(c => safeString(c?.cpfCnpj).replace(/\D/g, "") === cpf) || null;
+}
+
+// A Olist guarda o CPF formatado ("621.068.433-56"); a busca só com
+// números não encontra o contato. Tenta os dois formatos.
+async function findOlistContactIdByCpf(cpf) {
+    for (const term of [...new Set([formatCpfCnpj(cpf), cpf])]) {
+        const contacts = olistItemsFromResponse(
+            await olistRequest("/contatos?cpfCnpj=" + encodeURIComponent(term) + "&limit=20")
+        );
+        const match = findContactWithCpf(contacts, cpf);
+        if (match?.id) return match.id;
+        // Se a listagem não trouxer o CPF, um único resultado do filtro é o contato.
+        if (contacts.length === 1 && contacts[0]?.id && !safeString(contacts[0].cpfCnpj)) return contacts[0].id;
+    }
+    return null;
+}
+
 async function findOrCreateOlistContact(order) {
     const cpf = safeString(order.customer_cpf).replace(/\D/g, "");
     if (cpf) {
-        const existing = await olistRequest("/contatos?cpfCnpj=" + encodeURIComponent(cpf) + "&limit=20");
-        const contacts = olistItemsFromResponse(existing);
-        const match = contacts.find(c => safeString(c.cpfCnpj).replace(/\D/g, "") === cpf) || contacts[0];
-        if (match?.id) return match.id;
+        const existingId = await findOlistContactIdByCpf(cpf);
+        if (existingId) return existingId;
     }
 
     const address = order.customer_address && typeof order.customer_address === "object" ? order.customer_address : {};
@@ -222,7 +245,21 @@ async function findOrCreateOlistContact(order) {
         situacao: "B"
     };
 
-    const created = await olistRequest("/contatos", {method:"POST", body:JSON.stringify(payload)});
+    let created;
+    try {
+        created = await olistRequest("/contatos", {method:"POST", body:JSON.stringify(payload)});
+    } catch (error) {
+        // O contato já existe, mas o filtro por CPF não o encontrou:
+        // procura pelo nome e confirma pelo CPF antes de reaproveitar.
+        if (cpf && error.status === 400 && /j[aá] existe/i.test(String(error.body || error.message))) {
+            const byName = olistItemsFromResponse(
+                await olistRequest("/contatos?nome=" + encodeURIComponent(payload.nome) + "&limit=100")
+            );
+            const match = findContactWithCpf(byName, cpf);
+            if (match?.id) return match.id;
+        }
+        throw error;
+    }
     if (!created?.id) throw new Error("OLIST_CONTACT_CREATE_FAILED");
     return created.id;
 }
