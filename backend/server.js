@@ -4054,26 +4054,7 @@ app.get(
    INICIAR SERVIDOR
 ===================================================== */
 
-if (OLIST_CATALOG_SYNC_ENABLED) {
-    const delay = 15000;
-    setTimeout(async () => {
-        try {
-            const result = await runOlistCatalogSync({dryRun:false, maxProducts:500});
-            console.log("🟢 Olist catálogo sincronizado na inicialização:", result);
-        } catch (error) {
-            console.error("🔴 Olist catálogo na inicialização:", error);
-        }
-    }, delay);
-
-    setInterval(async () => {
-        try {
-            const result = await runOlistCatalogSync({dryRun:false, maxProducts:500});
-            console.log("🟢 Olist catálogo sincronizado automaticamente:", result);
-        } catch (error) {
-            console.error("🔴 Olist catálogo automático:", error);
-        }
-    }, OLIST_CATALOG_SYNC_INTERVAL_MINUTES * 60 * 1000);
-}
+// Olist catalog synchronization is intentionally disabled.\n
 
 app.listen(
     PORT,
