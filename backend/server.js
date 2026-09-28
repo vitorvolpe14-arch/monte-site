@@ -3280,21 +3280,51 @@ app.post(
                 });
             }
 
-            // Webhook repetido do mesmo pagamento: já está conciliado.
+            // Webhook repetido do mesmo pagamento: nunca refaça a baixa local.
+            // Se a Olist ainda estiver pendente/erro, aproveitamos a repetição para tentar
+            // novamente sem bloquear a confirmação da compra.
             if (
                 order.status === "paid" &&
                 order.transaction_nsu === transactionNsu &&
-                order.stock_decremented === true &&
-                order.olist_sync_status === "completed"
+                order.stock_decremented === true
             ) {
+                let olistRetry = {status:"skipped"};
+                if (order.olist_sync_status !== "completed") {
+                    try {
+                        const result = await syncPaidOrderToOlist({
+                            ...order,
+                            payment_method: order.payment_method || "credit_card",
+                            transaction_nsu: transactionNsu,
+                            customer_cpf: order.customer_cpf,
+                            customer_whatsapp: order.customer_whatsapp
+                        });
+                        olistRetry = {status:"completed", result};
+                    } catch (olistError) {
+                        olistRetry = {
+                            status:"error",
+                            error:String(olistError.message || olistError)
+                        };
+                        await supabaseRequest(
+                            "orders?id=eq." + encodeURIComponent(order.id),
+                            {method:"PATCH",body:JSON.stringify({
+                                olist_sync_status:"error",
+                                olist_sync_error:olistRetry.error
+                            })}
+                        ).catch(()=>{});
+                    }
+                }
+
                 processedPayments.add(orderNsu);
                 const confirmationEmail = await ensureOrderConfirmationEmail(order);
                 const adminSaleEmail = await ensureAdminSaleNotificationEmail(order);
                 const adminWhatsApp = await ensureWhatsAppAdminNewOrderNotification(order);
+
                 return res.status(200).json({
                     success: true,
+                    paid: true,
                     already_processed: true,
-                    confirmation_email: confirmationEmail.status
+                    confirmation_email: confirmationEmail.status,
+                    olist_sync: olistRetry.status
                 });
             }
 
@@ -3340,33 +3370,10 @@ app.post(
             const paidAmount = Number(payment.paid_amount ?? webhook.paid_amount ?? 0);
             const resolvedPaymentMethod = payment.capture_method === "pix" ? "pix" : "credit_card";
 
-            // Primeiro registramos a venda no Olist e lançamos o estoque lá.
-            // Só depois sincronizamos o estoque local, evitando que o MONTÊ venda
-            // um item que não foi registrado no ERP.
+            // IMPORTANTE: Olist é integração secundária.
+            // A confirmação da venda MONTÊ não pode depender do ERP.
+            // Primeiro consolidamos pagamento + estoque local; depois tentamos Olist.
             order.payment_method = resolvedPaymentMethod;
-            try {
-                const olistResult = await syncPaidOrderToOlist({
-                    ...order,
-                    payment_method: resolvedPaymentMethod,
-                    transaction_nsu: transactionNsu,
-                    customer_cpf: order.customer_cpf,
-                    customer_whatsapp: order.customer_whatsapp
-                });
-                console.log("🟢 Venda Olist sincronizada:", olistResult);
-            } catch (olistError) {
-                console.error("🔴 Falha na sincronização Olist:", olistError);
-                await supabaseRequest(
-                    "orders?id=eq." + encodeURIComponent(order.id),
-                    {method:"PATCH",body:JSON.stringify({
-                        olist_sync_status:"error",
-                        olist_sync_error:String(olistError.message || olistError)
-                    })}
-                ).catch(()=>{});
-                return res.status(500).json({
-                    success:false,
-                    message:"Pagamento confirmado, mas a venda ainda não foi sincronizada com o ERP. O webhook será processado novamente."
-                });
-            }
 
             // Baixa atômica e idempotente no estoque local.
             const stockResult = await supabaseRequest("rpc/decrement_order_stock", {
@@ -3374,7 +3381,7 @@ app.post(
                 body: JSON.stringify({ p_order_id: order.id })
             });
 
-            console.log("📦 Baixa de estoque:", stockResult);
+            console.log("📦 Baixa de estoque local:", stockResult);
 
             // Persiste o pagamento. Em caso de webhook simultâneo, a restrição
             // UNIQUE de transaction_nsu evita duplicidade.
@@ -3473,9 +3480,39 @@ app.post(
                 whatsapp_admin_notification_message_id: order.whatsapp_admin_notification_message_id
             });
 
+            // A venda já está confirmada no MONTÊ. A sincronização com a Olist
+            // é tentada somente agora; falhas do ERP não anulam a venda.
+            let olistSyncStatus = "completed";
+            try {
+                const olistResult = await syncPaidOrderToOlist({
+                    ...order,
+                    payment_method: resolvedPaymentMethod,
+                    transaction_nsu: transactionNsu,
+                    customer_cpf: order.customer_cpf,
+                    customer_whatsapp: order.customer_whatsapp
+                });
+                console.log("🟢 Venda Olist sincronizada:", olistResult);
+            } catch (olistError) {
+                olistSyncStatus = "error";
+                const olistMessage = String(olistError.message || olistError);
+                console.error("🔴 Olist indisponível; venda MONTÊ preservada:", olistMessage);
+                await supabaseRequest(
+                    "orders?id=eq." + encodeURIComponent(order.id),
+                    {method:"PATCH",body:JSON.stringify({
+                        olist_sync_status:"error",
+                        olist_sync_error:olistMessage
+                    })}
+                ).catch(()=>{});
+            }
+
             processedPayments.add(orderNsu);
 
-            console.log("✅ Pagamento confirmado, estoque baixado, notificações processadas e pedido conciliado:", orderNsu);
+            console.log(
+                "✅ Pagamento confirmado, estoque local baixado e notificações processadas:",
+                orderNsu,
+                "| Olist:",
+                olistSyncStatus
+            );
 
             return res.status(200).json({
                 success: true,
