@@ -322,89 +322,94 @@ async function createOrGetOlistOrder(order) {
     return {id:Number(created.id), numeroPedido:created.numeroPedido || null, created:true};
 }
 
-async function launchOlistStock(orderId) {
-    await olistRequest("/pedidos/" + encodeURIComponent(orderId) + "/lancar-estoque", {method:"POST"});
-}
-
-async function syncOlistStockToMonte(order) {
-    const rawItems = Array.isArray(order.items) ? order.items : [];
-    const synced = [];
-    for (const item of rawItems) {
-        const sku = safeString(item.variant_sku || item.sku);
-        if (!sku) continue;
-
-        const variants = await supabaseRequest(
-            "product_variants?sku=eq." + encodeURIComponent(sku) + "&select=id,sku,stock&limit=10",
-            {method:"GET"}
-        );
-        const variant = Array.isArray(variants) ? variants[0] : null;
-        if (!variant?.id) continue;
-
-        let product = variant.olist_product_id ? {id:Number(variant.olist_product_id)} : await findOlistProductBySku(sku);
-        if (!variant.olist_product_id) {
-            await supabaseRequest("product_variants?id=eq."+encodeURIComponent(variant.id),{method:"PATCH",body:JSON.stringify({olist_product_id:Number(product.id)})});
-        }
-        const stockData = await olistRequest("/estoque/" + encodeURIComponent(product.id));
-        const available = Math.max(0, Math.floor(Number(stockData?.disponivel ?? stockData?.saldo ?? 0)));
-
-        const current = Number(variant.stock || 0);
-        const delta = available - current;
-        if (delta !== 0) {
-            await supabaseRequest("rpc/adjust_product_variant_stock", {
-                method:"POST",
-                body:JSON.stringify({
-                    p_variant_id:variant.id,
-                    p_delta:delta,
-                    p_movement_type:"adjustment",
-                    p_reason:"Sincronização automática de estoque com Olist após venda " + safeString(order.order_nsu),
-                    p_created_by:"olist-sync"
-                })
-            });
-        }
-        synced.push({sku,available});
-    }
-    return synced;
-}
+/* =====================================================
+   OLIST — SINCRONIZAÇÃO SOMENTE DE PEDIDOS
+   Nunca cria produtos, nunca importa catálogo e nunca
+   altera o estoque do MONTÊ a partir da Olist.
+===================================================== */
 
 async function syncPaidOrderToOlist(order) {
     if (!order) throw new Error("OLIST_ORDER_MISSING");
+    if (safeString(order.status).toLowerCase() !== "paid") {
+        throw new Error("OLIST_ORDER_NOT_PAID");
+    }
 
     let result;
     if (order.olist_order_id) {
         result = {id:Number(order.olist_order_id), created:false};
     } else {
         result = await createOrGetOlistOrder(order);
-        await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
-            method:"PATCH",
-            body:JSON.stringify({
-                olist_order_id:result.id,
-                olist_sync_status:"order_created",
-                olist_sync_error:null,
-                olist_synced_at:new Date().toISOString()
-            })
-        });
     }
-
-    if (!order.olist_stock_launched_at) {
-        await launchOlistStock(result.id);
-        await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
-            method:"PATCH",
-            body:JSON.stringify({olist_stock_launched_at:new Date().toISOString()})
-        });
-    }
-
-    const stockSync = await syncOlistStockToMonte(order);
 
     await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
         method:"PATCH",
         body:JSON.stringify({
+            olist_order_id:result.id,
             olist_sync_status:"completed",
-            olist_stock_synced_at:new Date().toISOString(),
-            olist_sync_error:null
+            olist_sync_error:null,
+            olist_synced_at:new Date().toISOString()
         })
     });
 
-    return {...result, stockSynced:true, stockSync};
+    return {...result, catalogSynced:false, stockSynced:false};
+}
+
+const olistSyncLocks = new Set();
+
+async function processPendingOlistOrder(order) {
+    if (!order?.id || olistSyncLocks.has(String(order.id))) return;
+    if (safeString(order.status).toLowerCase() !== "paid") return;
+
+    olistSyncLocks.add(String(order.id));
+    try {
+        console.log("🔄 Olist — processando pedido pago:", order.order_nsu || order.id);
+
+        await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
+            method:"PATCH",
+            body:JSON.stringify({
+                olist_sync_status:"processing",
+                olist_sync_error:null
+            })
+        });
+
+        await syncPaidOrderToOlist(order);
+
+        console.log("🟢 Olist — pedido sincronizado:", order.order_nsu || order.id);
+    } catch (error) {
+        const message = String(error?.message || error);
+        console.error("🔴 Olist — falha no pedido", order.order_nsu || order.id, message);
+
+        await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
+            method:"PATCH",
+            body:JSON.stringify({
+                olist_sync_status:"error",
+                olist_sync_error:message
+            })
+        }).catch(() => {});
+    } finally {
+        olistSyncLocks.delete(String(order.id));
+    }
+}
+
+async function runPendingOlistSync() {
+    if (!OLIST_TOKEN && !(OLIST_CLIENT_ID && OLIST_CLIENT_SECRET && (OLIST_REFRESH_TOKEN || olistRefreshToken))) {
+        return;
+    }
+
+    try {
+        const rows = await supabaseRequest(
+            "orders?status=eq.paid&or=(olist_sync_status.is.null,olist_sync_status.neq.completed)&select=*&order=paid_at.asc&limit=10",
+            {method:"GET"}
+        );
+
+        if (!Array.isArray(rows) || !rows.length) return;
+
+        for (const order of rows) {
+            await processPendingOlistOrder(order);
+        }
+    } catch (error) {
+        console.error("🔴 Olist — erro no worker automático:", error.message || error);
+    }
 }
 
 app.get("/api/olist/config-check", (req, res) => {
@@ -3549,30 +3554,21 @@ app.post(
                 whatsapp_admin_notification_message_id: order.whatsapp_admin_notification_message_id
             });
 
-            // A venda já está confirmada no MONTÊ. A sincronização com a Olist
-            // é tentada somente agora; falhas do ERP não anulam a venda.
-            let olistSyncStatus = "completed";
-            try {
-                const olistResult = await syncPaidOrderToOlist({
+            // A venda MONTÊ já está confirmada. A Olist roda em segundo plano.
+            // O webhook responde sem esperar a Olist, evitando que uma falha/lentidão
+            // do ERP interfira no checkout, no estoque ou na confirmação da compra.
+            setImmediate(() => {
+                processPendingOlistOrder({
                     ...order,
+                    status: "paid",
                     payment_method: resolvedPaymentMethod,
                     transaction_nsu: transactionNsu,
                     customer_cpf: order.customer_cpf,
                     customer_whatsapp: order.customer_whatsapp
+                }).catch(error => {
+                    console.error("🔴 Olist — tarefa em segundo plano:", error.message || error);
                 });
-                console.log("🟢 Venda Olist sincronizada:", olistResult);
-            } catch (olistError) {
-                olistSyncStatus = "error";
-                const olistMessage = String(olistError.message || olistError);
-                console.error("🔴 Olist indisponível; venda MONTÊ preservada:", olistMessage);
-                await supabaseRequest(
-                    "orders?id=eq." + encodeURIComponent(order.id),
-                    {method:"PATCH",body:JSON.stringify({
-                        olist_sync_status:"error",
-                        olist_sync_error:olistMessage
-                    })}
-                ).catch(()=>{});
-            }
+            });
 
             processedPayments.add(orderNsu);
 
@@ -4067,5 +4063,10 @@ app.listen(
         console.log(
             `💳 InfinitePay configurada para: ${INFINITEPAY_HANDLE}`
         );
+
+        // Worker de segurança: pedidos pagos que não chegaram à Olist
+        // são processados automaticamente, sem tocar no fluxo do pagamento.
+        setTimeout(() => runPendingOlistSync().catch(() => {}), 10000);
+        setInterval(() => runPendingOlistSync().catch(() => {}), 60000);
 }
 );
