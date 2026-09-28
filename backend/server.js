@@ -138,11 +138,17 @@ async function olistRequest(endpoint, options = {}, allowRefresh = true) {
         }
     }, 15000);
 
-    if (response.status === 401 && allowRefresh && OLIST_CLIENT_ID && OLIST_CLIENT_SECRET && olistRefreshToken) {
-        olistAccessToken = null;
-        olistAccessTokenExpiresAt = 0;
-        await getOlistAccessToken();
-        return olistRequest(endpoint, options, false);
+    // Token recusado (ex.: OLIST_TOKEN fixo já expirado). Após um reinício o
+    // refresh token do OAuth só existe no Supabase, então ele é carregado aqui
+    // antes de desistir da renovação.
+    if (response.status === 401 && allowRefresh && OLIST_CLIENT_ID && OLIST_CLIENT_SECRET) {
+        if (!olistRefreshToken) await loadPersistedOlistRefreshToken();
+        if (olistRefreshToken) {
+            olistAccessToken = null;
+            olistAccessTokenExpiresAt = 0;
+            await getOlistAccessToken();
+            return olistRequest(endpoint, options, false);
+        }
     }
 
     const textResponse = await response.text();
@@ -262,15 +268,27 @@ function olistAddressFromOrder(order) {
     };
 }
 
+// Preço unitário com o desconto de 5% do Pix, em centavos. É o mesmo valor
+// cobrado pela InfinitePay no checkout e enviado à Olist.
+function pixDiscountedUnitCents(price) {
+    return Math.round(Math.round(Number(price || 0) * 100) * 0.95);
+}
+
 async function createOrGetOlistOrder(order) {
     const ecommerceNumber = safeString(order.order_nsu);
     if (!ecommerceNumber) throw new Error("OLIST_ORDER_NUMBER_MISSING");
 
+    // Só reaproveita um pedido da Olist se ele for realmente desta venda;
+    // nunca o primeiro resultado da busca às cegas.
     const existingResponse = await olistRequest("/pedidos?numeroPedidoEcommerce=" + encodeURIComponent(ecommerceNumber) + "&limit=20");
-    const existing = olistItemsFromResponse(existingResponse);
-    if (existing[0]?.id) {
-        return {id:Number(existing[0].id), numeroPedido:existing[0].numeroPedido || null, created:false};
+    const existing = olistItemsFromResponse(existingResponse).find(o =>
+        safeString(o?.ecommerce?.numeroPedidoEcommerce ?? o?.numeroPedidoEcommerce) === ecommerceNumber
+    );
+    if (existing?.id) {
+        return {id:Number(existing.id), numeroPedido:existing.numeroPedido || null, created:false};
     }
+
+    const isPix = safeString(order.payment_method).toLowerCase() === "pix";
 
     const rawItems = Array.isArray(order.items) ? order.items : [];
     const productCache = new Map();
@@ -278,7 +296,7 @@ async function createOrGetOlistOrder(order) {
 
     for (const item of rawItems) {
         const sku = safeString(item.variant_sku || item.sku);
-        if (!sku) throw new Error("OLIST_SKU_MISSING_FOR_ORDER_ITEM");
+        if (!sku) throw new Error("OLIST_SKU_MISSING_FOR_ORDER_ITEM:" + safeString(item.name || item.description || item.id));
         let product = productCache.get(sku);
         if (!product) {
             product = await findOlistProductBySku(sku);
@@ -287,7 +305,8 @@ async function createOrGetOlistOrder(order) {
         orderItems.push({
             produto: {id:Number(product.id), tipo:"P"},
             quantidade: Math.max(1, Number(item.quantity || 1)),
-            valorUnitario: Number(item.price || 0),
+            // No Pix a cliente pagou 5% a menos nos produtos; a Olist recebe o valor real.
+            valorUnitario: isPix ? pixDiscountedUnitCents(item.price) / 100 : Number(item.price || 0),
             infoAdicional: safeString(item.variant_color || item.color)
                 ? "Cor: " + safeString(item.variant_color || item.color)
                 : null
@@ -2909,7 +2928,7 @@ app.post(
             // Todos os valores são calculados em centavos a partir do mesmo preço
             // unitário enviado à InfinitePay. Assim o total salvo no pedido é
             // exatamente o valor cobrado e o payment_check do webhook confere.
-            const pixUnitCents = item => Math.round(Math.round(Number(item.price) * 100) * 0.95);
+            const pixUnitCents = item => pixDiscountedUnitCents(item.price);
             const productUnitCents = item => paymentMethod === "pix"
                 ? pixUnitCents(item)
                 : Math.round(Number(item.price) * 100);
