@@ -1697,6 +1697,115 @@ app.delete("/api/admin/products/:id",requireAdmin,async(req,res)=>{
         return res.status(500).json({success:false,message:"Não foi possível excluir o produto."});
     }
 });
+
+/* =====================================================
+   LIMPEZA DOS PRODUTOS SINCRONIZADOS DA OLIST
+   A antiga sincronização de catálogo marcava os produtos com
+   olist_product_id. Só produtos com essa marca são removidos.
+   Produtos com pedidos são apenas desativados, para preservar o
+   histórico das vendas.
+===================================================== */
+function chunkList(list, size) {
+    const chunks = [];
+    for (let i = 0; i < list.length; i += size) chunks.push(list.slice(i, i + size));
+    return chunks;
+}
+
+async function deleteOlistProductsByIds(ids) {
+    const filter = "in.(" + ids.map(encodeURIComponent).join(",") + ")";
+    await supabaseRequest("product_variants?product_id=" + filter, {
+        method: "DELETE",
+        headers: { "Prefer": "return=minimal" }
+    });
+    const deleted = await supabaseRequest("products?id=" + filter + "&olist_product_id=not.is.null", {
+        method: "DELETE",
+        headers: { "Prefer": "return=representation" }
+    });
+    return Array.isArray(deleted) ? deleted.length : 0;
+}
+
+async function deactivateProductsByIds(ids) {
+    const filter = "in.(" + ids.map(encodeURIComponent).join(",") + ")";
+    const updated = await supabaseRequest("products?id=" + filter + "&olist_product_id=not.is.null", {
+        method: "PATCH",
+        body: JSON.stringify({ active: false })
+    });
+    return Array.isArray(updated) ? updated.length : 0;
+}
+
+app.post("/api/admin/olist/products/delete", requireAdmin, async (req, res) => {
+    try {
+        const requested = Array.isArray(req.body?.product_ids) ? req.body.product_ids.map(safeString) : [];
+        const ids = [...new Set(requested)].filter(id => /^[0-9a-f-]{36}$/i.test(id));
+        if (!ids.length) {
+            return res.status(400).json({ success: false, message: "Nenhum produto da Olist informado." });
+        }
+        if (ids.length > 2000) {
+            return res.status(400).json({ success: false, message: "Quantidade de produtos excede o limite." });
+        }
+
+        // Confere no banco quais IDs realmente vieram da Olist.
+        const olistIds = [];
+        for (const chunk of chunkList(ids, 50)) {
+            const rows = await supabaseRequest(
+                "products?id=in.(" + chunk.map(encodeURIComponent).join(",") + ")&olist_product_id=not.is.null&select=id",
+                { method: "GET" }
+            );
+            if (Array.isArray(rows)) olistIds.push(...rows.map(row => String(row.id)));
+        }
+
+        const withOrders = new Set();
+        for (const chunk of chunkList(olistIds, 50)) {
+            const rows = await supabaseRequest(
+                "order_items?product_id=in.(" + chunk.map(encodeURIComponent).join(",") + ")&select=product_id",
+                { method: "GET" }
+            );
+            if (Array.isArray(rows)) rows.forEach(row => withOrders.add(String(row.product_id)));
+        }
+
+        const toDeactivate = olistIds.filter(id => withOrders.has(id));
+        const toDelete = olistIds.filter(id => !withOrders.has(id));
+        let deleted = 0;
+        let deactivated = 0;
+        const failed = [];
+
+        for (const chunk of chunkList(toDeactivate, 50)) {
+            deactivated += await deactivateProductsByIds(chunk);
+        }
+
+        for (const chunk of chunkList(toDelete, 50)) {
+            try {
+                deleted += await deleteOlistProductsByIds(chunk);
+            } catch (chunkError) {
+                console.error("Olist cleanup — lote falhou, tentando um a um:", chunkError.message);
+                for (const id of chunk) {
+                    try {
+                        deleted += await deleteOlistProductsByIds([id]);
+                    } catch (error) {
+                        // Se não puder excluir, ao menos tira o produto da loja.
+                        console.error("Olist cleanup — não excluído:", id, error.message);
+                        await deactivateProductsByIds([id]).catch(() => {});
+                        failed.push(id);
+                    }
+                }
+            }
+        }
+
+        console.log("🧹 Olist cleanup:", { requested: ids.length, olist: olistIds.length, deleted, deactivated, failed: failed.length });
+
+        return res.json({
+            success: true,
+            requested: ids.length,
+            ignored_not_olist: ids.length - olistIds.length,
+            deleted,
+            deactivated_with_orders: deactivated,
+            failed
+        });
+    } catch (error) {
+        console.error("Olist cleanup:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível excluir os produtos da Olist." });
+    }
+});
 app.put("/api/admin/products/:id/variants",requireAdmin,async(req,res)=>{
     try{
         const productId=safeString(req.params.id);
