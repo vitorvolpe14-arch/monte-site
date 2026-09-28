@@ -30,7 +30,7 @@
     <meta name="twitter:description" content="Conheça a coleção MONTÊ e compre online.">
     <meta name="twitter:image" content="https://monte-site-itjk.onrender.com/backend/assets/carousel-photo-1.webp">
 
-    <link rel="stylesheet" href="style.css?v=20260928-editorial">
+    <link rel="stylesheet" href="style.css?v=20260928-categorias">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -385,20 +385,19 @@
      COLEÇÃO
 ===================================================== -->
 
-<section id="cintos-acessorios" class="product-section category-section">
-    <div class="section-heading reveal">
-        <div>
-            <p class="eyebrow">COMPLETE O LOOK</p>
-            <h2>Cintos &amp; <em>acessórios</em></h2>
+<section id="cintos-acessorios" class="product-section category-section category-showcase">
+    <div class="category-intro reveal">
+        <p class="eyebrow">COMPLETE O LOOK</p>
+        <h2>Cintos &amp;<br><em>acessórios</em>.</h2>
+        <p class="category-intro-text">Os detalhes que finalizam cada produção.</p>
+        <div class="category-intro-controls">
+            <button class="collection-carousel-arrow category-prev" onclick="previousCategoryPage('cintos-acessorios')" aria-label="Ver cintos e acessórios anteriores">‹</button>
+            <button class="collection-carousel-arrow category-next" onclick="nextCategoryPage('cintos-acessorios')" aria-label="Ver mais cintos e acessórios">›</button>
         </div>
     </div>
 
-    <div class="collection-products-carousel">
-        <button class="collection-carousel-arrow category-prev" onclick="previousCategoryPage('cintos-acessorios')" aria-label="Ver cintos e acessórios anteriores">‹</button>
-        <div class="collection-products-viewport">
-            <div id="cintosAcessoriosProducts" class="products-grid collection-products-grid"></div>
-        </div>
-        <button class="collection-carousel-arrow category-next" onclick="nextCategoryPage('cintos-acessorios')" aria-label="Ver mais cintos e acessórios">›</button>
+    <div class="collection-products-viewport category-showcase-viewport">
+        <div id="cintosAcessoriosProducts" class="products-grid collection-products-grid"></div>
     </div>
 </section>
 
@@ -1039,7 +1038,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
-<script src="script.js?v=20260928-editorial"></script>
+<script src="script.js?v=20260928-categorias"></script>
 
 </body>
 </html>

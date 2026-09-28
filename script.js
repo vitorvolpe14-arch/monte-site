@@ -592,6 +592,12 @@ function previousCollectionPage() {
 let categorySectionProducts = { cintos: [], acessorios: [] };
 let categorySectionIndexes = { cintos: 0, acessorios: 0 };
 
+// A vitrine de categoria divide a largura com o texto ao lado:
+// 3 cards por vez no computador e 2 no celular.
+function getCategoryVisibleCount() {
+    return window.matchMedia("(max-width: 650px)").matches ? 2 : 3;
+}
+
 function renderCategorySection(category) {
     const container = document.getElementById(category === "cintos-acessorios" ? "cintosAcessoriosProducts" : category + "Products");
     if (!container) return;
@@ -611,11 +617,11 @@ function renderCategorySection(category) {
     const total = list.length;
     const start = categorySectionIndexes[category] % total;
 
-    for (let offset = 0; offset < Math.min(getCarouselVisibleCount(), total); offset++) {
+    for (let offset = 0; offset < Math.min(getCategoryVisibleCount(), total); offset++) {
         container.appendChild(createProductCard(list[(start + offset) % total]));
     }
 
-    const hasCarousel = total > getCarouselVisibleCount();
+    const hasCarousel = total > getCategoryVisibleCount();
     if (prev) {
         prev.disabled = !hasCarousel;
         prev.style.visibility = hasCarousel ? "visible" : "hidden";
@@ -634,17 +640,17 @@ function renderCategorySectionProducts(category, list) {
 
 function nextCategoryPage(category) {
     const list = categorySectionProducts[category] || [];
-    if (list.length <= getCarouselVisibleCount()) return;
+    if (list.length <= getCategoryVisibleCount()) return;
     categorySectionIndexes[category] =
-        (categorySectionIndexes[category] + COLLECTION_STEP) % list.length;
+        (categorySectionIndexes[category] + getCategoryVisibleCount()) % list.length;
     renderCategorySection(category);
 }
 
 function previousCategoryPage(category) {
     const list = categorySectionProducts[category] || [];
-    if (list.length <= getCarouselVisibleCount()) return;
+    if (list.length <= getCategoryVisibleCount()) return;
     categorySectionIndexes[category] =
-        (categorySectionIndexes[category] - COLLECTION_STEP + list.length) % list.length;
+        (categorySectionIndexes[category] - getCategoryVisibleCount() + list.length) % list.length;
     renderCategorySection(category);
 }
 
