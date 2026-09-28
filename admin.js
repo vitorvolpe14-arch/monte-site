@@ -228,7 +228,7 @@ async function syncPaidOrderOlist(id){
   if(!window.confirm("Sincronizar este pedido pago com a Olist?\n\nNenhuma nova cobrança será feita."))return;
   try{
     if(errorBox)errorBox.textContent="Sincronizando com a Olist...";
-    const d=await api("/api/admin/olist/sync-paid-order",{method:"POST",body:JSON.stringify({order_id:id})});
+    const d=await api("/api/admin/olist/sync-paid-order",{method:"POST",body:JSON.stringify({order_id:id,order_nsu:o.order_nsu||null})});
     await loadOrders();
     openOrder(id);
     const result=d.olist_sync||{};
