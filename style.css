@@ -6050,3 +6050,412 @@ canvas {
 /* Banner clicável — leva às novidades */
 #carouselSlides { cursor: pointer; }
 #carouselSlides:focus-visible { outline: 2px solid #111; outline-offset: -2px; }
+
+
+/* =====================================================
+   TIPOGRAFIA NO ESTILO KEY
+   Mesmas famílias da KEY (Playfair Display + DM Sans), com títulos
+   em caixa mista, itálico de destaque e espaçamento justo.
+===================================================== */
+
+.eyebrow,
+.newsletter p.eyebrow {
+    font-family: "DM Sans", sans-serif;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: .24em;
+    text-transform: uppercase;
+    margin: 0 0 16px;
+    color: var(--wine);
+}
+
+#novidades .eyebrow {
+    color: rgba(255, 255, 255, .7);
+}
+
+.section-heading h2,
+.sale-heading h2,
+.newsletter h2 {
+    font-family: "Playfair Display", Georgia, serif;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: -.04em;
+    line-height: .92;
+    margin: 0;
+}
+
+.section-heading h2 {
+    font-size: clamp(42px, 4.6vw, 66px);
+}
+
+.sale-heading h2 {
+    font-size: clamp(56px, 6vw, 86px);
+}
+
+.newsletter h2 {
+    font-size: clamp(38px, 3.8vw, 56px);
+    margin-bottom: 18px;
+}
+
+.section-heading h2 em,
+.sale-heading h2 em,
+.newsletter h2 em,
+.editorial-copy h2 em {
+    font-style: italic;
+}
+
+
+/* =====================================================
+   EDITORIAL — BANNER DE FOTOS (referência: KEY / 01)
+   Paleta MONTÊ: preto, bordô e off-white.
+===================================================== */
+
+.editorial-banner {
+    display: grid;
+    grid-template-columns: 1.25fr 1fr;
+    min-height: 640px;
+    background: var(--black);
+    color: var(--white);
+    overflow: hidden;
+}
+
+.editorial-media {
+    position: relative;
+    min-height: 520px;
+    overflow: hidden;
+    isolation: isolate;
+    background: var(--white);
+}
+
+.editorial-photo {
+    position: absolute;
+    will-change: translate;
+    /* As fotos de produto têm fundo branco: o multiply deixa só a bolsa.
+       Fica no wrapper porque ele cria o próprio contexto de empilhamento. */
+    mix-blend-mode: multiply;
+}
+
+.editorial-photo img {
+    display: block;
+    width: 100%;
+    height: auto;
+    /* O fundo das fotos é #fefefe; o ajuste leva a branco puro. */
+    filter: brightness(1.012);
+}
+
+.editorial-photo-back {
+    width: 30%;
+    left: 7%;
+    top: 9%;
+}
+
+.editorial-photo-back img {
+    transform: rotate(-6deg);
+    opacity: .92;
+}
+
+.editorial-photo-main {
+    width: 46%;
+    left: 29%;
+    top: 20%;
+    z-index: 1;
+}
+
+.editorial-photo-front {
+    width: 27%;
+    right: 5%;
+    bottom: 7%;
+    z-index: 2;
+}
+
+.editorial-photo-front img {
+    transform: rotate(5deg);
+}
+
+.editorial-copy {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 8vw;
+}
+
+.editorial-copy .eyebrow {
+    color: rgba(255, 255, 255, .72);
+}
+
+.editorial-copy h2 {
+    font-family: "Playfair Display", Georgia, serif;
+    font-weight: 400;
+    font-size: clamp(64px, 5.8vw, 88px);
+    line-height: .8;
+    letter-spacing: -.05em;
+    margin: 0 0 30px;
+    text-wrap: balance;
+}
+
+.editorial-copy > p:not(.eyebrow) {
+    max-width: 330px;
+    margin: 0 0 32px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: rgba(255, 255, 255, .72);
+}
+
+.editorial-button {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 220px;
+    min-height: 46px;
+    padding: 14px 34px;
+    background: var(--white);
+    color: var(--black);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: .15em;
+    text-decoration: none;
+    transition: transform .2s ease, background .2s ease, color .2s ease;
+}
+
+.editorial-button:hover,
+.editorial-button:focus-visible {
+    background: var(--wine);
+    color: var(--white);
+    transform: translateY(-2px);
+}
+
+@media (max-width: 1100px) {
+    .editorial-copy {
+        padding: 6vw;
+    }
+}
+
+@media (max-width: 760px) {
+    .editorial-banner {
+        grid-template-columns: 1fr;
+        min-height: 0;
+    }
+
+    .editorial-media {
+        min-height: 400px;
+    }
+
+    .editorial-photo-back {
+        width: 38%;
+        left: 4%;
+        top: 8%;
+    }
+
+    .editorial-photo-main {
+        width: 58%;
+        left: 21%;
+        top: 17%;
+    }
+
+    .editorial-photo-front {
+        width: 34%;
+        right: 3%;
+        bottom: 6%;
+    }
+
+    .editorial-copy {
+        padding: 56px 22px 64px;
+    }
+
+    .editorial-copy h2 {
+        font-size: clamp(54px, 16vw, 68px);
+    }
+
+    .editorial-button {
+        align-self: stretch;
+    }
+
+    .section-heading h2 {
+        font-size: clamp(34px, 10vw, 44px);
+    }
+
+    .sale-heading h2 {
+        font-size: clamp(46px, 14vw, 60px);
+    }
+
+    .newsletter h2 {
+        font-size: clamp(32px, 9vw, 40px);
+    }
+}
+
+
+/* =====================================================
+   ENTRADA SUAVE DOS TÍTULOS
+   Só é ativada pelo script (classe js-motion no <html>), então o
+   conteúdo continua visível se o JavaScript não carregar.
+===================================================== */
+
+.js-motion .reveal {
+    opacity: 0;
+    transform: translateY(28px);
+    transition: opacity .9s ease, transform .9s cubic-bezier(.2, .7, .2, 1);
+}
+
+.js-motion .reveal.is-visible {
+    opacity: 1;
+    transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .js-motion .reveal {
+        opacity: 1;
+        transform: none;
+        transition: none;
+    }
+}
+
+
+/* =====================================================
+   CINTOS & ACESSÓRIOS — TEXTO AO LADO (referência: KEY "Find your key")
+   Texto à esquerda e vitrine de 3 cards altos à direita, com o nome
+   do produto em itálico sobre a foto.
+===================================================== */
+
+#cintos-acessorios.category-showcase {
+    display: grid;
+    grid-template-columns: minmax(250px, 1fr) minmax(0, 3fr);
+    gap: 48px;
+    align-items: center;
+}
+
+.category-intro {
+    align-self: center;
+}
+
+.category-intro h2 {
+    font-family: "Playfair Display", Georgia, serif;
+    font-weight: 400;
+    font-size: clamp(52px, 5.2vw, 82px);
+    line-height: .82;
+    letter-spacing: -.05em;
+    margin: 0 0 26px;
+    text-wrap: balance;
+}
+
+.category-intro h2 em {
+    font-style: italic;
+}
+
+.category-intro-text {
+    max-width: 260px;
+    margin: 0 0 30px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: #5f5a55;
+}
+
+.category-intro-controls {
+    display: flex;
+    gap: 10px;
+}
+
+/* No celular, as setas das vitrines ficam soltas sobre as fotos
+   (position: absolute); aqui elas ficam sempre ao lado do texto. */
+.category-intro-controls .collection-carousel-arrow {
+    position: static;
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid rgba(13, 13, 13, .35);
+    box-shadow: none;
+    color: var(--black);
+    font-size: 24px;
+}
+
+.category-intro-controls .collection-carousel-arrow:hover:not(:disabled) {
+    background: var(--black);
+    border-color: var(--black);
+    color: var(--white);
+}
+
+#cintos-acessorios .collection-products-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 18px !important;
+}
+
+#cintos-acessorios .product-card .product-image {
+    aspect-ratio: 3 / 4.2 !important;
+}
+
+/* Foto sempre em fundo branco; nome em itálico logo abaixo da foto. */
+#cintos-acessorios .product-card .product-image {
+    background: var(--white) !important;
+}
+
+#cintos-acessorios .product-card .product-image img {
+    /* O fundo das fotos é #fefefe; o ajuste leva a branco puro. */
+    filter: brightness(1.012);
+}
+
+#cintos-acessorios .product-info {
+    padding: 16px 2px 0;
+    color: var(--black);
+}
+
+#cintos-acessorios .product-name {
+    font-family: "Playfair Display", Georgia, serif;
+    font-style: italic;
+    font-size: clamp(22px, 2vw, 28px);
+    line-height: 1;
+    letter-spacing: -.01em;
+    margin: 0 0 8px;
+}
+
+#cintos-acessorios .product-price {
+    font-size: 11px;
+    letter-spacing: .04em;
+    color: #3d3a36;
+}
+
+@media (max-width: 1100px) {
+    #cintos-acessorios.category-showcase {
+        grid-template-columns: minmax(210px, 1fr) minmax(0, 2.6fr);
+        gap: 32px;
+    }
+}
+
+@media (max-width: 760px) {
+    #cintos-acessorios.category-showcase {
+        grid-template-columns: 1fr;
+        gap: 30px;
+    }
+
+    .category-intro h2 {
+        font-size: clamp(46px, 14vw, 60px);
+        margin-bottom: 20px;
+    }
+
+    .category-intro-text {
+        margin-bottom: 22px;
+    }
+
+    .category-intro-controls .collection-carousel-arrow {
+        flex-basis: 40px;
+        width: 40px;
+        height: 40px;
+        font-size: 22px;
+    }
+}
+
+@media (max-width: 650px) {
+    #cintos-acessorios .collection-products-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 10px !important;
+    }
+
+    #cintos-acessorios .product-info {
+        padding: 12px 2px 0;
+    }
+
+    #cintos-acessorios .product-name {
+        font-size: 20px;
+    }
+}

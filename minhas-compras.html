@@ -88,6 +88,7 @@ form.addEventListener("submit", async (event) => {
         if (!response.ok) throw new Error(data.message || "Não foi possível consultar o pedido.");
 
         const o = data.order;
+        const discount = Math.round((Number(o.subtotal || 0) + Number(o.shipping || 0) - Number(o.total || 0)) * 100) / 100;
         const items = (o.items || []).map(item => `
             <div class="purchase-item">
                 <div>
@@ -117,7 +118,7 @@ form.addEventListener("submit", async (event) => {
             <div class="purchase-header">
                 <div>
                     <p class="section-label">PEDIDO</p>
-                    <h2>${esc(o.order_code?"MONTÊ-"+o.order_code:o.order_nsu)}</h2>
+                    <h2>${esc(o.order_code||o.order_nsu)}</h2>
                     <p>Realizado em ${date(o.created_at)}</p>
                 </div>
                 <span class="purchase-status">${esc(statusLabel(o.status))}</span>
@@ -138,6 +139,7 @@ form.addEventListener("submit", async (event) => {
                 <div class="purchase-panel">
                     <h3>Resumo</h3>
                     <p>Subtotal <strong>${money(o.subtotal)}</strong></p>
+                    ${discount > 0 ? `<p>Desconto Pix <strong>-${money(discount)}</strong></p>` : ""}
                     <p>Frete <strong>${money(o.shipping)}</strong></p>
                     <p class="purchase-total">Total <strong>${money(o.total)}</strong></p>
                 </div>

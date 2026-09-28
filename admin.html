@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20260925-11">
+<link rel="stylesheet" href="admin.css?v=20260928-1">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -65,7 +65,9 @@
 
     <section id="productsSection" class="section hidden">
       <div class="section-actions"><div><p class="eyebrow">CATÁLOGO</p><h2>Produtos</h2></div><button id="newProductButton">+ NOVO PRODUTO</button></div>
-      <div class="toolbar"><input id="productSearch" placeholder="Buscar por nome ou SKU..."></div><div id="productsGrid" class="product-admin-grid"></div>
+      <div class="toolbar"><input id="productSearch" placeholder="Buscar por nome ou SKU..."></div>
+      <div id="olistCleanupBar" class="olist-cleanup-bar hidden"><div><strong id="olistCleanupTitle"></strong><span id="olistCleanupInfo" class="field-help"></span></div><div class="olist-cleanup-actions"><label class="olist-filter"><input id="olistOnlyFilter" type="checkbox"> Mostrar só Olist</label><button id="deleteOlistProductsButton" type="button" class="danger-button">EXCLUIR PRODUTOS DA OLIST</button></div></div>
+      <div id="productsGrid" class="product-admin-grid"></div>
     </section>
 
     <section id="ordersSection" class="section hidden">
@@ -133,7 +135,7 @@
   <div id="orderDetails"></div>
 </div></div>
 
-<script src="admin.js?v=20260928-5"></script>
+<script src="admin.js?v=20260928-7"></script>
 <script src="admin-carousel.js?v=20260925-2"></script>
 </body>
 </html>

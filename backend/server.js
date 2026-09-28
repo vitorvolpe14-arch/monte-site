@@ -138,11 +138,17 @@ async function olistRequest(endpoint, options = {}, allowRefresh = true) {
         }
     }, 15000);
 
-    if (response.status === 401 && allowRefresh && OLIST_CLIENT_ID && OLIST_CLIENT_SECRET && olistRefreshToken) {
-        olistAccessToken = null;
-        olistAccessTokenExpiresAt = 0;
-        await getOlistAccessToken();
-        return olistRequest(endpoint, options, false);
+    // Token recusado (ex.: OLIST_TOKEN fixo já expirado). Após um reinício o
+    // refresh token do OAuth só existe no Supabase, então ele é carregado aqui
+    // antes de desistir da renovação.
+    if (response.status === 401 && allowRefresh && OLIST_CLIENT_ID && OLIST_CLIENT_SECRET) {
+        if (!olistRefreshToken) await loadPersistedOlistRefreshToken();
+        if (olistRefreshToken) {
+            olistAccessToken = null;
+            olistAccessTokenExpiresAt = 0;
+            await getOlistAccessToken();
+            return olistRequest(endpoint, options, false);
+        }
     }
 
     const textResponse = await response.text();
@@ -262,15 +268,27 @@ function olistAddressFromOrder(order) {
     };
 }
 
+// Preço unitário com o desconto de 5% do Pix, em centavos. É o mesmo valor
+// cobrado pela InfinitePay no checkout e enviado à Olist.
+function pixDiscountedUnitCents(price) {
+    return Math.round(Math.round(Number(price || 0) * 100) * 0.95);
+}
+
 async function createOrGetOlistOrder(order) {
     const ecommerceNumber = safeString(order.order_nsu);
     if (!ecommerceNumber) throw new Error("OLIST_ORDER_NUMBER_MISSING");
 
+    // Só reaproveita um pedido da Olist se ele for realmente desta venda;
+    // nunca o primeiro resultado da busca às cegas.
     const existingResponse = await olistRequest("/pedidos?numeroPedidoEcommerce=" + encodeURIComponent(ecommerceNumber) + "&limit=20");
-    const existing = olistItemsFromResponse(existingResponse);
-    if (existing[0]?.id) {
-        return {id:Number(existing[0].id), numeroPedido:existing[0].numeroPedido || null, created:false};
+    const existing = olistItemsFromResponse(existingResponse).find(o =>
+        safeString(o?.ecommerce?.numeroPedidoEcommerce ?? o?.numeroPedidoEcommerce) === ecommerceNumber
+    );
+    if (existing?.id) {
+        return {id:Number(existing.id), numeroPedido:existing.numeroPedido || null, created:false};
     }
+
+    const isPix = safeString(order.payment_method).toLowerCase() === "pix";
 
     const rawItems = Array.isArray(order.items) ? order.items : [];
     const productCache = new Map();
@@ -278,7 +296,7 @@ async function createOrGetOlistOrder(order) {
 
     for (const item of rawItems) {
         const sku = safeString(item.variant_sku || item.sku);
-        if (!sku) throw new Error("OLIST_SKU_MISSING_FOR_ORDER_ITEM");
+        if (!sku) throw new Error("OLIST_SKU_MISSING_FOR_ORDER_ITEM:" + safeString(item.name || item.description || item.id));
         let product = productCache.get(sku);
         if (!product) {
             product = await findOlistProductBySku(sku);
@@ -287,7 +305,8 @@ async function createOrGetOlistOrder(order) {
         orderItems.push({
             produto: {id:Number(product.id), tipo:"P"},
             quantidade: Math.max(1, Number(item.quantity || 1)),
-            valorUnitario: Number(item.price || 0),
+            // No Pix a cliente pagou 5% a menos nos produtos; a Olist recebe o valor real.
+            valorUnitario: isPix ? pixDiscountedUnitCents(item.price) / 100 : Number(item.price || 0),
             infoAdicional: safeString(item.variant_color || item.color)
                 ? "Cor: " + safeString(item.variant_color || item.color)
                 : null
@@ -392,6 +411,10 @@ async function processPendingOlistOrder(order) {
 }
 
 async function runPendingOlistSync() {
+    // Após um reinício, o refresh token obtido via OAuth existe apenas no Supabase.
+    if (!OLIST_TOKEN && OLIST_CLIENT_ID && OLIST_CLIENT_SECRET && !olistRefreshToken) {
+        await loadPersistedOlistRefreshToken();
+    }
     if (!OLIST_TOKEN && !(OLIST_CLIENT_ID && OLIST_CLIENT_SECRET && (OLIST_REFRESH_TOKEN || olistRefreshToken))) {
         return;
     }
@@ -499,15 +522,9 @@ app.get("/api/olist/callback", async (req, res) => {
         await persistOlistRefreshToken(olistRefreshToken);
         await olistRequest("/formas-pagamento?limit=1", {method:"GET"});
 
-        // Após a primeira autorização, dispara uma sincronização de catálogo
-        // em segundo plano. O navegador não precisa aguardar a importação.
-        setTimeout(() => {
-            runOlistCatalogSync({dryRun:false, maxProducts:500})
-                .then(result => console.log("🟢 Olist catálogo após autorização:", result))
-                .catch(syncError => console.error("🔴 Olist catálogo após autorização:", syncError));
-        }, 1000);
-
-        return res.send("<h2>Olist autorizado com sucesso.</h2><p>A conexão OAuth foi validada. A sincronização do catálogo foi iniciada em segundo plano.</p>");
+        // A sincronização de catálogo Olist está desativada: somente pedidos
+        // pagos são enviados à Olist (ver runPendingOlistSync).
+        return res.send("<h2>Olist autorizado com sucesso.</h2><p>A conexão OAuth foi validada. Os pedidos pagos serão sincronizados automaticamente.</p>");
     } catch (error) {
         console.error("Olist OAuth callback:", error.message);
         return res.status(502).send("A autorização foi recebida, mas a validação da API falhou.");
@@ -530,7 +547,8 @@ app.get("/api/olist/health", async (req,res) => {
 
 // OLIST CATALOG — preview and manual synchronization.
 // Preview is read-only against both Olist and MONTÊ.
-// Catálogo Olist desativado: MONTÊ não importa, cria ou atualiza produtos via Olist.\n// OLIST — reprocessa uma venda já paga no MONTÊ.
+// Catálogo Olist desativado: MONTÊ não importa, cria ou atualiza produtos via Olist.
+// OLIST — reprocessa uma venda já paga no MONTÊ.
 // Não cria cobrança nem altera o pagamento. A operação é idempotente:
 // se o pedido já tiver sido criado na Olist, reutiliza o olist_order_id salvo.
 app.post("/api/admin/olist/sync-paid-order", requireAdmin, async (req, res) => {
@@ -850,7 +868,7 @@ function formatOrderCode(value) {
 
 function normalizeOrderCode(value) {
     const raw = safeString(value).trim();
-    const match = raw.match(/^MONTÊ-(\d{4})$/i);
+    const match = raw.match(/^MONT[EÊ]-?(\d{4})$/i);
     return match ? match[1] : raw;
 }
 
@@ -884,7 +902,7 @@ async function sendOrderConfirmationEmail(order) {
     const idempotencyKey = "monte-order-confirmation-" + String(order.order_nsu);
     const response = await fetch("https://api.resend.com/emails", {
         method:"POST",
-        headers:{"Authorization":"Bearer "+RESEND_API_KEY,"Content-Type":"application/json","Accept":"application/json"},
+        headers:{"Authorization":"Bearer "+RESEND_API_KEY,"Content-Type":"application/json","Accept":"application/json","Idempotency-Key":idempotencyKey},
         body:JSON.stringify({
             from:RESEND_FROM_NAME+" <"+RESEND_FROM_EMAIL+">",
             to:[email],
@@ -1230,11 +1248,11 @@ app.use((req, res, next) => {
         "base-uri 'self'",
         "frame-ancestors 'self'",
         "object-src 'none'",
-        "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'",
+        "script-src 'self' https://cdn.jsdelivr.net https://www.googletagmanager.com 'unsafe-inline'",
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-        "font-src 'self' https://fonts.gstatic.com data:",
+        "font-src 'self' https://fonts.gstatic.com https://raw.githubusercontent.com data:",
         "img-src 'self' data: blob: https:",
-        "connect-src 'self' https://uvrhougaurupvkxmezwy.supabase.co https://viacep.com.br",
+        "connect-src 'self' https://uvrhougaurupvkxmezwy.supabase.co https://viacep.com.br https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com",
         "form-action 'self' https:",
         "upgrade-insecure-requests"
     ].join("; "));
@@ -1341,6 +1359,12 @@ const infinitePayWebhookRateLimit = createRateLimiter({
     max: 30
 });
 
+// Eventos de analytics têm limite próprio para não consumir a cota do checkout.
+const analyticsRateLimit = createRateLimiter({
+    windowMs: 60 * 1000,
+    max: 120
+});
+
 /* =====================================================
    MONTÊ ADMIN AUTH — acesso exclusivo do administrador
 ===================================================== */
@@ -1349,7 +1373,7 @@ const ADMIN_PASSWORD_HASH = safeString(process.env.ADMIN_PASSWORD_HASH);
 const ADMIN_SESSION_TTL = 1000 * 60 * 60 * 8;
 const adminSessions = new Map();
 const adminLoginAttempts = new Map();
-function parseCookies(req){const h=req.headers.cookie||"";const o={};h.split(";").filter(Boolean).forEach(p=>{const i=p.indexOf("=");if(i>=0)o[p.slice(0,i).trim()]=decodeURIComponent(p.slice(i+1).trim())});return o}
+function parseCookies(req){const h=req.headers.cookie||"";const o={};h.split(";").filter(Boolean).forEach(p=>{const i=p.indexOf("=");if(i<0)return;const v=p.slice(i+1).trim();try{o[p.slice(0,i).trim()]=decodeURIComponent(v)}catch{o[p.slice(0,i).trim()]=v}});return o}
 function getAdminSession(req){const t=parseCookies(req)["monte_admin_session"];if(!t)return null;const s=adminSessions.get(t);if(!s)return null;if(Date.now()>s.expiresAt){adminSessions.delete(t);return null}return {token:t,...s}}
 function requireAdmin(req,res,next){
     const origin = safeString(req.headers.origin);
@@ -1436,7 +1460,7 @@ function analyticsClientInfo(req){
     os:/windows/i.test(ua)?"Windows":/mac os|macintosh/i.test(ua)?"macOS":/android/i.test(ua)?"Android":/iphone|ipad|ipod/i.test(ua)?"iOS":/linux/i.test(ua)?"Linux":"Outro"
   };
 }
-app.post("/api/analytics/event",checkoutRateLimit,async(req,res)=>{
+app.post("/api/analytics/event",analyticsRateLimit,async(req,res)=>{
   try{
     const b=req.body||{}, allowed=["page_view","view_product","add_to_cart","remove_from_cart","begin_checkout","checkout_started","checkout_completed","purchase"];
     const event_name=safeString(b.event_name);
@@ -1460,7 +1484,7 @@ app.post("/api/analytics/event",checkoutRateLimit,async(req,res)=>{
     res.status(201).json({success:true});
   }catch(e){console.error("Analytics:",e);res.status(400).json({success:false,message:"Não foi possível registrar o evento."})}
 });
-app.post("/api/analytics/cart",checkoutRateLimit,async(req,res)=>{
+app.post("/api/analytics/cart",analyticsRateLimit,async(req,res)=>{
   try{
     const b=req.body||{}, visitor_id=safeString(b.visitor_id).slice(0,120), session_key=safeString(b.session_id).slice(0,120);
     if(!visitor_id||!session_key) return res.status(400).json({success:false,message:"Identificadores ausentes."});
@@ -1480,7 +1504,7 @@ app.get("/api/admin/analytics",requireAdmin,async(req,res)=>{
       supabaseRequest("site_events?created_at=gte."+encodeURIComponent(since)+"&select=*&order=created_at.desc&limit=10000",{method:"GET"}),
       supabaseRequest("site_sessions?last_seen_at=gte."+encodeURIComponent(since)+"&select=*&order=last_seen_at.desc&limit=5000",{method:"GET"}),
       supabaseRequest("cart_snapshots?last_activity_at=gte."+encodeURIComponent(since)+"&select=*&order=last_activity_at.desc&limit=5000",{method:"GET"}),
-      supabaseRequest("orders?created_at=gte."+encodeURIComponent(since)+"&select=id,order_nsu,customer_name,customer_email,subtotal,shipping,total,status,payment_method,created_at,paid_at,paid_amount",{method:"GET"}),
+      supabaseRequest("orders?created_at=gte."+encodeURIComponent(since)+"&select=id,order_nsu,order_code,customer_name,customer_email,subtotal,shipping,total,status,payment_method,created_at,paid_at,paid_amount&order=created_at.desc",{method:"GET"}),
       supabaseRequest("order_items?created_at=gte."+encodeURIComponent(since)+"&select=order_id,product_id,product_name,sku,quantity,total_price,created_at&order=created_at.desc&limit=10000",{method:"GET"})
     ]);
     const good=["paid","processing","shipped","delivered"],paid=orders.filter(o=>good.includes(o.status)),paidIds=new Set(paid.map(o=>String(o.id)));
@@ -1692,6 +1716,115 @@ app.delete("/api/admin/products/:id",requireAdmin,async(req,res)=>{
         return res.status(500).json({success:false,message:"Não foi possível excluir o produto."});
     }
 });
+
+/* =====================================================
+   LIMPEZA DOS PRODUTOS SINCRONIZADOS DA OLIST
+   A antiga sincronização de catálogo marcava os produtos com
+   olist_product_id. Só produtos com essa marca são removidos.
+   Produtos com pedidos são apenas desativados, para preservar o
+   histórico das vendas.
+===================================================== */
+function chunkList(list, size) {
+    const chunks = [];
+    for (let i = 0; i < list.length; i += size) chunks.push(list.slice(i, i + size));
+    return chunks;
+}
+
+async function deleteOlistProductsByIds(ids) {
+    const filter = "in.(" + ids.map(encodeURIComponent).join(",") + ")";
+    await supabaseRequest("product_variants?product_id=" + filter, {
+        method: "DELETE",
+        headers: { "Prefer": "return=minimal" }
+    });
+    const deleted = await supabaseRequest("products?id=" + filter + "&olist_product_id=not.is.null", {
+        method: "DELETE",
+        headers: { "Prefer": "return=representation" }
+    });
+    return Array.isArray(deleted) ? deleted.length : 0;
+}
+
+async function deactivateProductsByIds(ids) {
+    const filter = "in.(" + ids.map(encodeURIComponent).join(",") + ")";
+    const updated = await supabaseRequest("products?id=" + filter + "&olist_product_id=not.is.null", {
+        method: "PATCH",
+        body: JSON.stringify({ active: false })
+    });
+    return Array.isArray(updated) ? updated.length : 0;
+}
+
+app.post("/api/admin/olist/products/delete", requireAdmin, async (req, res) => {
+    try {
+        const requested = Array.isArray(req.body?.product_ids) ? req.body.product_ids.map(safeString) : [];
+        const ids = [...new Set(requested)].filter(id => /^[0-9a-f-]{36}$/i.test(id));
+        if (!ids.length) {
+            return res.status(400).json({ success: false, message: "Nenhum produto da Olist informado." });
+        }
+        if (ids.length > 2000) {
+            return res.status(400).json({ success: false, message: "Quantidade de produtos excede o limite." });
+        }
+
+        // Confere no banco quais IDs realmente vieram da Olist.
+        const olistIds = [];
+        for (const chunk of chunkList(ids, 50)) {
+            const rows = await supabaseRequest(
+                "products?id=in.(" + chunk.map(encodeURIComponent).join(",") + ")&olist_product_id=not.is.null&select=id",
+                { method: "GET" }
+            );
+            if (Array.isArray(rows)) olistIds.push(...rows.map(row => String(row.id)));
+        }
+
+        const withOrders = new Set();
+        for (const chunk of chunkList(olistIds, 50)) {
+            const rows = await supabaseRequest(
+                "order_items?product_id=in.(" + chunk.map(encodeURIComponent).join(",") + ")&select=product_id",
+                { method: "GET" }
+            );
+            if (Array.isArray(rows)) rows.forEach(row => withOrders.add(String(row.product_id)));
+        }
+
+        const toDeactivate = olistIds.filter(id => withOrders.has(id));
+        const toDelete = olistIds.filter(id => !withOrders.has(id));
+        let deleted = 0;
+        let deactivated = 0;
+        const failed = [];
+
+        for (const chunk of chunkList(toDeactivate, 50)) {
+            deactivated += await deactivateProductsByIds(chunk);
+        }
+
+        for (const chunk of chunkList(toDelete, 50)) {
+            try {
+                deleted += await deleteOlistProductsByIds(chunk);
+            } catch (chunkError) {
+                console.error("Olist cleanup — lote falhou, tentando um a um:", chunkError.message);
+                for (const id of chunk) {
+                    try {
+                        deleted += await deleteOlistProductsByIds([id]);
+                    } catch (error) {
+                        // Se não puder excluir, ao menos tira o produto da loja.
+                        console.error("Olist cleanup — não excluído:", id, error.message);
+                        await deactivateProductsByIds([id]).catch(() => {});
+                        failed.push(id);
+                    }
+                }
+            }
+        }
+
+        console.log("🧹 Olist cleanup:", { requested: ids.length, olist: olistIds.length, deleted, deactivated, failed: failed.length });
+
+        return res.json({
+            success: true,
+            requested: ids.length,
+            ignored_not_olist: ids.length - olistIds.length,
+            deleted,
+            deactivated_with_orders: deactivated,
+            failed
+        });
+    } catch (error) {
+        console.error("Olist cleanup:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível excluir os produtos da Olist." });
+    }
+});
 app.put("/api/admin/products/:id/variants",requireAdmin,async(req,res)=>{
     try{
         const productId=safeString(req.params.id);
@@ -1828,7 +1961,7 @@ app.patch("/api/admin/orders/:id/status",requireAdmin,async(req,res)=>{
                 await supabaseRequest(`orders?id=eq.${id}`, {
                     method: "PATCH",
                     body: JSON.stringify({ whatsapp_tracking_status: "error" })
-                });
+                }).catch(() => {});
             }
         }
 
@@ -1987,7 +2120,8 @@ app.get("/api/instagram/feed", async (req, res) => {
                 .map(item => ({
                     id: String(item.id || ""),
                     media_type: String(item.media_type || ""),
-                    image_url: String(item.media_url || item.thumbnail_url || ""),
+                    // Em vídeos, media_url aponta para o .mp4; a capa fica em thumbnail_url.
+                    image_url: String((item.media_type === "VIDEO" ? item.thumbnail_url : item.media_url) || item.thumbnail_url || item.media_url || ""),
                     permalink: String(item.permalink || "https://www.instagram.com/oficialmonte_/"),
                     caption: String(item.caption || ""),
                     timestamp: item.timestamp || null
@@ -2029,19 +2163,6 @@ app.get("/admin", (req, res) => {
 app.get("/admin/", (req, res) => {
     res.sendFile(path.join(__dirname, "..", "admin.html"));
 });
-
-/* =====================================================
-   ARQUIVOS DO SITE
-===================================================== */
-
-app.use(
-    express.static(
-        path.join(
-            __dirname,
-            ".."
-        )
-    )
-);
 
 
 /* =====================================================
@@ -2804,17 +2925,19 @@ app.post(
 
             // O desconto de 5% do Pix incide somente sobre os produtos.
             // O frete permanece integral.
-            const pixDiscount = paymentMethod === "pix"
-                ? Number((subtotal * 0.05).toFixed(2))
-                : 0;
-
-            const checkoutProductSubtotal = Number(
-                (subtotal - pixDiscount).toFixed(2)
+            // Todos os valores são calculados em centavos a partir do mesmo preço
+            // unitário enviado à InfinitePay. Assim o total salvo no pedido é
+            // exatamente o valor cobrado e o payment_check do webhook confere.
+            const pixUnitCents = item => pixDiscountedUnitCents(item.price);
+            const productUnitCents = item => paymentMethod === "pix"
+                ? pixUnitCents(item)
+                : Math.round(Number(item.price) * 100);
+            const checkoutProductCents = productItems.reduce(
+                (sum, item) => sum + productUnitCents(item) * Number(item.quantity), 0
             );
+            const shippingCents = Math.round(shippingValue * 100);
 
-            const checkoutTotal = Number(
-                (checkoutProductSubtotal + shippingValue).toFixed(2)
-            );
+            const checkoutTotal = (checkoutProductCents + shippingCents) / 100;
 
             const savedOrders = await supabaseRequest("orders", {
                 method: "POST",
@@ -2871,14 +2994,14 @@ app.post(
             if (paymentMethod === "pix") {
                 const pixItems = productItems.map((item) => ({
                     quantity: item.quantity,
-                    price: Math.round(item.price * 0.95 * 100),
+                    price: pixUnitCents(item),
                     description: item.description
                 }));
 
                 if (shippingValue > 0) {
                     pixItems.push({
                         quantity: 1,
-                        price: Math.round(shippingValue * 100),
+                        price: shippingCents,
                         description: shippingOption.name
                     });
                 }
@@ -3357,13 +3480,15 @@ app.post(
             // Webhook repetido do mesmo pagamento: nunca refaça a baixa local.
             // Se a Olist ainda estiver pendente/erro, aproveitamos a repetição para tentar
             // novamente sem bloquear a confirmação da compra.
+            // Pedidos já em separação/enviados/entregues também contam como pagos:
+            // um webhook repetido não pode fazer o status voltar para "paid".
             if (
-                order.status === "paid" &&
+                ["paid", "processing", "shipped", "delivered"].includes(order.status) &&
                 order.transaction_nsu === transactionNsu &&
                 order.stock_decremented === true
             ) {
                 let olistRetry = {status:"skipped"};
-                if (order.olist_sync_status !== "completed") {
+                if (order.status === "paid" && order.olist_sync_status !== "completed") {
                     try {
                         const result = await syncPaidOrderToOlist({
                             ...order,
@@ -3525,8 +3650,7 @@ app.post(
                 order_nsu: orderNsu,
                 customer_name: order.customer_name,
                 customer_email: order.customer_email,
-                total: order.total,
-                order_confirmation_email_sent_at: null
+                total: order.total
             });
 
             const adminSaleEmail = await ensureAdminSaleNotificationEmail({
@@ -3776,7 +3900,6 @@ app.get("/api/pedido-confirmacao", orderStatusRateLimit, async (req, res) => {
                 shipping: Number(order.shipping || 0),
                 total: Number(order.total || 0),
                 created_at: order.created_at,
-                pix_payload: order.payment_method === "pix" ? buildPixPayload(Number(order.total || 0), String(order.order_code || order.order_nsu)) : null,
                 items: (order.order_items || []).map(item => ({
                     product_name: item.product_name,
                     variant_color: item.variant_color,
@@ -4009,7 +4132,8 @@ app.get("/sitemap.xml", async (req, res) => {
         return res.status(200).send(xml);
     } catch (error) {
         console.error("❌ Sitemap:", error);
-        return res.status(500).type("application/xml").send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
+        // Sem acesso ao catálogo, publica ao menos as páginas institucionais.
+        return res.sendFile(path.join(__dirname, "..", "sitemap.xml"));
     }
 });
 
@@ -4046,10 +4170,33 @@ app.get(
 
 
 /* =====================================================
+   ARQUIVOS DO SITE
+   Registrado depois das rotas dinâmicas para que /sitemap.xml e
+   /robots.txt gerados pelo servidor tenham prioridade sobre os arquivos
+   estáticos. O código do backend não é servido publicamente; apenas as
+   imagens em /backend/assets.
+===================================================== */
+
+app.use("/backend", (req, res, next) => {
+    if (req.path.startsWith("/assets/")) return next();
+    return res.status(404).send("Não encontrado.");
+});
+
+app.use(
+    express.static(
+        path.join(
+            __dirname,
+            ".."
+        )
+    )
+);
+
+
+/* =====================================================
    INICIAR SERVIDOR
 ===================================================== */
 
-// Olist catalog synchronization is intentionally disabled.\n
+// Olist catalog synchronization is intentionally disabled.
 
 app.listen(
     PORT,

@@ -20,11 +20,6 @@ h1{text-align:center;font-size:29px;font-weight:500;margin:0 0 10px}
 .items{margin:28px 0}.item{display:flex;justify-content:space-between;gap:20px;padding:15px 0;border-bottom:1px solid #eee}
 .item-name{font-weight:500}.item-meta{color:#777;font-size:13px;margin-top:5px}
 .total{display:flex;justify-content:space-between;font-size:18px;font-weight:600;padding-top:20px}
-.pix{display:none;margin-top:28px;padding:24px;background:#f7f5f2;text-align:center}
-.pix h2{font-size:16px;letter-spacing:1.5px;margin:0 0 8px}.pix p{color:#666;line-height:1.5;font-size:14px}
-#pixQr{display:block;margin:18px auto;background:#fff;padding:8px}
-.pix-code{width:100%;min-height:92px;resize:none;border:1px solid #ddd;background:#fff;padding:12px;font-size:12px}
-.copy{width:100%;padding:14px;background:#111;color:#fff;border:0;margin-top:10px;cursor:pointer;letter-spacing:1px}
 .back{display:block;text-align:center;color:#555;text-decoration:none;margin-top:24px}
 .error{text-align:center;color:#555;line-height:1.6}
 @media(max-width:600px){.card{padding:28px 18px}.page{padding:16px 10px}h1{font-size:25px}.item{font-size:14px}}
@@ -34,13 +29,8 @@ h1{text-align:center;font-size:29px;font-weight:500;margin:0 0 10px}
 <main class="page"><section class="card">
 <div class="logo">MONTÊ</div>
 <div id="content"><div class="check">✓</div><h1 id="title">Pedido recebido</h1><p class="subtitle" id="subtitle">Estamos carregando os detalhes do seu pedido.</p>
-<div id="orderBox" class="order">Carregando pedido...</div><div id="items" class="items"></div><div id="pix" class="pix">
-<h2>PAGAMENTO VIA PIX</h2><p>Seu pedido foi criado. Para concluir, pague pelo QR Code ou copie o Pix Copia e Cola.</p>
-<img id="pixQr" width="240" height="240" alt="QR Code Pix" style="display:block;margin:18px auto;background:#fff;padding:8px;width:240px;height:240px;"><strong id="pixAmount"></strong>
-<textarea id="pixCode" class="pix-code" readonly></textarea><button class="copy" onclick="copyPix()">COPIAR PIX COPIA E COLA</button>
-</div><a class="back" href="/">Voltar para a MONTÊ</a></div>
+<div id="orderBox" class="order">Carregando pedido...</div><div id="items" class="items"></div><a class="back" href="/">Voltar para a MONTÊ</a></div>
 </section></main>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
 <script>
 const money=v=>new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(v||0));
 const params=new URLSearchParams(location.search);
@@ -57,21 +47,21 @@ async function fetchOrder(){
   return d.order;
 }
 
+function isPaid(o){
+  return ["paid","processing","shipped","delivered"].includes(o.status);
+}
+
 function renderOrder(o){
   lastOrder=o;
-  const paid=o.status==="paid";
-  const pixPending=o.payment_method==="pix"&&!paid;
-  const cardPending=o.payment_method==="credit_card"&&!paid;
+  const paid=isPaid(o);
 
   document.getElementById("title").textContent=paid
     ?"Pagamento recebido"
-    :(pixPending?"Finalize o pagamento":"Pagamento em processamento");
+    :"Pagamento em processamento";
 
   document.getElementById("subtitle").textContent=paid
     ?"Pagamento confirmado. Recebemos seu pagamento e seu pedido está registrado na MONTÊ."
-    :(pixPending
-      ?"Seu pedido foi criado, mas a compra ainda não foi concluída. Faça o pagamento via Pix abaixo."
-      :"Seu pedido foi criado, mas ainda estamos aguardando a confirmação do pagamento.");
+    :"Seu pedido foi criado e estamos aguardando a confirmação do pagamento pela InfinitePay. Você receberá um e-mail assim que ele for confirmado.";
 
   document.getElementById("orderBox").innerHTML=
     '<div class="row"><span class="label">Pedido</span><span class="value">'+esc(o.order_code)+'</span></div>'+
@@ -85,25 +75,7 @@ function renderOrder(o){
     '</div></div><strong>'+money(i.total_price)+'</strong></div>'
   ).join("");
 
-  const pix=document.getElementById("pix");
-  pix.style.display="none";
-
-  if(pixPending&&o.pix_payload){
-    pix.style.display="block";
-    document.getElementById("pixAmount").textContent=money(o.total);
-    document.getElementById("pixCode").value=o.pix_payload;
-    const qr=document.getElementById("pixQr");
-    const encoded=encodeURIComponent(o.pix_payload);
-    const fallback="https://quickchart.io/qr?size=280&margin=2&ecLevel=M&text="+encoded;
-    qr.src=fallback;
-    if(window.QRCode?.toDataURL){
-      QRCode.toDataURL(o.pix_payload,{
-        width:240,margin:2,errorCorrectionLevel:"M"
-      }).then(url=>{qr.src=url;}).catch(()=>{qr.src=fallback;});
-    }
-  }
-
-  if(cardPending || pixPending){
+  if(!paid){
     startPaymentPolling();
   } else {
     stopPolling();
@@ -126,7 +98,7 @@ function startPaymentPolling(){
     try{
       const o=await fetchOrder();
       renderOrder(o);
-      if(o.status==="paid"||pollCount>=30)stopPolling();
+      if(isPaid(o)||pollCount>=30)stopPolling();
     }catch(e){
       if(pollCount>=15)stopPolling();
     }
@@ -135,14 +107,6 @@ function startPaymentPolling(){
 
 function stopPolling(){
   if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
-}
-
-function copyPix(){
-  const el=document.getElementById("pixCode");
-  if(!el?.value)return;
-  navigator.clipboard.writeText(el.value)
-    .then(()=>alert("Pix Copia e Cola copiado."))
-    .catch(()=>{el.focus();el.select();document.execCommand("copy");alert("Pix Copia e Cola copiado.");});
 }
 
 function esc(v){

@@ -83,6 +83,12 @@ function getCarouselVisibleCount() {
    FORMATAÇÃO DE PREÇO
 ===================================================== */
 
+function escapeHTML(value) {
+    return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+    })[char]);
+}
+
 function formatPrice(value) {
 
     return new Intl.NumberFormat(
@@ -105,11 +111,13 @@ function createProductCard(product) {
     const card = document.createElement("article");
 
     card.className = "product-card";
+    card.dataset.productId = product.id;
+    card.dataset.productName = product.name || "";
 
     const image =
         product.images && product.images.length
             ? product.images[0]
-            : "data:image/svg+xml;charset=UTF-8,"
+            : "data:image/svg+xml;charset=UTF-8," +
               encodeURIComponent(`
                 <svg xmlns="http://www.w3.org/2000/svg"
                      width="600"
@@ -189,8 +197,8 @@ function createProductCard(product) {
             }
 
             <img
-                src="${image}"
-                alt="${product.name}"
+                src="${escapeHTML(image)}"
+                alt="${escapeHTML(product.name)}"
                 loading="lazy"
             >
 
@@ -199,7 +207,7 @@ function createProductCard(product) {
         <div class="product-info">
 
             <div class="product-name">
-                ${product.name}
+                ${escapeHTML(product.name)}
             </div>
 
             <div class="product-price">
@@ -584,6 +592,12 @@ function previousCollectionPage() {
 let categorySectionProducts = { cintos: [], acessorios: [] };
 let categorySectionIndexes = { cintos: 0, acessorios: 0 };
 
+// A vitrine de categoria divide a largura com o texto ao lado:
+// 3 cards por vez no computador e 2 no celular.
+function getCategoryVisibleCount() {
+    return window.matchMedia("(max-width: 650px)").matches ? 2 : 3;
+}
+
 function renderCategorySection(category) {
     const container = document.getElementById(category === "cintos-acessorios" ? "cintosAcessoriosProducts" : category + "Products");
     if (!container) return;
@@ -603,11 +617,11 @@ function renderCategorySection(category) {
     const total = list.length;
     const start = categorySectionIndexes[category] % total;
 
-    for (let offset = 0; offset < Math.min(getCarouselVisibleCount(), total); offset++) {
+    for (let offset = 0; offset < Math.min(getCategoryVisibleCount(), total); offset++) {
         container.appendChild(createProductCard(list[(start + offset) % total]));
     }
 
-    const hasCarousel = total > getCarouselVisibleCount();
+    const hasCarousel = total > getCategoryVisibleCount();
     if (prev) {
         prev.disabled = !hasCarousel;
         prev.style.visibility = hasCarousel ? "visible" : "hidden";
@@ -626,17 +640,17 @@ function renderCategorySectionProducts(category, list) {
 
 function nextCategoryPage(category) {
     const list = categorySectionProducts[category] || [];
-    if (list.length <= getCarouselVisibleCount()) return;
+    if (list.length <= getCategoryVisibleCount()) return;
     categorySectionIndexes[category] =
-        (categorySectionIndexes[category] + COLLECTION_STEP) % list.length;
+        (categorySectionIndexes[category] + getCategoryVisibleCount()) % list.length;
     renderCategorySection(category);
 }
 
 function previousCategoryPage(category) {
     const list = categorySectionProducts[category] || [];
-    if (list.length <= getCarouselVisibleCount()) return;
+    if (list.length <= getCategoryVisibleCount()) return;
     categorySectionIndexes[category] =
-        (categorySectionIndexes[category] - COLLECTION_STEP + list.length) % list.length;
+        (categorySectionIndexes[category] - getCategoryVisibleCount() + list.length) % list.length;
     renderCategorySection(category);
 }
 
@@ -1068,6 +1082,14 @@ document.getElementById(
 
         updateCart();
 
+        window.monteAnalytics?.track("add_to_cart", {
+            product_id: selectedProduct.id,
+            product_name: selectedProduct.name,
+            variant_id: selectedVariant?.id || null,
+            quantity: selectedQuantity,
+            value: Number(selectedProduct.price || 0) * selectedQuantity
+        });
+
 
         closeProductModal();
 
@@ -1150,15 +1172,15 @@ function updateCart() {
         element.innerHTML = `
 
             <img
-                src="${item.images[0]}"
-                alt="${item.name}"
+                src="${escapeHTML(Array.isArray(item.images) ? item.images[0] || "" : "")}"
+                alt="${escapeHTML(item.name)}"
             >
 
 
             <div>
 
                 <div class="cart-item-name">
-                    ${item.name}${item.variant_color ? " · " + item.variant_color : ""}
+                    ${escapeHTML(item.name)}${item.variant_color ? " · " + escapeHTML(item.variant_color) : ""}
                 </div>
 
                 <div class="cart-item-price">
@@ -1354,8 +1376,12 @@ function updatePaymentSummary(subtotal = getCartSubtotal()) {
 
     selectedPaymentMethod = paymentMethod;
 
+    // Mesmo cálculo do servidor: 5% por unidade, arredondado em centavos.
     const pixDiscount = paymentMethod === "pix"
-        ? Number((subtotal * 0.05).toFixed(2))
+        ? cart.reduce((sum, item) => {
+            const unitCents = Math.round(Number(item.price || 0) * 100);
+            return sum + (unitCents - Math.round(unitCents * 0.95)) * Number(item.quantity || 0);
+        }, 0) / 100
         : 0;
 
     const checkoutTotal = Number(
@@ -1581,6 +1607,8 @@ async function checkout() {
     const checkoutButton=document.querySelector(".checkout-button");
     if(checkoutButton){checkoutButton.disabled=true;checkoutButton.textContent="PREPARANDO PAGAMENTO...";}
     showToast("Preparando seu pagamento...");
+    window.monteAnalytics?.track("begin_checkout",{value:getCartSubtotal(),metadata:{payment_method:paymentMethod}});
+    window.monteAnalytics?.saveCart();
 
     try{
         const response=await fetch("/api/criar-checkout",{
@@ -1642,6 +1670,14 @@ async function checkout() {
         if(checkoutButton){checkoutButton.disabled=false;checkoutButton.textContent="FINALIZAR COMPRA";}
     }
 }
+
+// Ao voltar do checkout pelo botão "voltar", a página pode ser restaurada do
+// cache com o botão ainda desabilitado.
+window.addEventListener("pageshow",event=>{
+    if(!event.persisted)return;
+    const checkoutButton=document.querySelector(".checkout-button");
+    if(checkoutButton){checkoutButton.disabled=false;checkoutButton.textContent="FINALIZAR COMPRA";}
+});
 
 function renderDirectPixPayment(data){
     const panel=document.getElementById("directPixPayment");
@@ -1996,6 +2032,29 @@ function loadCart() {
 
     }
 
+    if (!Array.isArray(cart)) cart = [];
+
+    // O carrinho salvo pode ter preços antigos. Atualiza com o catálogo atual
+    // (o servidor cobra sempre o preço vigente) e remove itens indisponíveis.
+    if (products.length) {
+        cart = cart
+            .map(item => {
+                const product = products.find(p => p.id === item.id);
+                if (!product) return null;
+                return {
+                    ...item,
+                    name: product.name,
+                    price: product.price,
+                    oldPrice: product.oldPrice,
+                    sale: product.sale,
+                    images: product.images,
+                    variants: product.variants,
+                    stock: product.stock
+                };
+            })
+            .filter(Boolean);
+    }
+
 
     updateCart();
 
@@ -2062,13 +2121,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
 (function(){
  const VK="monte_analytics_visitor",SK="monte_analytics_session",TK="monte_analytics_session_started";
- const uid=()=>crypto.randomUUID();
- const visitor_id=localStorage.getItem(VK)||uid();localStorage.setItem(VK,visitor_id);
- let session_id=sessionStorage.getItem(SK),started=Number(sessionStorage.getItem(TK)||0);
- if(!session_id||!started||Date.now()-started>1800000){session_id=uid();sessionStorage.setItem(SK,session_id);sessionStorage.setItem(TK,String(Date.now()));}
+ const uid=()=>window.crypto?.randomUUID?window.crypto.randomUUID():Date.now().toString(36)+"-"+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
+ const read=(store,key)=>{try{return window[store].getItem(key)}catch{return null}};
+ const write=(store,key,value)=>{try{window[store].setItem(key,value)}catch{}};
+ const visitor_id=read("localStorage",VK)||uid();write("localStorage",VK,visitor_id);
+ let session_id=read("sessionStorage",SK),started=Number(read("sessionStorage",TK)||0);
+ if(!session_id||!started||Date.now()-started>1800000){session_id=uid();write("sessionStorage",SK,session_id);write("sessionStorage",TK,String(Date.now()));}
  async function post(path,data){try{await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},keepalive:true,body:JSON.stringify(data)})}catch{}}
  function track(name,extra){post("/api/analytics/event",{visitor_id,session_id,event_name:name,path:location.pathname+location.search,referrer:document.referrer,...extra})}
- function saveCart(){const items=Array.isArray(window.cart)?window.cart:[];if(!items.length)return;const subtotal=items.reduce((s,i)=>s+Number(i.price||0)*Number(i.quantity||1),0);post("/api/analytics/cart",{visitor_id,session_id,items:items.map(i=>({id:i.id,product_id:i.id,product_name:i.name,sku:i.sku,variant_id:i.variant_id||null,variant_color:i.variant_color||i.color||null,quantity:i.quantity,unit_price:i.price,total_price:Number(i.price||0)*Number(i.quantity||1)})),subtotal,shipping:Number(window.selectedShippingOption?.price||0),total:subtotal+Number(window.selectedShippingOption?.price||0),customer_name:document.getElementById("customerName")?.value||"",customer_email:document.getElementById("customerEmail")?.value||"",customer_phone:document.getElementById("customerPhone")?.value||""})}
+ function saveCart(){const items=Array.isArray(cart)?cart:[];const shippingPrice=Number(selectedShippingOption?.price||0);if(!items.length)return;const subtotal=items.reduce((s,i)=>s+Number(i.price||0)*Number(i.quantity||1),0);post("/api/analytics/cart",{visitor_id,session_id,items:items.map(i=>({id:i.id,product_id:i.id,product_name:i.name,sku:i.sku,variant_id:i.variant_id||null,variant_color:i.variant_color||i.color||null,quantity:i.quantity,unit_price:i.price,total_price:Number(i.price||0)*Number(i.quantity||1)})),subtotal,shipping:shippingPrice,total:subtotal+shippingPrice,customer_name:document.getElementById("customerName")?.value||"",customer_email:document.getElementById("customerEmail")?.value||"",customer_phone:document.getElementById("customerPhone")?.value||""})}
  window.monteAnalytics={track,saveCart};
  window.addEventListener("load",()=>track("page_view"));
  setInterval(saveCart,30000);
@@ -2118,3 +2179,69 @@ document.addEventListener("DOMContentLoaded", () => {
    FORMA DE PAGAMENTO
 ===================================================== */
 document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
+
+
+/* =====================================================
+   PARALLAX E ENTRADA SUAVE
+   Elementos com data-parallax="velocidade" se deslocam conforme a
+   posição do bloco na tela (camadas em profundidades diferentes).
+   Usa a propriedade CSS "translate" para não conflitar com rotações.
+   Desligado para quem pede menos movimento no sistema.
+===================================================== */
+(function setupParallaxAndReveal() {
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    const start = () => {
+        const reveals = [...document.querySelectorAll(".reveal")];
+        if ("IntersectionObserver" in window && !reduceMotion.matches) {
+            document.documentElement.classList.add("js-motion");
+            const observer = new IntersectionObserver(entries => {
+                entries.forEach(entry => {
+                    if (!entry.isIntersecting) return;
+                    entry.target.classList.add("is-visible");
+                    observer.unobserve(entry.target);
+                });
+            }, { threshold: 0.15, rootMargin: "0px 0px -40px 0px" });
+            reveals.forEach(element => observer.observe(element));
+        }
+
+        const layers = [...document.querySelectorAll("[data-parallax]")];
+        if (!layers.length) return;
+
+        let scheduled = false;
+        const update = () => {
+            scheduled = false;
+            const viewportHeight = window.innerHeight;
+            const strength = window.innerWidth <= 760 ? 0.5 : 1;
+
+            layers.forEach(layer => {
+                if (reduceMotion.matches) {
+                    layer.style.translate = "";
+                    return;
+                }
+                const rect = layer.parentElement.getBoundingClientRect();
+                if (rect.bottom < -200 || rect.top > viewportHeight + 200) return;
+                const distanceFromCenter = rect.top + rect.height / 2 - viewportHeight / 2;
+                const offset = distanceFromCenter * Number(layer.dataset.parallax || 0) * strength;
+                layer.style.translate = "0 " + offset.toFixed(1) + "px";
+            });
+        };
+
+        const requestUpdate = () => {
+            if (scheduled) return;
+            scheduled = true;
+            requestAnimationFrame(update);
+        };
+
+        window.addEventListener("scroll", requestUpdate, { passive: true });
+        window.addEventListener("resize", requestUpdate);
+        reduceMotion.addEventListener?.("change", requestUpdate);
+        update();
+    };
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", start, { once: true });
+    } else {
+        start();
+    }
+})();
