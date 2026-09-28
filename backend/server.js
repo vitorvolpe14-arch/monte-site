@@ -4155,6 +4155,7 @@ app.get("/produto/:id/:slug", async (req, res) => {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <title>${xmlEscape(title)}</title>
 <meta name="description" content="${xmlEscape(description.slice(0, 160))}">
 <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
