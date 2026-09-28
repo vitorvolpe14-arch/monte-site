@@ -3575,8 +3575,7 @@ app.post(
             console.log(
                 "✅ Pagamento confirmado, estoque local baixado e notificações processadas:",
                 orderNsu,
-                "| Olist:",
-                olistSyncStatus
+                "| Olist: processamento em segundo plano"
             );
 
             return res.status(200).json({
