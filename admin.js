@@ -220,7 +220,8 @@ function money(v){return new Intl.NumberFormat("pt-BR",{style:"currency",currenc
 function date(v){return v?new Date(v).toLocaleString("pt-BR"):"—"}
 function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 
-async function syncPaidOrderOlist(id){\n  id = id || window.currentOrderId;
+async function syncPaidOrderOlist(id){
+  id = id || window.currentOrderId;
   const errorBox=$("orderUpdateError");
   if(errorBox) errorBox.textContent="";
   const o=orders.find(x=>String(x.id)===String(id));
