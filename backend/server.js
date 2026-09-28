@@ -264,28 +264,26 @@ async function findOrCreateOlistContact(order) {
     return created.id;
 }
 
+// As formas de recebimento mudam pouco: guardamos a lista por 1 hora para
+// não gastar o limite de requisições da Olist a cada pedido.
+let olistReceiptFormsCache = {expiresAt:0, items:[]};
+
 async function findOlistPaymentIds(paymentMethod) {
     const wanted = safeString(paymentMethod).toLowerCase();
     const terms = wanted === "pix"
         ? ["pix"]
         : ["cartão de crédito", "cartao de credito", "cartão", "cartao"];
 
-    const [recebimentos, pagamentos] = await Promise.all([
-        olistRequest("/formas-recebimento?limit=100"),
-        olistRequest("/formas-pagamento?limit=100")
-    ]);
+    if (Date.now() > olistReceiptFormsCache.expiresAt) {
+        const recebimentos = await olistRequest("/formas-recebimento?limit=100");
+        olistReceiptFormsCache = {expiresAt:Date.now() + 60 * 60 * 1000, items:olistItemsFromResponse(recebimentos)};
+    }
 
-    const received = olistItemsFromResponse(recebimentos);
-    const paid = olistItemsFromResponse(pagamentos);
-    const pick = (items) => {
-        for (const term of terms) {
-            const hit = items.find(x => safeString(x.nome).toLowerCase().includes(term));
-            if (hit?.id) return Number(hit.id);
-        }
-        return null;
-    };
-
-    return {formaRecebimentoId:pick(received), meioPagamentoId:pick(paid)};
+    for (const term of terms) {
+        const hit = olistReceiptFormsCache.items.find(x => safeString(x.nome).toLowerCase().includes(term));
+        if (hit?.id) return {formaRecebimentoId:Number(hit.id)};
+    }
+    return {formaRecebimentoId:null};
 }
 
 function olistAddressFromOrder(order) {
@@ -360,19 +358,34 @@ async function createOrGetOlistOrder(order) {
         situacao: 3,
         data: new Date().toISOString().slice(0,10),
         valorFrete: Number(order.shipping || 0),
-        observacoesInternas: "Pedido MONTÊ " + ecommerceNumber + " | InfinitePay " + safeString(order.transaction_nsu),
+        observacoesInternas: "Pedido MONTÊ " + ecommerceNumber +
+            " | InfinitePay " + safeString(order.transaction_nsu) +
+            " | Pagamento: " + (isPix ? "Pix" : "Cartão de crédito"),
         ecommerce: {numeroPedidoEcommerce:ecommerceNumber},
         enderecoEntrega: olistAddressFromOrder(order),
         itens: orderItems
     };
 
-    if (paymentIds.formaRecebimentoId || paymentIds.meioPagamentoId) {
-        payload.pagamento = {};
-        if (paymentIds.formaRecebimentoId) payload.pagamento.formaRecebimento = {id:paymentIds.formaRecebimentoId};
-        if (paymentIds.meioPagamentoId) payload.pagamento.meioPagamento = {id:paymentIds.meioPagamentoId};
+    // O "meio de pagamento" da Olist não é a lista de /formas-pagamento
+    // (a Olist recusava com "Meio de pagamento não encontrado"); enviamos só
+    // a forma de recebimento. A forma de pagamento também vai na observação.
+    if (paymentIds.formaRecebimentoId) {
+        payload.pagamento = {formaRecebimento:{id:paymentIds.formaRecebimentoId}};
     }
 
-    const created = await olistRequest("/pedidos", {method:"POST", body:JSON.stringify(payload)});
+    let created;
+    try {
+        created = await olistRequest("/pedidos", {method:"POST", body:JSON.stringify(payload)});
+    } catch (error) {
+        // Se a Olist recusar só os dados de pagamento, cria o pedido sem eles.
+        const onlyPaymentProblem = error.status === 400 && payload.pagamento &&
+            Array.isArray(error.data?.detalhes) && error.data.detalhes.length &&
+            error.data.detalhes.every(d => safeString(d?.campo).startsWith("pagamento"));
+        if (!onlyPaymentProblem) throw error;
+        console.warn("Olist recusou os dados de pagamento; criando o pedido sem eles:", ecommerceNumber);
+        delete payload.pagamento;
+        created = await olistRequest("/pedidos", {method:"POST", body:JSON.stringify(payload)});
+    }
     if (!created?.id) throw new Error("OLIST_ORDER_CREATE_FAILED");
 
     return {id:Number(created.id), numeroPedido:created.numeroPedido || null, created:true};
@@ -411,10 +424,15 @@ async function syncPaidOrderToOlist(order) {
 }
 
 const olistSyncLocks = new Set();
+// Espera entre tentativas automáticas de um pedido que falhou, para não
+// repetir a cada minuto e esgotar o limite de requisições da Olist.
+const olistRetryAfter = new Map();
+const OLIST_RETRY_DELAY_MS = 10 * 60 * 1000;
+const OLIST_RATE_LIMIT_DELAY_MS = 2 * 60 * 1000;
 
 async function processPendingOlistOrder(order) {
-    if (!order?.id || olistSyncLocks.has(String(order.id))) return;
-    if (safeString(order.status).toLowerCase() !== "paid") return;
+    if (!order?.id || olistSyncLocks.has(String(order.id))) return {skipped:true};
+    if (safeString(order.status).toLowerCase() !== "paid") return {skipped:true};
 
     olistSyncLocks.add(String(order.id));
     try {
@@ -430,9 +448,13 @@ async function processPendingOlistOrder(order) {
 
         await syncPaidOrderToOlist(order);
 
+        olistRetryAfter.delete(String(order.id));
         console.log("🟢 Olist — pedido sincronizado:", order.order_nsu || order.id);
+        return {ok:true};
     } catch (error) {
         const message = String(error?.message || error);
+        const rateLimited = error?.status === 429;
+        olistRetryAfter.set(String(order.id), Date.now() + (rateLimited ? OLIST_RATE_LIMIT_DELAY_MS : OLIST_RETRY_DELAY_MS));
         console.error("🔴 Olist — falha no pedido", order.order_nsu || order.id, message);
 
         await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
@@ -442,6 +464,7 @@ async function processPendingOlistOrder(order) {
                 olist_sync_error:message
             })
         }).catch(() => {});
+        return {ok:false, rateLimited};
     } finally {
         olistSyncLocks.delete(String(order.id));
     }
@@ -465,7 +488,10 @@ async function runPendingOlistSync() {
         if (!Array.isArray(rows) || !rows.length) return;
 
         for (const order of rows) {
-            await processPendingOlistOrder(order);
+            if ((olistRetryAfter.get(String(order.id)) || 0) > Date.now()) continue;
+            const result = await processPendingOlistOrder(order);
+            // Limite de requisições atingido: o restante fica para a próxima rodada.
+            if (result?.rateLimited) break;
         }
     } catch (error) {
         console.error("🔴 Olist — erro no worker automático:", error.message || error);
