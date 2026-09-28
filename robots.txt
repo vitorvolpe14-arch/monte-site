@@ -5,4 +5,4 @@ Disallow: /admin/
 Disallow: /backend/
 Disallow: /minhas-compras.html
 Disallow: /pagamento-sucesso.html
-Sitemap: https://monte-site-itjk.onrender.com/sitemap.xml
+Sitemap: https://oficialmontee.com.br/sitemap.xml

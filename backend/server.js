@@ -22,6 +22,12 @@ const SITE_URL =
     process.env.SITE_URL ||
     "https://monte-site-itjk.onrender.com";
 
+// Endereço público da loja, usado no que o Google e as clientes veem
+// (sitemap, robots, links de produto e dos e-mails). SITE_URL continua
+// sendo usado pelas integrações (InfinitePay e Olist), que estão
+// cadastradas com o endereço do Render.
+const PUBLIC_SITE_URL = safeString(process.env.PUBLIC_SITE_URL || "https://oficialmontee.com.br").replace(/\/$/, "");
+
 const INFINITEPAY_API =
     "https://api.checkout.infinitepay.io/links";
 
@@ -962,7 +968,7 @@ async function sendOrderConfirmationEmail(order) {
     const orderCode = formatOrderCode(order.order_code || order.order_nsu);
     const customerName = safeString(order.customer_name).split(/\s+/)[0] || "cliente";
     const total = Number(order.total || 0);
-    const purchasesUrl = SITE_URL.replace(/\/$/, "") + "/minhas-compras.html?order_nsu=" + encodeURIComponent(orderCode);
+    const purchasesUrl = PUBLIC_SITE_URL + "/minhas-compras.html?order_nsu=" + encodeURIComponent(orderCode);
     const html = "<html><body style=\"margin:0;background:#f7f5f2;font-family:Arial,Helvetica,sans-serif;color:#171717;\">" +
       "<div style=\"max-width:620px;margin:0 auto;padding:40px 20px;\"><div style=\"background:#111;color:#fff;text-align:center;padding:24px 20px;letter-spacing:6px;font-size:24px;\">MONTÊ</div>" +
       "<div style=\"background:#fff;padding:38px 30px;\"><p style=\"margin:0 0 12px;font-size:12px;letter-spacing:2px;color:#777;\">COMPRA CONFIRMADA</p>" +
@@ -1074,7 +1080,7 @@ async function sendOrderTrackingEmail(order) {
     const carrier = safeString(order.shipping_carrier);
     const trackingCode = safeString(order.tracking_code);
     const trackingUrl = safeString(order.tracking_url);
-    const purchasesUrl = SITE_URL.replace(/\/$/, "") + "/minhas-compras.html?order_nsu=" + encodeURIComponent(orderCode);
+    const purchasesUrl = PUBLIC_SITE_URL + "/minhas-compras.html?order_nsu=" + encodeURIComponent(orderCode);
     const total = Number(order.total || 0);
 
     if (status === "shipped" && !trackingCode) {
@@ -2437,7 +2443,7 @@ app.post("/api/newsletter", newsletterRateLimit, async (req, res) => {
                 "<h1 style=\"margin:0 0 18px;font-size:30px;line-height:1.2;font-weight:500\">Bem-vinda à MONTÊ.</h1>" +
                 "<p style=\"margin:0;color:#555;font-size:15px;line-height:1.8\">Seu cadastro foi realizado com sucesso. A partir de agora, você receberá novidades, lançamentos e conteúdos selecionados da MONTÊ.</p>" +
                 "<div style=\"margin:30px 0;border-top:1px solid #e8e5e1;border-bottom:1px solid #e8e5e1;padding:22px 0\"><p style=\"margin:0;color:#777;font-size:13px;line-height:1.7\">Prepare-se para conhecer novas coleções, peças e histórias da marca antes de todo mundo.</p></div>" +
-                "<div style=\"text-align:center;margin:30px 0 8px\"><a href=\"https://monte-site-itjk.onrender.com\" style=\"display:inline-block;background:#111;color:#fff;text-decoration:none;padding:15px 28px;font-size:11px;letter-spacing:2px\">VISITAR A MONTÊ</a></div>" +
+                "<div style=\"text-align:center;margin:30px 0 8px\"><a href=\"https://oficialmontee.com.br\" style=\"display:inline-block;background:#111;color:#fff;text-decoration:none;padding:15px 28px;font-size:11px;letter-spacing:2px\">VISITAR A MONTÊ</a></div>" +
                 "</div><div style=\"padding:22px;text-align:center;color:#999;font-size:10px;line-height:1.6\">MONTÊ — Bolsas & acessórios<br>Você recebeu este e-mail porque se cadastrou para receber novidades da marca.</div>" +
                 "</div></body></html>";
 
@@ -4073,11 +4079,11 @@ function publicImageUrl(value) {
     const raw = safeString(value);
     if (!raw) return "";
     if (/^https?:\/\//i.test(raw)) return raw;
-    return new URL("/" + raw.replace(/^\/+/, ""), SITE_URL).href;
+    return new URL("/" + raw.replace(/^\/+/, ""), PUBLIC_SITE_URL).href;
 }
 
 function productSeoUrl(product) {
-    return new URL("/produto/" + encodeURIComponent(product.id) + "/" + encodeURIComponent(slugify(product.name)), SITE_URL).href;
+    return new URL("/produto/" + encodeURIComponent(product.id) + "/" + encodeURIComponent(slugify(product.name)), PUBLIC_SITE_URL).href;
 }
 
 function productAvailabilityForSchema(product) {
@@ -4188,11 +4194,11 @@ app.get("/sitemap.xml", async (req, res) => {
     try {
         const products = await getPublicProductsForSeo();
         const urls = [
-            { loc: new URL("/", SITE_URL).href },
-            { loc: new URL("/trocas-devolucoes.html", SITE_URL).href },
-            { loc: new URL("/politica-privacidade.html", SITE_URL).href },
-            { loc: new URL("/entrega-frete.html", SITE_URL).href },
-            { loc: new URL("/termos-de-compra.html", SITE_URL).href },
+            { loc: new URL("/", PUBLIC_SITE_URL).href },
+            { loc: new URL("/trocas-devolucoes.html", PUBLIC_SITE_URL).href },
+            { loc: new URL("/politica-privacidade.html", PUBLIC_SITE_URL).href },
+            { loc: new URL("/entrega-frete.html", PUBLIC_SITE_URL).href },
+            { loc: new URL("/termos-de-compra.html", PUBLIC_SITE_URL).href },
             ...products.map(product => ({ loc: productSeoUrl(product), lastmod: product.updated_at }))
         ];
         const xml = [
@@ -4220,7 +4226,7 @@ app.get("/robots.txt", (req, res) => {
         "Disallow: /backend/",
         "Disallow: /minhas-compras.html",
         "Disallow: /pagamento-sucesso.html",
-        "Sitemap: " + new URL("/sitemap.xml", SITE_URL).href
+        "Sitemap: " + new URL("/sitemap.xml", PUBLIC_SITE_URL).href
     ].join("\n") + "\n";
     res.set("Content-Type", "text/plain; charset=utf-8");
     return res.status(200).send(body);
