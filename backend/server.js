@@ -171,9 +171,24 @@ async function olistRequest(endpoint, options = {}, allowRefresh = true) {
     let data = {};
     try { data = textResponse ? JSON.parse(textResponse) : {}; } catch { data = {raw:textResponse}; }
     if (!response.ok) {
-        const error = new Error("Olist API " + response.status);
+        // Preserve o corpo completo devolvido pela Olist. A API V3 normalmente
+        // informa em mensagem/detalhes qual campo do payload está inválido.
+        const errorDetails = data && typeof data === "object" ? data : {raw: textResponse};
+        const error = new Error(
+            "Olist API " + response.status +
+            (Object.keys(errorDetails).length ? ": " + JSON.stringify(errorDetails) : "")
+        );
         error.status = response.status;
-        error.data = data;
+        error.data = errorDetails;
+        error.body = textResponse;
+        error.endpoint = endpoint;
+
+        console.error("🔴 Olist API error:", {
+            status: response.status,
+            endpoint,
+            response: errorDetails
+        });
+
         throw error;
     }
     return data;
@@ -549,6 +564,102 @@ app.post("/api/admin/olist/catalog-sync", requireAdmin, async (req, res) => {
     } catch (error) {
         console.error("Olist catalog sync:", error);
         return res.status(502).json({success:false,message:String(error.message || "Falha ao sincronizar o catálogo Olist.")});
+    }
+});
+
+// OLIST — reprocessa uma venda já paga no MONTÊ.
+// Não cria cobrança nem altera o pagamento. A operação é idempotente:
+// se o pedido já tiver sido criado na Olist, reutiliza o olist_order_id salvo.
+app.post("/api/admin/olist/sync-paid-order", requireAdmin, async (req, res) => {
+    try {
+        const orderNsu = safeString(req.body?.order_nsu);
+        const orderId = safeString(req.body?.order_id);
+
+        if (!orderNsu && !orderId) {
+            return res.status(400).json({
+                success:false,
+                message:"Informe order_nsu ou order_id da venda já paga."
+            });
+        }
+
+        const filter = orderId
+            ? "id=eq." + encodeURIComponent(orderId)
+            : "order_nsu=eq." + encodeURIComponent(orderNsu);
+
+        const rows = await supabaseRequest(
+            "orders?" + filter + "&select=*,order_items(*)&limit=1",
+            {method:"GET"}
+        );
+        const order = Array.isArray(rows) ? rows[0] : null;
+
+        if (!order) {
+            return res.status(404).json({
+                success:false,
+                message:"Venda não encontrada no MONTÊ."
+            });
+        }
+
+        if (safeString(order.status).toLowerCase() !== "paid") {
+            return res.status(409).json({
+                success:false,
+                message:"A venda encontrada não está marcada como paga.",
+                status:order.status || null
+            });
+        }
+
+        try {
+            const result = await syncPaidOrderToOlist({
+                ...order,
+                payment_method: order.payment_method || "credit_card"
+            });
+
+            return res.json({
+                success:true,
+                paid:true,
+                charged_again:false,
+                order_nsu:order.order_nsu,
+                olist_sync:result
+            });
+        } catch (error) {
+            const details = error?.data || null;
+            const message = String(error?.message || error || "Falha na sincronização Olist.");
+
+            console.error("🔴 Olist sync manual da venda paga:", {
+                order_nsu: order.order_nsu,
+                order_id: order.id,
+                status: error?.status || null,
+                endpoint: error?.endpoint || null,
+                message,
+                details
+            });
+
+            await supabaseRequest(
+                "orders?id=eq." + encodeURIComponent(order.id),
+                {
+                    method:"PATCH",
+                    body:JSON.stringify({
+                        olist_sync_status:"error",
+                        olist_sync_error:message
+                    })
+                }
+            ).catch(()=>{});
+
+            return res.status(502).json({
+                success:false,
+                paid:true,
+                charged_again:false,
+                order_nsu:order.order_nsu,
+                olist_status:error?.status || null,
+                message,
+                details
+            });
+        }
+    } catch (error) {
+        console.error("Olist sync-paid-order:", error);
+        return res.status(500).json({
+            success:false,
+            message:"Não foi possível processar a sincronização da venda paga."
+        });
     }
 });
 
