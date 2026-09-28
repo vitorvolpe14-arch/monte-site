@@ -353,14 +353,21 @@ async function createOrGetOlistOrder(order) {
     const contactId = await findOrCreateOlistContact(order);
     const paymentIds = await findOlistPaymentIds(order.payment_method);
 
+    // Número que a cliente e o painel mostram (ex.: MONTÊ-0007).
+    const monteCode = formatOrderCode(order.order_code || ecommerceNumber);
+    const shippingName = safeString(order.shipping_service_name);
+
     const payload = {
         idContato: Number(contactId),
         situacao: 3,
         data: new Date().toISOString().slice(0,10),
+        numeroOrdemCompra: monteCode,
         valorFrete: Number(order.shipping || 0),
-        observacoesInternas: "Pedido MONTÊ " + ecommerceNumber +
+        observacoesInternas: "Pedido " + monteCode +
+            " | Pagamento: " + (isPix ? "Pix" : "Cartão de crédito") + " (pago na InfinitePay)" +
+            (shippingName ? " | Frete: " + shippingName : "") +
             " | InfinitePay " + safeString(order.transaction_nsu) +
-            " | Pagamento: " + (isPix ? "Pix" : "Cartão de crédito"),
+            " | Ref. " + ecommerceNumber,
         ecommerce: {numeroPedidoEcommerce:ecommerceNumber},
         enderecoEntrega: olistAddressFromOrder(order),
         itens: orderItems
@@ -377,13 +384,17 @@ async function createOrGetOlistOrder(order) {
     try {
         created = await olistRequest("/pedidos", {method:"POST", body:JSON.stringify(payload)});
     } catch (error) {
-        // Se a Olist recusar só os dados de pagamento, cria o pedido sem eles.
-        const onlyPaymentProblem = error.status === 400 && payload.pagamento &&
+        // Campos opcionais (pagamento e nº da ordem de compra): se a Olist
+        // recusar só eles, cria o pedido sem esses campos em vez de travar.
+        const optional = campo => campo.startsWith("pagamento") || campo === "numeroOrdemCompra";
+        const onlyOptionalProblem = error.status === 400 &&
             Array.isArray(error.data?.detalhes) && error.data.detalhes.length &&
-            error.data.detalhes.every(d => safeString(d?.campo).startsWith("pagamento"));
-        if (!onlyPaymentProblem) throw error;
-        console.warn("Olist recusou os dados de pagamento; criando o pedido sem eles:", ecommerceNumber);
-        delete payload.pagamento;
+            error.data.detalhes.every(d => optional(safeString(d?.campo)));
+        if (!onlyOptionalProblem) throw error;
+        const rejected = error.data.detalhes.map(d => safeString(d.campo));
+        console.warn("Olist recusou campos opcionais; criando o pedido sem eles:", ecommerceNumber, rejected.join(", "));
+        if (rejected.some(campo => campo.startsWith("pagamento"))) delete payload.pagamento;
+        if (rejected.includes("numeroOrdemCompra")) delete payload.numeroOrdemCompra;
         created = await olistRequest("/pedidos", {method:"POST", body:JSON.stringify(payload)});
     }
     if (!created?.id) throw new Error("OLIST_ORDER_CREATE_FAILED");
