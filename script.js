@@ -2204,8 +2204,7 @@ document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
         }
 
         const layers = [...document.querySelectorAll("[data-parallax]")];
-        const tracks = [...document.querySelectorAll("[data-marquee]")];
-        if (!layers.length && !tracks.length) return;
+        if (!layers.length) return;
 
         let scheduled = false;
         const update = () => {
@@ -2225,17 +2224,6 @@ document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
                 layer.style.translate = "0 " + offset.toFixed(1) + "px";
             });
 
-            tracks.forEach(track => {
-                if (reduceMotion.matches) {
-                    track.style.removeProperty("--mx");
-                    return;
-                }
-                const rect = track.parentElement.getBoundingClientRect();
-                if (rect.bottom < -200 || rect.top > viewportHeight + 200) return;
-                const distanceFromCenter = rect.top + rect.height / 2 - viewportHeight / 2;
-                const offset = distanceFromCenter * Number(track.dataset.marquee || 0);
-                track.style.setProperty("--mx", offset.toFixed(1) + "px");
-            });
         };
 
         const requestUpdate = () => {
