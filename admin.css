@@ -2317,3 +2317,6 @@ input:focus,select:focus,textarea:focus{
 .sku-done ul{margin:8px 0 0;padding-left:18px}
 .sku-done code{font:500 12px ui-monospace,SFMono-Regular,Menlo,monospace;background:#f2f2f2;padding:2px 5px;border-radius:5px}
 .sku-skipped{color:var(--ad-muted)}
+.sku-head-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.secondary-link{display:inline-flex;align-items:center;min-height:40px;padding:0 18px;border:1px solid var(--ad-line);border-radius:999px;background:#fff;color:var(--ad-ink);font-size:10px;letter-spacing:.14em;text-decoration:none;font-weight:500}
+.secondary-link:hover{border-color:var(--ad-ink)}

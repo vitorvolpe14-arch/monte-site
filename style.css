@@ -7800,3 +7800,6 @@ body.cart-open .toast { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); 
     .volpe-mark,
     .volpe-name::after { transition: none; }
 }
+
+/* Texto só para leitores de tela e buscadores */
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}

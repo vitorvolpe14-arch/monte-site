@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="admin.css?v=20260930-sku">
+<link rel="stylesheet" href="admin.css?v=20260930-auditoria">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -111,7 +111,7 @@
     <section id="stockSection" class="section hidden">
       <div class="section-actions"><div><p class="eyebrow">INVENTÁRIO</p><h2>Estoque</h2></div></div>
       <div class="panel sku-sync-panel">
-        <div class="panel-head"><div><h2>SKUs site × Olist</h2><p class="field-help">Compara os SKUs dos produtos do site com os da Olist. Se houver diferença, corrige só no site, apenas nos produtos que já existem. Nada é alterado na Olist.</p></div><button id="compareSkuButton" type="button">COMPARAR COM A OLIST</button></div>
+        <div class="panel-head"><div><h2>SKUs site × Olist</h2><p class="field-help">Compara os SKUs dos produtos do site com os da Olist. Se houver diferença, corrige só no site, apenas nos produtos que já existem. Nada é alterado na Olist.</p></div><div class="sku-head-actions"><a class="secondary-link" href="/api/olist/auth" target="_blank" rel="noopener">RECONECTAR OLIST</a><button id="compareSkuButton" type="button">COMPARAR COM A OLIST</button></div></div>
         <div id="skuSyncResult"></div>
       </div>
       <div id="stockTable" class="panel table-wrap"></div><div class="panel stock-history-panel"><div class="panel-head"><h2>Histórico de movimentações</h2><button id="refreshStock" class="secondary">ATUALIZAR</button></div><div id="stockMovements" class="table-wrap"></div></div>
@@ -174,7 +174,7 @@
     if (date) date.textContent = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }).toUpperCase();
   })();
 </script>
-<script src="admin.js?v=20260930-sku"></script>
+<script src="admin.js?v=20260930-auditoria"></script>
 <script src="admin-carousel.js?v=20260925-2"></script>
 </body>
 </html>

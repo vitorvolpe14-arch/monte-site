@@ -257,7 +257,7 @@ async function compareSkus(){
   btn.disabled=true;btn.textContent="CONSULTANDO A OLIST...";
   box.innerHTML='<p class="sku-loading">Buscando os produtos na Olist. Pode levar até um minuto.</p>';
   try{skuCompare=await api("/api/admin/olist/sku-compare");renderSkuCompare()}
-  catch(e){skuCompare=null;box.innerHTML='<p class="error">'+esc(e.message)+'</p>'}
+  catch(e){skuCompare=null;box.innerHTML='<p class="error">'+esc(e.message)+'</p>'+(/RECONECTAR OLIST/.test(e.message)?'<p><a class="secondary-link" href="/api/olist/auth" target="_blank" rel="noopener">RECONECTAR OLIST</a></p>':'')}
   finally{btn.disabled=false;btn.textContent="COMPARAR DE NOVO"}
 }
 function renderSkuCompare(){
