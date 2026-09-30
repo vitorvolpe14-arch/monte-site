@@ -6478,3 +6478,505 @@ canvas {
 .carousel {
     background: #6D2234;
 }
+
+
+/* =====================================================
+   ABERTURA — logo desenhada + cortina em camadas (parallax)
+   Linha do tempo: traço das letras (0,2–1,5s), preenchimento,
+   filete bordô e assinatura, depois a cortina branca sobe, a faixa
+   bordô vem logo atrás e a logo sobe mais devagar (parallax).
+   Sem JavaScript a animação roda igual e termina sozinha.
+===================================================== */
+
+.monte-intro {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    animation: introGone 0s linear 3.15s forwards;
+}
+
+.intro-seen .monte-intro {
+    display: none;
+}
+
+html.intro-playing,
+html.intro-playing body {
+    overflow: hidden;
+}
+
+@keyframes introGone {
+    to { visibility: hidden; pointer-events: none; }
+}
+
+.intro-layer {
+    position: absolute;
+    inset: 0;
+    will-change: transform;
+}
+
+.intro-layer-wine {
+    background: #6D2234;
+    animation: introLift 1s cubic-bezier(.76, 0, .24, 1) 2.34s forwards;
+}
+
+.intro-layer-paper {
+    background: #ffffff;
+    display: grid;
+    place-items: center;
+    animation: introLift .92s cubic-bezier(.76, 0, .24, 1) 2.2s forwards;
+}
+
+@keyframes introLift {
+    to { transform: translate3d(0, -100%, 0); }
+}
+
+.intro-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 22px;
+    translate: var(--ix, 0px) var(--iy, 0px);
+    transition: translate .6s cubic-bezier(.2, .7, .2, 1);
+    animation: introStageOut .92s cubic-bezier(.76, 0, .24, 1) 2.2s forwards;
+}
+
+/* A cortina sobe 100%; a logo desce 42% dentro dela: sobe mais devagar. */
+@keyframes introStageOut {
+    to { transform: translate3d(0, 42vh, 0); opacity: 0; }
+}
+
+.intro-wordmark {
+    width: clamp(210px, 34vw, 430px);
+    height: auto;
+    overflow: visible;
+}
+
+.intro-wordmark path {
+    fill: #0d0d0d;
+    fill-opacity: 0;
+    stroke: #0d0d0d;
+    stroke-width: .9;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation:
+        introDraw 1s cubic-bezier(.65, 0, .35, 1) calc(.2s + var(--i) * .1s) forwards,
+        introFill .55s ease calc(1.05s + var(--i) * .07s) forwards;
+}
+
+@keyframes introDraw {
+    to { stroke-dashoffset: 0; }
+}
+
+@keyframes introFill {
+    to { fill-opacity: 1; stroke-opacity: 0; }
+}
+
+.intro-rule {
+    display: block;
+    width: min(44vw, 210px);
+    height: 1px;
+    background: #6D2234;
+    transform: scaleX(0);
+    animation: introRule .7s cubic-bezier(.65, 0, .35, 1) 1.4s forwards;
+}
+
+@keyframes introRule {
+    to { transform: scaleX(1); }
+}
+
+.intro-tagline {
+    margin: 0;
+    padding-left: .62em;
+    font: 500 10px/1 "DM Sans", Arial, sans-serif;
+    letter-spacing: .62em;
+    color: #6D2234;
+    opacity: 0;
+    animation: introTag .9s ease 1.6s forwards;
+}
+
+@keyframes introTag {
+    from { opacity: 0; letter-spacing: .95em; }
+    to { opacity: 1; letter-spacing: .62em; }
+}
+
+/* O site aparece depois da cortina: foto do topo assenta, cabeçalho desce. */
+html:not(.intro-seen) #carouselSlides {
+    animation: introHero 1.7s cubic-bezier(.2, .7, .2, 1) 2.5s both;
+}
+
+html:not(.intro-seen) .shipping-bar,
+html:not(.intro-seen) .header {
+    animation: introHeader .9s cubic-bezier(.2, .7, .2, 1) 2.75s both;
+}
+
+@keyframes introHero {
+    from { transform: scale(1.08); opacity: .001; }
+    to { transform: none; opacity: 1; }
+}
+
+@keyframes introHeader {
+    from { opacity: 0; transform: translateY(-12px); }
+    to { opacity: 1; transform: none; }
+}
+
+/* Toque na abertura: adianta a saída. */
+.monte-intro.is-skipping { animation: introGone 0s linear .95s forwards; }
+.monte-intro.is-skipping .intro-layer-paper { animation: introLift .8s cubic-bezier(.76, 0, .24, 1) forwards; }
+.monte-intro.is-skipping .intro-layer-wine { animation: introLift .88s cubic-bezier(.76, 0, .24, 1) .07s forwards; }
+.monte-intro.is-skipping .intro-stage { animation: introStageOut .8s cubic-bezier(.76, 0, .24, 1) forwards; }
+html.intro-skipped #carouselSlides { animation-delay: .3s; }
+html.intro-skipped .shipping-bar,
+html.intro-skipped .header { animation-delay: .5s; }
+
+/* Menos movimento: logo aparece pronta e a tela some num fade curto. */
+.intro-reduced .monte-intro { animation: introFade .45s ease .9s forwards; }
+.intro-reduced .intro-layer,
+.intro-reduced .intro-stage,
+.intro-reduced .intro-wordmark path,
+.intro-reduced .intro-rule,
+.intro-reduced .intro-tagline,
+.intro-reduced #carouselSlides,
+.intro-reduced .shipping-bar,
+.intro-reduced .header { animation: none; }
+.intro-reduced .intro-wordmark path { fill-opacity: 1; stroke: none; }
+.intro-reduced .intro-rule { transform: none; }
+.intro-reduced .intro-tagline { opacity: 1; }
+
+@keyframes introFade {
+    to { opacity: 0; visibility: hidden; pointer-events: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .intro-wordmark path { animation: none; fill-opacity: 1; stroke: none; }
+    .intro-layer, .intro-stage, .intro-rule, .intro-tagline { animation: none; }
+    .intro-rule { transform: none; }
+    .intro-tagline { opacity: 1; }
+    .monte-intro { animation: introFade .45s ease .9s forwards; }
+    html:not(.intro-seen) #carouselSlides,
+    html:not(.intro-seen) .shipping-bar,
+    html:not(.intro-seen) .header { animation: none; }
+}
+
+
+/* =====================================================
+   FRASES GRANDES — faixas que deslizam com a rolagem
+===================================================== */
+
+.statement {
+    overflow: hidden;
+    display: grid;
+    gap: clamp(4px, 1vw, 14px);
+    padding: clamp(54px, 8vw, 118px) 0;
+}
+
+.statement--light { background: #ffffff; color: #0d0d0d; --accent: #6D2234; --stroke: rgba(13, 13, 13, .55); }
+.statement--dark  { background: #0d0d0d; color: #ffffff; --accent: #b0485f; --stroke: rgba(255, 255, 255, .6); }
+.statement--wine  { background: #6D2234; color: #ffffff; --accent: #f1dfe3; --stroke: rgba(255, 255, 255, .62); }
+
+.statement-track {
+    display: flex;
+    align-items: center;
+    gap: .42em;
+    width: max-content;
+    white-space: nowrap;
+    font-family: "Playfair Display", Georgia, serif;
+    font-weight: 400;
+    font-size: clamp(50px, 9.6vw, 152px);
+    line-height: 1.04;
+    letter-spacing: -.045em;
+    translate: calc(var(--mx, 0px) - 22%) 0;
+    will-change: translate;
+}
+
+.statement-track em {
+    font-style: italic;
+    color: var(--accent);
+}
+
+.statement-track i {
+    font-style: normal;
+    font-size: .4em;
+    color: var(--accent);
+    opacity: .75;
+}
+
+.statement-track--outline {
+    font-size: clamp(38px, 7vw, 112px);
+    font-style: italic;
+    color: transparent;
+    -webkit-text-stroke: 1px var(--stroke);
+    translate: calc(var(--mx, 0px) - 34%) 0;
+}
+
+.statement-track--outline i {
+    -webkit-text-stroke: 0;
+    color: var(--accent);
+}
+
+@media (max-width: 760px) {
+    .statement-track--outline { -webkit-text-stroke-width: .8px; }
+}
+
+
+/* =====================================================
+   NOTA MONTÊ — etiqueta de roupa no checkout (parallax)
+   Pendurada por um cordão bordô; inclina com o ponteiro,
+   as camadas internas se deslocam em profundidades diferentes
+   e ela balança quando os dados mudam.
+===================================================== */
+
+.order-note {
+    margin: 26px 0 8px;
+}
+
+.order-note-kicker {
+    margin: 0 0 6px;
+    font-size: 9px;
+    letter-spacing: .24em;
+    color: #6D2234;
+    text-align: center;
+}
+
+.order-note-stage {
+    position: relative;
+    padding-top: 46px;
+    perspective: 900px;
+    filter: drop-shadow(0 18px 22px rgba(20, 8, 12, .16)) drop-shadow(0 2px 3px rgba(20, 8, 12, .1));
+}
+
+.order-note-cord {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 60px;
+    height: 58px;
+    margin-left: -30px;
+    overflow: visible;
+    translate: 0 var(--cord-y, 0px);
+    rotate: var(--sway, 0deg);
+    transform-origin: 50% 0;
+    transition: translate .5s cubic-bezier(.2, .7, .2, 1);
+}
+
+.order-note-cord path {
+    fill: none;
+    stroke: #6D2234;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+}
+
+.order-note-tag {
+    --px: 0;
+    --py: 0;
+    position: relative;
+    padding: 46px 22px 20px;
+    background:
+        radial-gradient(120% 60% at 50% 0%, rgba(255, 255, 255, .7), transparent 60%),
+        #f4efe7;
+    color: #1b1716;
+    clip-path: polygon(16% 0, 84% 0, 100% 34px, 100% 100%, 0 100%, 0 34px);
+    transform-origin: 50% 0;
+    transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+    rotate: var(--sway, 0deg);
+    translate: 0 var(--tag-y, 0px);
+    transition: transform .5s cubic-bezier(.2, .7, .2, 1), translate .5s cubic-bezier(.2, .7, .2, 1);
+}
+
+.order-note-tag.is-swaying {
+    animation: noteSway 1.1s cubic-bezier(.3, .6, .3, 1);
+}
+
+@keyframes noteSway {
+    0% { rotate: 0deg; }
+    22% { rotate: -2.4deg; }
+    48% { rotate: 1.5deg; }
+    72% { rotate: -.6deg; }
+    100% { rotate: 0deg; }
+}
+
+.order-note-eyelet {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    width: 18px;
+    height: 18px;
+    margin-left: -9px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #ffffff 0 34%, #b8914a 36% 52%, #e9d49a 60%, #8c6a2c 76%, transparent 78%);
+}
+
+.order-note-head,
+.order-note-grid,
+.order-note-items,
+.order-note-sum,
+.order-note-total {
+    translate: calc(var(--px) * var(--d, 0) * 1px) calc(var(--py) * var(--d, 0) * 1px);
+    transition: translate .5s cubic-bezier(.2, .7, .2, 1);
+}
+
+[data-depth="1.6"] { --d: 6; }
+[data-depth="1.2"] { --d: 4.5; }
+[data-depth="0.8"] { --d: 3; }
+[data-depth="0.5"] { --d: 1.8; }
+
+.order-note-head {
+    display: grid;
+    justify-items: center;
+    gap: 6px;
+    padding-bottom: 14px;
+    border-bottom: 1px dashed rgba(27, 23, 22, .28);
+    text-align: center;
+}
+
+.order-note-logo {
+    width: 96px;
+    height: auto;
+    fill: #0d0d0d;
+}
+
+.order-note-head p {
+    margin: 0;
+    font-size: 8.5px;
+    letter-spacing: .32em;
+    color: #6D2234;
+}
+
+.order-note-head span {
+    font: 11px/1 "Courier New", Courier, monospace;
+    color: #7a716a;
+    letter-spacing: .08em;
+}
+
+.order-note-grid,
+.order-note-sum {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 16px;
+    margin: 16px 0 0;
+}
+
+.order-note-grid .wide { grid-column: 1 / -1; }
+
+.order-note dt {
+    margin: 0 0 3px;
+    font-size: 8px;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: #948a82;
+}
+
+.order-note dd {
+    margin: 0;
+    font: 12px/1.45 "Courier New", Courier, monospace;
+    color: #1b1716;
+    overflow-wrap: anywhere;
+}
+
+.order-note dd.is-empty {
+    color: #bdb3a9;
+    letter-spacing: .2em;
+}
+
+.order-note dd.note-script {
+    font: italic 22px/1.1 "Playfair Display", Georgia, serif;
+    letter-spacing: -.01em;
+}
+
+.order-note dd.note-script.is-empty {
+    font: 12px/1.45 "Courier New", Courier, monospace;
+}
+
+.order-note dd.is-fresh {
+    animation: noteInk .7s ease;
+}
+
+@keyframes noteInk {
+    from { color: #6D2234; }
+}
+
+.order-note-items {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px dashed rgba(27, 23, 22, .28);
+    display: grid;
+    gap: 8px;
+}
+
+.order-note-item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 12px;
+    font: 12px/1.35 "Courier New", Courier, monospace;
+}
+
+.order-note-item small {
+    grid-column: 1 / -1;
+    font-size: 10.5px;
+    color: #8a8178;
+}
+
+.order-note-sum {
+    padding-top: 14px;
+    border-top: 1px dashed rgba(27, 23, 22, .28);
+}
+
+.order-note-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-top: 16px;
+    padding: 14px 0 12px;
+    border-top: 1px solid #1b1716;
+    border-bottom: 1px solid #1b1716;
+}
+
+.order-note-total span {
+    font-size: 9px;
+    letter-spacing: .3em;
+}
+
+.order-note-total strong {
+    font: 400 28px/1 "Playfair Display", Georgia, serif;
+    letter-spacing: -.02em;
+}
+
+.order-note-foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-top: 14px;
+}
+
+.order-note-barcode {
+    width: 130px;
+    height: 30px;
+}
+
+.order-note-care {
+    width: 118px;
+    height: auto;
+    fill: none;
+    stroke: #6D2234;
+    stroke-width: 1.3;
+    opacity: .8;
+}
+
+.order-note-legal {
+    margin: 12px 0 0;
+    font-size: 9.5px;
+    line-height: 1.5;
+    color: #8a8178;
+    text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .statement-track { translate: -22% 0; }
+    .statement-track--outline { translate: -34% 0; }
+    .order-note-tag.is-swaying { animation: none; }
+}
+
+@media (max-width: 760px) {
+    .statement { gap: 12px; }
+}
