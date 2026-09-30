@@ -6659,66 +6659,6 @@ html.intro-skipped .header { animation-delay: .5s; }
 
 
 /* =====================================================
-   FRASES GRANDES — faixas que deslizam com a rolagem
-===================================================== */
-
-.statement {
-    overflow: hidden;
-    display: grid;
-    gap: clamp(4px, 1vw, 14px);
-    padding: clamp(54px, 8vw, 118px) 0;
-}
-
-.statement--light { background: #ffffff; color: #0d0d0d; --accent: #6D2234; --stroke: rgba(13, 13, 13, .55); }
-.statement--dark  { background: #0d0d0d; color: #ffffff; --accent: #b0485f; --stroke: rgba(255, 255, 255, .6); }
-.statement--wine  { background: #6D2234; color: #ffffff; --accent: #f1dfe3; --stroke: rgba(255, 255, 255, .62); }
-
-.statement-track {
-    display: flex;
-    align-items: center;
-    gap: .42em;
-    width: max-content;
-    white-space: nowrap;
-    font-family: "Playfair Display", Georgia, serif;
-    font-weight: 400;
-    font-size: clamp(50px, 9.6vw, 152px);
-    line-height: 1.04;
-    letter-spacing: -.045em;
-    translate: calc(var(--mx, 0px) - 22%) 0;
-    will-change: translate;
-}
-
-.statement-track em {
-    font-style: italic;
-    color: var(--accent);
-}
-
-.statement-track i {
-    font-style: normal;
-    font-size: .4em;
-    color: var(--accent);
-    opacity: .75;
-}
-
-.statement-track--outline {
-    font-size: clamp(38px, 7vw, 112px);
-    font-style: italic;
-    color: transparent;
-    -webkit-text-stroke: 1px var(--stroke);
-    translate: calc(var(--mx, 0px) - 34%) 0;
-}
-
-.statement-track--outline i {
-    -webkit-text-stroke: 0;
-    color: var(--accent);
-}
-
-@media (max-width: 760px) {
-    .statement-track--outline { -webkit-text-stroke-width: .8px; }
-}
-
-
-/* =====================================================
    NOTA MONTÊ — etiqueta de roupa no checkout (parallax)
    Pendurada por um cordão bordô; inclina com o ponteiro,
    as camadas internas se deslocam em profundidades diferentes
@@ -6972,13 +6912,7 @@ html.intro-skipped .header { animation-delay: .5s; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .statement-track { translate: -22% 0; }
-    .statement-track--outline { translate: -34% 0; }
     .order-note-tag.is-swaying { animation: none; }
-}
-
-@media (max-width: 760px) {
-    .statement { gap: 12px; }
 }
 
 /* =====================================================
