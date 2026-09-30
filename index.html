@@ -5,6 +5,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
+    <script>
+      (function () {
+        var root = document.documentElement, seen = false;
+        try { seen = sessionStorage.getItem("monteIntroSeen") === "1"; sessionStorage.setItem("monteIntroSeen", "1"); } catch (e) {}
+        root.classList.add(seen || location.hash ? "intro-seen" : "intro-playing");
+        if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) root.classList.add("intro-reduced");
+      })();
+    </script>
 
     <title>MONTÊ | Bolsas Femininas e Acessórios</title>
     <meta name="description" content="MONTÊ — bolsas femininas e acessórios. Conheça a coleção, novidades e seleção especial da marca. Compre online com pagamento seguro e entrega para todo o Brasil.">
@@ -32,7 +40,7 @@
     <meta name="twitter:description" content="Conheça a coleção MONTÊ e compre online.">
     <meta name="twitter:image" content="https://oficialmontee.com.br/backend/assets/carousel-photo-1.webp">
 
-    <link rel="stylesheet" href="style.css?v=20260928-bordo">
+    <link rel="stylesheet" href="style.css?v=20260930-experiencia">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -76,6 +84,20 @@
 
 
 <body>
+
+<!-- =====================================================
+     ABERTURA — logo desenhada e cortina em camadas
+===================================================== -->
+<div class="monte-intro" id="monteIntro" aria-hidden="true">
+    <div class="intro-layer intro-layer-wine"></div>
+    <div class="intro-layer intro-layer-paper">
+        <div class="intro-stage">
+            <svg class="intro-wordmark" viewBox="8 -90.3 402.4 91.8" role="img" aria-label="MONTÊ"><path pathLength="1" style="--i:0" d="M22.5 0L8.0 0L8.0-72.6L12.6-72.6L40.8-41.2L69.0-72.6L73.5-72.6L73.5 0L59.0 0L59.1-39.9L40.8-20.7L22.5-39.9L22.5 0Z"/><path pathLength="1" style="--i:1" d="M107.9-22.3Q105.5-29.0 105.5-35.9Q105.5-42.8 107.9-49.4Q110.3-56.0 114.8-61.2Q119.2-66.4 126.4-69.5Q133.6-72.7 142.5-72.7Q151.4-72.7 158.6-69.5Q165.8-66.4 170.2-61.2Q174.7-56.0 177.1-49.4Q179.5-42.8 179.5-35.9Q179.5-29.0 177.1-22.3Q174.7-15.7 170.2-10.5Q165.8-5.4 158.6-2.2Q151.4 1.0 142.5 1.0Q133.6 1.0 126.4-2.2Q119.2-5.4 114.8-10.5Q110.3-15.7 107.9-22.3ZM122.4-44.0Q121.0-40.0 121.0-35.9Q121.0-31.8 122.4-27.8Q123.8-23.8 126.4-20.7Q129.0-17.6 133.1-15.7Q137.3-13.8 142.5-13.8Q147.7-13.8 151.8-15.7Q156.0-17.6 158.6-20.7Q161.2-23.8 162.6-27.8Q164.0-31.8 164.0-35.9Q164.0-40.0 162.6-44.0Q161.2-48.0 158.6-51.1Q156.0-54.2 151.8-56.1Q147.7-58.0 142.5-58.0Q137.3-58.0 133.1-56.1Q129.0-54.2 126.4-51.1Q123.8-48.0 122.4-44.0Z"/><path pathLength="1" style="--i:2" d="M225.6 0L211.3 0L211.3-73.0L215.1-73.0L251.2-31.0L251.2-71.4L265.6-71.4L265.6 1.5L261.8 1.5L225.6-38.9L225.6 0Z"/><path pathLength="1" style="--i:3" d="M312.0-57.2L294.2-57.2L294.2-71.4L344.1-71.4L344.1-57.2L326.3-57.2L326.3 0L312.0 0L312.0-57.2Z"/><path pathLength="1" style="--i:4" d="M388.1-76.9L373.2-76.9L387.1-90.3L396.2-90.3L410.3-76.9L395.3-76.9L391.6-81.4L388.1-76.9ZM410.4 0L373.4 0L373.4-71.5L409.2-71.5L409.2-57.2L387.7-57.2L387.7-42.9L406.5-42.9L406.5-28.6L387.7-28.6L387.7-14.3L410.4-14.3L410.4 0Z"/></svg>
+            <span class="intro-rule"></span>
+            <p class="intro-tagline">BOLSAS &amp; ACESSÓRIOS</p>
+        </div>
+    </div>
+</div>
 
 
 <!-- =====================================================
@@ -278,6 +300,15 @@
 
 
 <!-- =====================================================
+     FRASES — faixa 1
+===================================================== -->
+
+<section class="statement statement--light" aria-label="Feita para durar. Escolhida para marcar.">
+    <div class="statement-track" data-marquee="-0.32" aria-hidden="true"><span>Feita para <em>durar</em></span><i>·</i><span>Escolhida para <em>marcar</em></span><i>·</i><span>Feita para <em>durar</em></span><i>·</i><span>Escolhida para <em>marcar</em></span><i>·</i><span>Feita para <em>durar</em></span><i>·</i><span>Escolhida para <em>marcar</em></span><i>·</i></div>
+    <div class="statement-track statement-track--outline" data-marquee="0.24" aria-hidden="true"><span>MONTÊ</span><i>·</i><span>Bolsas &amp; acessórios</span><i>·</i><span>MONTÊ</span><i>·</i><span>Bolsas &amp; acessórios</span><i>·</i><span>MONTÊ</span><i>·</i><span>Bolsas &amp; acessórios</span><i>·</i><span>MONTÊ</span><i>·</i><span>Bolsas &amp; acessórios</span><i>·</i></div>
+</section>
+
+<!-- =====================================================
      NOVIDADES
 ===================================================== -->
 
@@ -382,6 +413,15 @@
 
 
 <!-- =====================================================
+     FRASES — faixa 2
+===================================================== -->
+
+<section class="statement statement--dark" aria-label="Detalhes que ficam. Presença em cada peça.">
+    <div class="statement-track" data-marquee="-0.32" aria-hidden="true"><span>Detalhes que <em>ficam</em></span><i>·</i><span>Presença em cada <em>peça</em></span><i>·</i><span>Detalhes que <em>ficam</em></span><i>·</i><span>Presença em cada <em>peça</em></span><i>·</i><span>Detalhes que <em>ficam</em></span><i>·</i><span>Presença em cada <em>peça</em></span><i>·</i></div>
+    <div class="statement-track statement-track--outline" data-marquee="0.24" aria-hidden="true"><span>Elegância no dia a dia</span><i>·</i><span>Elegância no dia a dia</span><i>·</i><span>Elegância no dia a dia</span><i>·</i><span>Elegância no dia a dia</span><i>·</i><span>Elegância no dia a dia</span><i>·</i><span>Elegância no dia a dia</span><i>·</i></div>
+</section>
+
+<!-- =====================================================
      COLEÇÃO
 ===================================================== -->
 
@@ -453,6 +493,15 @@
 
 </section>
 
+
+<!-- =====================================================
+     FRASES — faixa 3
+===================================================== -->
+
+<section class="statement statement--wine" aria-label="Sua bolsa, sua assinatura.">
+    <div class="statement-track" data-marquee="-0.32" aria-hidden="true"><span>Sua bolsa, sua <em>assinatura</em></span><i>·</i><span>Sua bolsa, sua <em>assinatura</em></span><i>·</i><span>Sua bolsa, sua <em>assinatura</em></span><i>·</i><span>Sua bolsa, sua <em>assinatura</em></span><i>·</i><span>Sua bolsa, sua <em>assinatura</em></span><i>·</i></div>
+    <div class="statement-track statement-track--outline" data-marquee="0.24" aria-hidden="true"><span>Feita para você</span><i>·</i><span>MONTÊ</span><i>·</i><span>Feita para você</span><i>·</i><span>MONTÊ</span><i>·</i><span>Feita para você</span><i>·</i><span>MONTÊ</span><i>·</i><span>Feita para você</span><i>·</i><span>MONTÊ</span><i>·</i></div>
+</section>
 
 <!-- =====================================================
      NEWSLETTER
@@ -992,6 +1041,41 @@
                 <p class="direct-pix-note">O pedido ficará aguardando a confirmação do pagamento.</p>
             </div>
 
+    <div class="order-note" id="orderNote">
+        <p class="order-note-kicker">SUA NOTA MONTÊ</p>
+        <div class="order-note-stage">
+            <svg class="order-note-cord" viewBox="0 0 120 70" preserveAspectRatio="none" aria-hidden="true"><path d="M60 0 C 44 22, 76 38, 60 70"/></svg>
+            <article class="order-note-tag" aria-label="Resumo do pedido">
+                <span class="order-note-eyelet" aria-hidden="true"></span>
+                <header class="order-note-head" data-depth="1.6">
+                    <svg class="order-note-logo" viewBox="8 -90.3 402.4 91.8" role="img" aria-label="MONTÊ"><path d="M22.5 0L8.0 0L8.0-72.6L12.6-72.6L40.8-41.2L69.0-72.6L73.5-72.6L73.5 0L59.0 0L59.1-39.9L40.8-20.7L22.5-39.9L22.5 0Z M107.9-22.3Q105.5-29.0 105.5-35.9Q105.5-42.8 107.9-49.4Q110.3-56.0 114.8-61.2Q119.2-66.4 126.4-69.5Q133.6-72.7 142.5-72.7Q151.4-72.7 158.6-69.5Q165.8-66.4 170.2-61.2Q174.7-56.0 177.1-49.4Q179.5-42.8 179.5-35.9Q179.5-29.0 177.1-22.3Q174.7-15.7 170.2-10.5Q165.8-5.4 158.6-2.2Q151.4 1.0 142.5 1.0Q133.6 1.0 126.4-2.2Q119.2-5.4 114.8-10.5Q110.3-15.7 107.9-22.3ZM122.4-44.0Q121.0-40.0 121.0-35.9Q121.0-31.8 122.4-27.8Q123.8-23.8 126.4-20.7Q129.0-17.6 133.1-15.7Q137.3-13.8 142.5-13.8Q147.7-13.8 151.8-15.7Q156.0-17.6 158.6-20.7Q161.2-23.8 162.6-27.8Q164.0-31.8 164.0-35.9Q164.0-40.0 162.6-44.0Q161.2-48.0 158.6-51.1Q156.0-54.2 151.8-56.1Q147.7-58.0 142.5-58.0Q137.3-58.0 133.1-56.1Q129.0-54.2 126.4-51.1Q123.8-48.0 122.4-44.0Z M225.6 0L211.3 0L211.3-73.0L215.1-73.0L251.2-31.0L251.2-71.4L265.6-71.4L265.6 1.5L261.8 1.5L225.6-38.9L225.6 0Z M312.0-57.2L294.2-57.2L294.2-71.4L344.1-71.4L344.1-57.2L326.3-57.2L326.3 0L312.0 0L312.0-57.2Z M388.1-76.9L373.2-76.9L387.1-90.3L396.2-90.3L410.3-76.9L395.3-76.9L391.6-81.4L388.1-76.9ZM410.4 0L373.4 0L373.4-71.5L409.2-71.5L409.2-57.2L387.7-57.2L387.7-42.9L406.5-42.9L406.5-28.6L387.7-28.6L387.7-14.3L410.4-14.3L410.4 0Z"/></svg>
+                    <p>NOTA DE COMPRA</p>
+                    <span id="noteDate"></span>
+                </header>
+                <dl class="order-note-grid" data-depth="0.8">
+                    <div class="wide"><dt>Destinatária</dt><dd id="noteName" class="note-script"></dd></div>
+                    <div><dt>Contato</dt><dd id="noteContact"></dd></div>
+                    <div><dt>CPF</dt><dd id="noteCpf"></dd></div>
+                    <div class="wide"><dt>Entrega</dt><dd id="noteAddress"></dd></div>
+                </dl>
+                <div class="order-note-items" id="noteItems" data-depth="0.5"></div>
+                <dl class="order-note-sum" data-depth="0.5">
+                    <div><dt>Frete</dt><dd id="noteShipping"></dd></div>
+                    <div id="noteDiscountRow" hidden><dt>Desconto Pix</dt><dd id="noteDiscount"></dd></div>
+                    <div><dt>Pagamento</dt><dd id="notePayment"></dd></div>
+                </dl>
+                <div class="order-note-total" data-depth="1.2"><span>TOTAL</span><strong id="noteTotal">R$ 0,00</strong></div>
+                <div class="order-note-foot">
+                    <div class="order-note-barcode" id="noteBarcode" aria-hidden="true"></div>
+                    <svg class="order-note-care" viewBox="0 0 150 22" aria-label="Cuidados com a peça">
+                        <path d="M3 5h16l-2 12H5z M1 5h20"/><path d="M34 18l9-14 9 14z M36 6l14 12"/><path d="M62 17h17c0-6-3-10-9-10h-5l-3 10z M66 7V5"/><circle cx="96" cy="11" r="7"/><path d="M90 5l12 12"/><rect x="112" y="4" width="14" height="14"/><circle cx="119" cy="11" r="5"/>
+                    </svg>
+                </div>
+                <p class="order-note-legal">Guarde em saco de tecido, longe do sol e da umidade. Este é um resumo do pedido; a nota fiscal é emitida após a confirmação do pagamento.</p>
+            </article>
+        </div>
+    </div>
+
     <p id="checkoutDiscount" class="checkout-discount" style="display:none;margin:12px 0 0;font-size:13px;text-align:right"></p>
 
     <div class="checkout-total">
@@ -1038,7 +1122,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
-<script src="script.js?v=20260928-categorias"></script>
+<script src="script.js?v=20260930-experiencia"></script>
 
 </body>
 </html>

@@ -1403,6 +1403,8 @@ function updatePaymentSummary(subtotal = getCartSubtotal()) {
         const input = option.querySelector('input[name="paymentMethod"]');
         option.classList.toggle("selected", !!input?.checked);
     });
+
+    renderCheckoutNote({ subtotal, shipping, pixDiscount, total: checkoutTotal, paymentMethod });
 }
 
 function setupPaymentMethodSelector() {
@@ -2206,7 +2208,8 @@ document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
         }
 
         const layers = [...document.querySelectorAll("[data-parallax]")];
-        if (!layers.length) return;
+        const tracks = [...document.querySelectorAll("[data-marquee]")];
+        if (!layers.length && !tracks.length) return;
 
         let scheduled = false;
         const update = () => {
@@ -2225,6 +2228,18 @@ document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
                 const offset = distanceFromCenter * Number(layer.dataset.parallax || 0) * strength;
                 layer.style.translate = "0 " + offset.toFixed(1) + "px";
             });
+
+            tracks.forEach(track => {
+                if (reduceMotion.matches) {
+                    track.style.removeProperty("--mx");
+                    return;
+                }
+                const rect = track.parentElement.getBoundingClientRect();
+                if (rect.bottom < -200 || rect.top > viewportHeight + 200) return;
+                const distanceFromCenter = rect.top + rect.height / 2 - viewportHeight / 2;
+                const offset = distanceFromCenter * Number(track.dataset.marquee || 0);
+                track.style.setProperty("--mx", offset.toFixed(1) + "px");
+            });
         };
 
         const requestUpdate = () => {
@@ -2237,6 +2252,212 @@ document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
         window.addEventListener("resize", requestUpdate);
         reduceMotion.addEventListener?.("change", requestUpdate);
         update();
+    };
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", start, { once: true });
+    } else {
+        start();
+    }
+})();
+
+
+
+/* =====================================================
+   ABERTURA — libera a página quando a animação termina
+===================================================== */
+(function setupIntro() {
+    const root = document.documentElement;
+    const intro = document.getElementById("monteIntro");
+    if (!intro) return;
+    if (!root.classList.contains("intro-playing")) {
+        intro.remove();
+        return;
+    }
+
+    let finished = false;
+    const finish = () => {
+        if (finished) return;
+        finished = true;
+        root.classList.remove("intro-playing");
+        root.classList.add("intro-done");
+        window.removeEventListener("pointermove", onMove);
+        intro.remove();
+    };
+
+    // A animação começa na primeira pintura; o script pode carregar depois.
+    const duration = root.classList.contains("intro-reduced") ? 1400 : 3200;
+    let timer = setTimeout(finish, Math.max(300, duration - performance.now()));
+
+    intro.addEventListener("animationend", event => {
+        if (event.target === intro) finish();
+    });
+
+    const stage = intro.querySelector(".intro-stage");
+    const tagline = intro.querySelector(".intro-tagline");
+    function onMove(event) {
+        const x = event.clientX / window.innerWidth - .5;
+        const y = event.clientY / window.innerHeight - .5;
+        stage?.style.setProperty("--ix", (x * -16).toFixed(1) + "px");
+        stage?.style.setProperty("--iy", (y * -12).toFixed(1) + "px");
+        if (tagline) tagline.style.translate = (x * 10).toFixed(1) + "px " + (y * 8).toFixed(1) + "px";
+    }
+    window.addEventListener("pointermove", onMove, { passive: true });
+
+    intro.addEventListener("click", () => {
+        if (intro.classList.contains("is-skipping")) return;
+        intro.classList.add("is-skipping");
+        root.classList.add("intro-skipped");
+        clearTimeout(timer);
+        timer = setTimeout(finish, 1000);
+    });
+})();
+
+
+/* =====================================================
+   NOTA MONTÊ — etiqueta de compra no checkout
+===================================================== */
+const NOTE_FIELDS = ["customerName", "customerEmail", "customerPhone", "customerCpf", "customerCep", "customerStreet", "customerNumber", "customerComplement", "customerNeighborhood", "customerCity", "customerState"];
+let lastNoteSignature = "";
+
+function noteValue(id) {
+    return (document.getElementById(id)?.value || "").trim();
+}
+
+function maskCpfForNote(value) {
+    const digits = value.replace(/\D/g, "");
+    if (digits.length < 11) return digits ? digits.replace(/\d(?=\d{2})/g, "•") : "";
+    return "•••." + digits.slice(3, 6) + "." + digits.slice(6, 9) + "-••";
+}
+
+function setNoteText(id, text, placeholder = "— — —") {
+    const element = document.getElementById(id);
+    if (!element) return;
+    const value = text || placeholder;
+    if (element.textContent !== value) {
+        element.textContent = value;
+        element.classList.remove("is-fresh");
+        void element.offsetWidth;
+        if (text) element.classList.add("is-fresh");
+    }
+    element.classList.toggle("is-empty", !text);
+}
+
+function drawNoteBarcode(seed) {
+    const box = document.getElementById("noteBarcode");
+    if (!box) return;
+    let hash = 2166136261;
+    for (const char of seed) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+    const stops = [];
+    let x = 0;
+    while (x < 100) {
+        hash = Math.imul(hash ^ (hash >>> 13), 1274126177);
+        const bar = 0.8 + (Math.abs(hash) % 3) * 0.8;
+        const gap = 0.8 + (Math.abs(hash >> 5) % 3) * 0.7;
+        stops.push(`#1b1716 ${x.toFixed(1)}% ${(x + bar).toFixed(1)}%`, `transparent ${(x + bar).toFixed(1)}% ${(x + bar + gap).toFixed(1)}%`);
+        x += bar + gap;
+    }
+    box.style.background = `linear-gradient(90deg, ${stops.join(", ")})`;
+}
+
+function renderCheckoutNote(summary) {
+    if (!document.getElementById("orderNote")) return;
+    const totals = summary || (() => {
+        const subtotal = getCartSubtotal();
+        const shipping = getShippingValue();
+        const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked')?.value || selectedPaymentMethod || "pix";
+        const pixDiscount = paymentMethod === "pix"
+            ? cart.reduce((sum, item) => {
+                const unitCents = Math.round(Number(item.price || 0) * 100);
+                return sum + (unitCents - Math.round(unitCents * 0.95)) * Number(item.quantity || 0);
+            }, 0) / 100
+            : 0;
+        return { subtotal, shipping, pixDiscount, total: Number((subtotal - pixDiscount + shipping).toFixed(2)), paymentMethod };
+    })();
+
+    const today = new Date();
+    setNoteText("noteDate", [today.getDate(), today.getMonth() + 1].map(n => String(n).padStart(2, "0")).join(".") + "." + today.getFullYear());
+
+    setNoteText("noteName", noteValue("customerName"));
+    setNoteText("noteContact", [noteValue("customerEmail"), noteValue("customerPhone")].filter(Boolean).join(" · "));
+    setNoteText("noteCpf", maskCpfForNote(noteValue("customerCpf")));
+
+    const street = [noteValue("customerStreet"), noteValue("customerNumber")].filter(Boolean).join(", ");
+    const cityLine = [noteValue("customerCity"), noteValue("customerState").toUpperCase()].filter(Boolean).join(" / ");
+    const address = [street, noteValue("customerComplement"), noteValue("customerNeighborhood"), cityLine, noteValue("customerCep")].filter(Boolean).join(" — ");
+    setNoteText("noteAddress", address);
+
+    const itemsBox = document.getElementById("noteItems");
+    if (itemsBox) {
+        itemsBox.innerHTML = cart.length
+            ? cart.map(item => `<div class="order-note-item"><span>${escapeHTML(item.name)}</span><span>${formatPrice(Number(item.price || 0) * Number(item.quantity || 0))}</span><small>${escapeHTML(item.variant_color || "Cor única")} · ${Number(item.quantity || 0)} un.</small></div>`).join("")
+            : '<div class="order-note-item"><span class="is-empty">Nenhuma peça na sacola</span></div>';
+    }
+
+    setNoteText("noteShipping", selectedShippingOption ? `${selectedShippingOption.name} · ${formatPrice(totals.shipping)}` : "");
+    const discountRow = document.getElementById("noteDiscountRow");
+    if (discountRow) discountRow.hidden = !(totals.pixDiscount > 0);
+    setNoteText("noteDiscount", totals.pixDiscount > 0 ? "-" + formatPrice(totals.pixDiscount) : "");
+    setNoteText("notePayment", totals.paymentMethod === "pix" ? "Pix · 5% off nas peças" : "Cartão de crédito");
+    setNoteText("noteTotal", formatPrice(totals.total));
+
+    const signature = [noteValue("customerName"), noteValue("customerCpf"), address, cart.length, totals.total].join("|");
+    drawNoteBarcode(signature || "MONTE");
+    if (signature !== lastNoteSignature) {
+        lastNoteSignature = signature;
+        const tag = document.querySelector(".order-note-tag");
+        if (tag && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            tag.classList.remove("is-swaying");
+            void tag.offsetWidth;
+            tag.classList.add("is-swaying");
+        }
+    }
+}
+
+(function setupCheckoutNote() {
+    const start = () => {
+        const note = document.getElementById("orderNote");
+        if (!note) return;
+        const tag = note.querySelector(".order-note-tag");
+        const cord = note.querySelector(".order-note-cord");
+        const scroller = document.querySelector("#cartOverlay .cart");
+        const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+        NOTE_FIELDS.forEach(id => document.getElementById(id)?.addEventListener("input", () => renderCheckoutNote()));
+
+        // Ponteiro: a etiqueta inclina e as camadas internas se deslocam.
+        note.addEventListener("pointermove", event => {
+            if (reduceMotion.matches || event.pointerType === "touch") return;
+            const rect = tag.getBoundingClientRect();
+            const x = (event.clientX - rect.left) / rect.width - .5;
+            const y = (event.clientY - rect.top) / rect.height - .5;
+            tag.style.setProperty("--ry", (x * 10).toFixed(2) + "deg");
+            tag.style.setProperty("--rx", (y * -7).toFixed(2) + "deg");
+            tag.style.setProperty("--px", (x * 2).toFixed(2));
+            tag.style.setProperty("--py", (y * 2).toFixed(2));
+        });
+        note.addEventListener("pointerleave", () => {
+            ["--rx", "--ry", "--px", "--py"].forEach(name => tag.style.removeProperty(name));
+        });
+
+        // Rolagem do carrinho: cordão e etiqueta em velocidades diferentes.
+        let scheduled = false;
+        const onScroll = () => {
+            if (scheduled) return;
+            scheduled = true;
+            requestAnimationFrame(() => {
+                scheduled = false;
+                if (reduceMotion.matches) return;
+                const rect = note.getBoundingClientRect();
+                const fromCenter = rect.top + rect.height / 2 - window.innerHeight / 2;
+                tag.style.setProperty("--tag-y", (fromCenter * -0.05).toFixed(1) + "px");
+                cord.style.setProperty("--cord-y", (fromCenter * 0.06).toFixed(1) + "px");
+            });
+        };
+        scroller?.addEventListener("scroll", onScroll, { passive: true });
+
+        renderCheckoutNote();
+        onScroll();
     };
 
     if (document.readyState === "loading") {
