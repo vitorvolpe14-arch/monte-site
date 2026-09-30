@@ -1128,17 +1128,18 @@ function updateCart() {
 
     container.innerHTML = "";
 
+    const cartPanel = document.querySelector("#cartOverlay .cart");
+    if (cartPanel) cartPanel.classList.toggle("is-empty", cart.length === 0);
 
     if (cart.length === 0) {
 
         container.innerHTML = `
-
             <div class="empty-cart">
-
-                Seu carrinho está vazio.
-
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M10 16h28l-2.4 24H12.4z"/><path d="M17 16v-3a7 7 0 0 1 14 0v3"/></svg>
+                <p class="empty-cart-title">Sua sacola está vazia</p>
+                <p class="empty-cart-text">Que tal começar pelas novidades da coleção?</p>
+                <button type="button" class="empty-cart-button" onclick="closeCart(); document.getElementById('novidades')?.scrollIntoView({ behavior: 'smooth' });">VER NOVIDADES</button>
             </div>
-
         `;
 
     }
@@ -1168,61 +1169,48 @@ function updateCart() {
         element.className =
             "cart-item";
 
+        element.style.setProperty("--i", index);
 
         element.innerHTML = `
 
-            <img
-                src="${escapeHTML(Array.isArray(item.images) ? item.images[0] || "" : "")}"
-                alt="${escapeHTML(item.name)}"
-            >
+            <div class="cart-item-media">
+                <img
+                    src="${escapeHTML(Array.isArray(item.images) ? item.images[0] || "" : "")}"
+                    alt="${escapeHTML(item.name)}"
+                >
+            </div>
 
-
-            <div>
+            <div class="cart-item-body">
 
                 <div class="cart-item-name">
-                    ${escapeHTML(item.name)}${item.variant_color ? " · " + escapeHTML(item.variant_color) : ""}
+                    ${escapeHTML(item.name)}
                 </div>
 
-                <div class="cart-item-price">
-                    ${formatPrice(
-                        item.price
-                    )}
-                </div>
+                ${item.variant_color ? `<div class="cart-item-variant">${escapeHTML(item.variant_color)}</div>` : ""}
 
+                <div class="cart-item-row">
 
-                <div class="cart-quantity">
+                    <div class="cart-quantity" aria-label="Quantidade">
+                        <button type="button" aria-label="Diminuir quantidade" onclick="updateItemQuantity(${index}, -1)">−</button>
+                        <span>${item.quantity}</span>
+                        <button type="button" aria-label="Aumentar quantidade" onclick="updateItemQuantity(${index}, 1)">+</button>
+                    </div>
 
-                    <button
-                        onclick="updateItemQuantity(${index}, -1)">
-
-                        −
-
-                    </button>
-
-
-                    <span>
-                        ${item.quantity}
-                    </span>
-
-
-                    <button
-                        onclick="updateItemQuantity(${index}, 1)">
-
-                        +
-
-                    </button>
+                    <div class="cart-item-price">
+                        ${formatPrice(item.price * item.quantity)}
+                        ${item.quantity > 1 ? `<small>${formatPrice(item.price)} cada</small>` : ""}
+                    </div>
 
                 </div>
 
             </div>
 
-
             <button
+                type="button"
                 class="cart-item-remove"
+                aria-label="Remover ${escapeHTML(item.name)}"
                 onclick="removeFromCart(${index})">
-
-                REMOVER
-
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
             </button>
 
         `;
@@ -1231,6 +1219,9 @@ function updateCart() {
         container.appendChild(element);
 
     });
+
+    const headerCount = document.getElementById("cartHeaderCount");
+    if (headerCount) headerCount.textContent = cartQuantity;
 
 
     count.textContent =
@@ -1313,6 +1304,8 @@ function openCart() {
         .getElementById("cartOverlay")
         .classList.add("active");
 
+    document.body.classList.add("cart-open");
+
 }
 
 
@@ -1321,6 +1314,8 @@ function closeCart() {
     document
         .getElementById("cartOverlay")
         .classList.remove("active");
+
+    document.body.classList.remove("cart-open");
 
 }
 
@@ -1405,6 +1400,7 @@ function updatePaymentSummary(subtotal = getCartSubtotal()) {
     });
 
     renderCheckoutNote({ subtotal, shipping, pixDiscount, total: checkoutTotal, paymentMethod });
+    renderCheckoutExtras({ subtotal, shipping, pixDiscount, paymentMethod });
 }
 
 function setupPaymentMethodSelector() {
@@ -1584,11 +1580,11 @@ async function checkout() {
     const state=document.getElementById("customerState")?.value.trim().toUpperCase();
 
     if(!name||!email||!phone||!cpf||!cep||!street||!number||!neighborhood||!city||!state){
-        showToast("Preencha todos os dados do cliente e da entrega."); return;
+        flagCheckoutFields(); showToast("Preencha todos os dados do cliente e da entrega."); return;
     }
     const cpfDigits=cpf.replace(/\D/g,"");
     const whatsappNumber=phone.replace(/\D/g,"");
-    if(cpfDigits.length!==11){showToast("Informe um CPF válido com 11 dígitos.");return;}
+    if(cpfDigits.length!==11){flagCheckoutFields(["customerCpf"]);showToast("Informe um CPF válido com 11 dígitos.");return;}
 
     const items=cart.map(item=>{
         const price=Number(item.price), quantity=Number(item.quantity)||1;
@@ -1599,7 +1595,7 @@ async function checkout() {
             variant_id:item.variant_id||null,variant_color:item.variant_color||null};
     }).filter(Boolean);
 
-    if(!selectedShippingOption){showToast("Selecione uma opção de frete antes de finalizar a compra.");return;}
+    if(!selectedShippingOption){document.querySelector(".shipping-result")?.scrollIntoView({behavior:"smooth",block:"center"});showToast("Selecione uma opção de frete antes de finalizar a compra.");return;}
     const shippingServiceId=String(selectedShippingOption.id||"");
     if(!items.length){showToast("Não foi possível identificar os produtos do carrinho.");return;}
 
@@ -2465,4 +2461,169 @@ function renderCheckoutNote(summary) {
     } else {
         start();
     }
+})();
+
+/* =====================================================
+   CHECKOUT — etapas, campos e barra de finalização
+   Mostra o progresso da compra, confirma cada campo
+   preenchido, destaca o que falta e mantém o total e o
+   botão de finalizar sempre à vista.
+===================================================== */
+
+const CHECKOUT_RULES = {
+    customerName: v => v.trim().split(/\s+/).filter(Boolean).length >= 2,
+    customerEmail: v => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim()),
+    customerPhone: v => v.replace(/\D/g, "").length >= 10,
+    customerCpf: v => v.replace(/\D/g, "").length === 11,
+    customerCep: v => v.replace(/\D/g, "").length === 8,
+    customerStreet: v => v.trim().length > 1,
+    customerNumber: v => v.trim().length > 0,
+    customerNeighborhood: v => v.trim().length > 1,
+    customerCity: v => v.trim().length > 1,
+    customerState: v => /^[A-Za-z]{2}$/.test(v.trim())
+};
+
+const CHECKOUT_STEP_FIELDS = {
+    data: ["customerName", "customerEmail", "customerPhone", "customerCpf"],
+    delivery: ["customerCep", "customerStreet", "customerNumber", "customerNeighborhood", "customerCity", "customerState"]
+};
+
+function checkoutFieldValid(id) {
+    const input = document.getElementById(id);
+    return !!input && CHECKOUT_RULES[id](input.value || "");
+}
+
+function refreshCheckoutField(input, { strict = false } = {}) {
+    const field = input?.closest(".field");
+    if (!field) return;
+    const rule = CHECKOUT_RULES[input.id];
+    const value = input.value || "";
+    const valid = rule ? rule(value) : value.trim().length > 0;
+    field.classList.toggle("is-valid", !!value.trim() && valid);
+    if (valid || !value.trim()) field.classList.remove("is-invalid");
+    else if (strict) field.classList.add("is-invalid");
+}
+
+function flagCheckoutFields(ids) {
+    const required = [...CHECKOUT_STEP_FIELDS.data, ...CHECKOUT_STEP_FIELDS.delivery];
+    const missing = ids || required.filter(id => !(document.getElementById(id)?.value || "").trim());
+    missing.forEach(id => document.getElementById(id)?.closest(".field")?.classList.add("is-invalid"));
+    const first = document.getElementById(missing[0]);
+    if (first) {
+        first.closest(".field")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        setTimeout(() => first.focus({ preventScroll: true }), 350);
+    }
+}
+
+function updateCheckoutProgress() {
+    const steps = document.getElementById("checkoutSteps");
+    if (!steps) return;
+    const done = {
+        bag: cart.length > 0,
+        data: CHECKOUT_STEP_FIELDS.data.every(checkoutFieldValid),
+        delivery: CHECKOUT_STEP_FIELDS.delivery.every(checkoutFieldValid) && !!selectedShippingOption
+    };
+    done.payment = done.bag && done.data && done.delivery;
+    const order = ["bag", "data", "delivery", "payment"];
+    const current = order.find(step => !done[step]);
+    steps.querySelectorAll("li").forEach(li => {
+        li.classList.toggle("is-done", !!done[li.dataset.step]);
+        li.classList.toggle("is-current", li.dataset.step === current);
+    });
+    steps.style.setProperty("--progress", current ? order.indexOf(current) / (order.length - 1) : 1);
+    document.querySelectorAll(".checkout-step[data-section]").forEach(section => {
+        section.classList.toggle("is-complete", !!done[section.dataset.section]);
+    });
+}
+
+function renderCheckoutExtras({ subtotal, shipping, pixDiscount, paymentMethod }) {
+    const potential = cart.reduce((sum, item) => {
+        const unitCents = Math.round(Number(item.price || 0) * 100);
+        return sum + (unitCents - Math.round(unitCents * 0.95)) * Number(item.quantity || 0);
+    }, 0) / 100;
+
+    const perk = document.getElementById("pixPerk");
+    const perkText = document.getElementById("pixPerkText");
+    const perkButton = document.getElementById("pixPerkButton");
+    if (perk && perkText) {
+        perk.hidden = !(cart.length && potential > 0);
+        perk.classList.toggle("is-active", paymentMethod === "pix");
+        perkText.innerHTML = paymentMethod === "pix"
+            ? `Pix selecionado: você economiza <strong>${formatPrice(potential)}</strong>`
+            : `Pagando no Pix você economiza <strong>${formatPrice(potential)}</strong>`;
+        if (perkButton) perkButton.hidden = paymentMethod === "pix";
+    }
+
+    const hint = document.getElementById("checkoutBarHint");
+    if (hint) {
+        const parts = [];
+        if (pixDiscount > 0) parts.push(`${formatPrice(pixDiscount)} de desconto no Pix`);
+        parts.push(selectedShippingOption ? `frete ${formatPrice(shipping)}` : "frete a calcular");
+        hint.textContent = parts.join(" · ");
+    }
+
+    const total = document.getElementById("checkoutTotal");
+    if (total && total.dataset.last !== total.textContent) {
+        if (total.dataset.last) {
+            total.classList.remove("is-bumping");
+            void total.offsetWidth;
+            total.classList.add("is-bumping");
+        }
+        total.dataset.last = total.textContent;
+    }
+
+    updateCheckoutProgress();
+}
+
+(function setupCheckoutExperience() {
+    const start = () => {
+        const form = document.querySelector("#cartOverlay .checkout-form");
+        if (!form) return;
+
+        const phone = document.getElementById("customerPhone");
+        if (phone) {
+            phone.addEventListener("input", () => {
+                const d = phone.value.replace(/\D/g, "").slice(0, 11);
+                phone.value = d.length > 10 ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+                    : d.length > 6 ? `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+                    : d.length > 2 ? `(${d.slice(0, 2)}) ${d.slice(2)}`
+                    : d;
+            });
+        }
+
+        const state = document.getElementById("customerState");
+        if (state) state.addEventListener("input", () => { state.value = state.value.replace(/[^a-z]/gi, "").toUpperCase(); });
+
+        form.querySelectorAll(".field input").forEach(input => {
+            input.addEventListener("input", () => { refreshCheckoutField(input); updateCheckoutProgress(); });
+            input.addEventListener("blur", () => refreshCheckoutField(input, { strict: true }));
+        });
+
+        // O CEP preenche rua, bairro e cidade sem disparar "input": confere de novo.
+        const recheck = () => { form.querySelectorAll(".field input").forEach(i => refreshCheckoutField(i)); updateCheckoutProgress(); };
+        form.addEventListener("change", recheck);
+        new MutationObserver(recheck).observe(document.getElementById("shippingValue") || form, { childList: true, characterData: true, subtree: true });
+
+        document.getElementById("pixPerkButton")?.addEventListener("click", () => {
+            const pix = document.querySelector('input[name="paymentMethod"][value="pix"]');
+            if (!pix) return;
+            pix.checked = true;
+            pix.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+
+        document.querySelectorAll("#checkoutSteps [data-go]").forEach(button => {
+            button.addEventListener("click", () => {
+                const target = document.getElementById(button.dataset.go);
+                if (!target) return;
+                const panel = document.querySelector("#cartOverlay .cart");
+                const header = panel.querySelector(".cart-header");
+                const top = target.getBoundingClientRect().top - panel.getBoundingClientRect().top + panel.scrollTop - header.offsetHeight - 12;
+                panel.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+            });
+        });
+
+        recheck();
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start, { once: true });
+    else start();
 })();

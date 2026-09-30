@@ -40,7 +40,7 @@
     <meta name="twitter:description" content="Conheça a coleção MONTÊ e compre online.">
     <meta name="twitter:image" content="https://oficialmontee.com.br/backend/assets/carousel-photo-1.webp">
 
-    <link rel="stylesheet" href="style.css?v=20260930-abertura-lenta">
+    <link rel="stylesheet" href="style.css?v=20260930-checkout">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -859,160 +859,108 @@
      class="cart-overlay"
      onclick="closeCartOutside(event)">
 
-
-    <aside class="cart">
+    <aside class="cart" aria-label="Sacola de compras">
 
         <div class="cart-header">
-
-            <h2>
-                SEU CARRINHO
-            </h2>
-
-            <button onclick="closeCart()">
-                ×
+            <div class="cart-title">
+                <p class="cart-kicker">MONTÊ</p>
+                <h2>Sua sacola <span id="cartHeaderCount" class="cart-header-count">0</span></h2>
+            </div>
+            <button class="cart-close" onclick="closeCart()" aria-label="Fechar sacola">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
             </button>
-
+            <ol class="checkout-steps" id="checkoutSteps" aria-label="Etapas da compra">
+                <li data-step="bag"><button type="button" data-go="cartItems"><i></i><span>Sacola</span></button></li>
+                <li data-step="data"><button type="button" data-go="stepData"><i></i><span>Dados</span></button></li>
+                <li data-step="delivery"><button type="button" data-go="stepDelivery"><i></i><span>Entrega</span></button></li>
+                <li data-step="payment"><button type="button" data-go="stepPayment"><i></i><span>Pagamento</span></button></li>
+            </ol>
         </div>
 
-
-        <div id="cartItems"
-             class="cart-items">
-
-        </div>
-
+        <div id="cartItems" class="cart-items"></div>
 
         <div class="cart-footer">
 
-            <div class="subtotal">
-
-                <span>
-                    SUBTOTAL
-                </span>
-
-                <strong id="cartTotal">
-                    R$ 0,00
-                </strong>
-
+            <div class="cart-subtotal subtotal">
+                <span>Subtotal</span>
+                <strong id="cartTotal">R$ 0,00</strong>
             </div>
 
+            <div class="pix-perk" id="pixPerk" hidden>
+                <span class="pix-perk-icon" aria-hidden="true"></span>
+                <p id="pixPerkText">Pagando no Pix você economiza <strong>R$ 0,00</strong></p>
+                <button type="button" id="pixPerkButton" class="pix-perk-button" hidden>USAR PIX</button>
+            </div>
 
             <div class="checkout-form">
 
-    <h3>SEUS DADOS</h3>
+                <section class="checkout-step" id="stepData" data-section="data">
+                    <header class="checkout-step-head">
+                        <span class="checkout-step-num">01</span>
+                        <h3>Seus dados</h3>
+                        <i class="checkout-step-check" aria-hidden="true"></i>
+                    </header>
+                    <div class="field-grid">
+                        <label class="field full"><input type="text" id="customerName" placeholder=" " autocomplete="name"><span>Nome completo</span></label>
+                        <label class="field full"><input type="email" id="customerEmail" placeholder=" " autocomplete="email" inputmode="email"><span>E-mail</span></label>
+                        <label class="field"><input type="tel" id="customerPhone" placeholder=" " autocomplete="tel" inputmode="tel" maxlength="15"><span>WhatsApp</span></label>
+                        <label class="field"><input type="text" id="customerCpf" placeholder=" " inputmode="numeric" maxlength="14" autocomplete="off"><span>CPF</span></label>
+                    </div>
+                    <p class="field-hint">Enviamos o código de rastreio do pedido pelo WhatsApp e por e-mail.</p>
+                </section>
 
-    <input
-        type="text"
-        id="customerName"
-        placeholder="Nome completo"
-        autocomplete="name"
-    >
+                <section class="checkout-step" id="stepDelivery" data-section="delivery">
+                    <header class="checkout-step-head">
+                        <span class="checkout-step-num">02</span>
+                        <h3>Entrega</h3>
+                        <i class="checkout-step-check" aria-hidden="true"></i>
+                    </header>
+                    <div class="field-grid">
+                        <label class="field"><input type="text" id="customerCep" placeholder=" " maxlength="9" inputmode="numeric" autocomplete="postal-code"><span>CEP</span></label>
+                        <a class="cep-help" href="https://buscacepinter.correios.com.br/app/endereco/index.php" target="_blank" rel="noopener">Não sei meu CEP</a>
+                        <label class="field full"><input type="text" id="customerStreet" placeholder=" " autocomplete="address-line1"><span>Rua / Avenida</span></label>
+                        <label class="field field-short"><input type="text" id="customerNumber" placeholder=" " autocomplete="off"><span>Número</span></label>
+                        <label class="field field-long"><input type="text" id="customerComplement" placeholder=" " autocomplete="address-line2"><span>Complemento (opcional)</span></label>
+                        <label class="field full"><input type="text" id="customerNeighborhood" placeholder=" " autocomplete="address-level3"><span>Bairro</span></label>
+                        <label class="field field-long"><input type="text" id="customerCity" placeholder=" " autocomplete="address-level2"><span>Cidade</span></label>
+                        <label class="field field-short"><input type="text" id="customerState" placeholder=" " maxlength="2" autocomplete="address-level1"><span>UF</span></label>
+                    </div>
 
-    <input
-        type="email"
-        id="customerEmail"
-        placeholder="E-mail"
-        autocomplete="email"
-    >
+                    <div class="shipping-result">
+                        <div class="shipping-result-head">
+                            <span>Frete</span>
+                            <strong id="shippingValue">Informe seu CEP</strong>
+                        </div>
+                        <div id="shippingOptions" class="shipping-options"></div>
+                    </div>
+                </section>
 
-    <input
-        type="tel"
-        id="customerPhone"
-        placeholder="Telefone"
-        autocomplete="tel"
-    >
-
-
-    <input
-        type="text"
-        id="customerCpf"
-        placeholder="CPF"
-        inputmode="numeric"
-        maxlength="14"
-        autocomplete="off"
-    >
-
-    <h3>ENDEREÇO DE ENTREGA</h3>
-
-    <input
-        type="text"
-        id="customerCep"
-        placeholder="CEP"
-        maxlength="9"
-        autocomplete="postal-code"
-    >
-
-    <input
-        type="text"
-        id="customerStreet"
-        placeholder="Rua / Avenida"
-        autocomplete="street-address"
-    >
-
-    <div class="checkout-row">
-
-        <input
-            type="text"
-            id="customerNumber"
-            placeholder="Número"
-            autocomplete="address-line1"
-        >
-
-        <input
-            type="text"
-            id="customerComplement"
-            placeholder="Complemento (apto, bloco, condomínio)"
-            autocomplete="address-line2"
-        >
-
-    </div>
-
-    <input
-        type="text"
-        id="customerNeighborhood"
-        placeholder="Bairro"
-        autocomplete="address-level3"
-    >
-
-    <input
-        type="text"
-        id="customerCity"
-        placeholder="Cidade"
-        autocomplete="address-level2"
-    >
-
-    <input
-        type="text"
-        id="customerState"
-        placeholder="Estado (UF)"
-        maxlength="2"
-        autocomplete="address-level1"
-    >
-
-    <div class="shipping-result">
-        <div class="shipping-result-head">
-            <span>FRETE</span>
-            <strong id="shippingValue">Informe seu endereço</strong>
-        </div>
-        <div id="shippingOptions" class="shipping-options"></div>
-    </div>
-
-    <div class="payment-methods" aria-label="Forma de pagamento">
-        <label class="payment-option selected" id="paymentOptionPix">
-            <input type="radio" name="paymentMethod" value="pix" checked>
-            <span class="payment-option-content">
-                <strong>PIX — 5% OFF</strong>
-                <small>Desconto aplicado somente nos produtos. O frete permanece integral.</small>
-            </span>
-        </label>
-        <label class="payment-option" id="paymentOptionCard">
-            <input type="radio" name="paymentMethod" value="credit_card">
-            <span class="payment-option-content">
-                <strong>CARTÃO DE CRÉDITO</strong>
-                <small>Pagamento seguro pela InfinitePay.</small>
-            </span>
-        </label>
-    </div>
-
+                <section class="checkout-step" id="stepPayment" data-section="payment">
+                    <header class="checkout-step-head">
+                        <span class="checkout-step-num">03</span>
+                        <h3>Pagamento</h3>
+                        <i class="checkout-step-check" aria-hidden="true"></i>
+                    </header>
+                    <div class="payment-methods" role="radiogroup" aria-label="Forma de pagamento">
+                        <label class="payment-option selected" id="paymentOptionPix">
+                            <input type="radio" name="paymentMethod" value="pix" checked>
+                            <span class="payment-option-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2.8l9.2 9.2-9.2 9.2L2.8 12z"/><path d="M8.2 12l3.8-3.8 3.8 3.8-3.8 3.8z"/></svg></span>
+                            <span class="payment-option-content">
+                                <strong>Pix</strong>
+                                <small>Aprovação imediata</small>
+                            </span>
+                            <em class="payment-option-badge">5% OFF</em>
+                        </label>
+                        <label class="payment-option" id="paymentOptionCard">
+                            <input type="radio" name="paymentMethod" value="credit_card">
+                            <span class="payment-option-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19M6 15h4"/></svg></span>
+                            <span class="payment-option-content">
+                                <strong>Cartão de crédito</strong>
+                                <small>Pagamento seguro InfinitePay</small>
+                            </span>
+                        </label>
+                    </div>
+                    <p class="field-hint">O desconto do Pix vale para as peças; o frete é cobrado integralmente.</p>
 
             <div id="directPixPayment" class="direct-pix-payment" hidden>
                 <div class="direct-pix-header"><span>PIX</span><strong>PAGUE COM PIX</strong></div>
@@ -1024,6 +972,8 @@
                 <button type="button" class="direct-pix-copy-button" onclick="copyDirectPix()">COPIAR PIX COPIA E COLA</button>
                 <p class="direct-pix-note">O pedido ficará aguardando a confirmação do pagamento.</p>
             </div>
+
+                </section>
 
     <div class="order-note" id="orderNote">
         <p class="order-note-kicker">SUA NOTA MONTÊ</p>
@@ -1060,33 +1010,26 @@
         </div>
     </div>
 
-    <p id="checkoutDiscount" class="checkout-discount" style="display:none;margin:12px 0 0;font-size:13px;text-align:right"></p>
 
-    <div class="checkout-total">
-        <span>TOTAL</span>
-        <strong id="checkoutTotal">R$ 0,00</strong>
-    </div>
+                <ul class="checkout-trust" aria-label="Garantias">
+                    <li><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>Pagamento seguro</li>
+                    <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg>Envio com rastreio</li>
+                    <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12l-8 8-8-8 8-8z"/><path d="M9.5 12h5"/></svg>Pix com 5% OFF</li>
+                </ul>
 
-</div>
+                <button type="button" onclick="closeCart()" class="continue-shopping">Continuar comprando</button>
 
+            </div>
 
-            <button
-                onclick="checkout()"
-                class="checkout-button">
+        </div>
 
-                FINALIZAR COMPRA
-
-            </button>
-
-
-            <button
-                onclick="closeCart()"
-                class="continue-shopping">
-
-                CONTINUAR COMPRANDO
-
-            </button>
-
+        <div class="checkout-bar">
+            <div class="checkout-bar-total">
+                <span>Total</span>
+                <strong id="checkoutTotal">R$ 0,00</strong>
+                <small id="checkoutBarHint"></small>
+            </div>
+            <button onclick="checkout()" class="checkout-button">FINALIZAR COMPRA</button>
         </div>
 
     </aside>
@@ -1106,7 +1049,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
-<script src="script.js?v=20260930-abertura-lenta"></script>
+<script src="script.js?v=20260930-checkout"></script>
 
 </body>
 </html>
