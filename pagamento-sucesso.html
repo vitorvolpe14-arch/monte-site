@@ -4,41 +4,243 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
+<meta name="robots" content="noindex">
 <title>Pedido — MONTÊ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Playfair+Display:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
 <style>
+:root{
+  --ink:#0b0b0b; --paper:#efe8de; --ivory:#f5efe6; --muted:#a79f95;
+  --gold:#c9a45c; --gold-soft:rgba(201,164,92,.34); --wine:#6D2234;
+}
 *{box-sizing:border-box}
-body{margin:0;background:#f8f7f5;color:#111;font-family:Arial,Helvetica,sans-serif}
-.page{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px 16px}
-.card{width:min(720px,100%);background:#fff;padding:42px;border:1px solid #e7e4df}
-.logo{text-align:center;letter-spacing:6px;font-size:25px;font-weight:700;margin-bottom:38px}
-.check{width:54px;height:54px;border:1px solid #111;border-radius:50%;display:grid;place-items:center;margin:0 auto 20px;font-size:25px}
-h1{text-align:center;font-size:29px;font-weight:500;margin:0 0 10px}
-.subtitle{text-align:center;color:#666;line-height:1.6;margin:0 auto 30px}
-.order{background:#f7f5f2;padding:20px;margin:24px 0}
-.row{display:flex;justify-content:space-between;gap:20px;padding:10px 0;border-bottom:1px solid #e4e1dc}
-.row:last-child{border-bottom:0}
-.label{color:#666}.value{font-weight:600;text-align:right}
-.items{margin:28px 0}.item{display:flex;justify-content:space-between;gap:20px;padding:15px 0;border-bottom:1px solid #eee}
-.item-name{font-weight:500}.item-meta{color:#777;font-size:13px;margin-top:5px}
-.total{display:flex;justify-content:space-between;font-size:18px;font-weight:600;padding-top:20px}
-.back{display:block;text-align:center;color:#555;text-decoration:none;margin-top:24px}
-.error{text-align:center;color:#555;line-height:1.6}
-@media(max-width:600px){.card{padding:28px 18px}.page{padding:16px 10px}h1{font-size:25px}.item{font-size:14px}}
+html,body{margin:0}
+html{background:#e4dbcf}
+body{
+  min-height:100vh; color:var(--ivory); font-family:"DM Sans",Arial,sans-serif;
+  background:
+    radial-gradient(120% 80% at 50% 0%, #f7f2ea 0%, var(--paper) 55%, #e4dbcf 100%) fixed;
+  overflow-x:hidden;
+}
+/* Fundo em camadas (parallax): monograma e poeira dourada */
+.scene{position:relative;min-height:100vh;perspective:1400px}
+.backdrop{position:fixed;inset:0;overflow:hidden;pointer-events:none}
+.bg-monogram{position:absolute;left:50%;top:50%;width:min(120vw,1100px);margin-left:calc(min(120vw,1100px)/-2);margin-top:calc(min(120vw,1100px)/-2);
+  aspect-ratio:1;pointer-events:none;opacity:.5;translate:var(--bx,0px) var(--by,0px);transition:translate .8s cubic-bezier(.2,.7,.2,1)}
+.bg-monogram path{fill:none;stroke:rgba(109,34,52,.07);stroke-width:.14}
+.dust{position:absolute;inset:-10%;pointer-events:none;translate:var(--dx,0px) var(--dy,0px);transition:translate 1s cubic-bezier(.2,.7,.2,1);
+  background:
+    radial-gradient(2px 2px at 12% 22%, rgba(201,164,92,.55), transparent 60%),
+    radial-gradient(1.5px 1.5px at 78% 14%, rgba(201,164,92,.5), transparent 60%),
+    radial-gradient(2px 2px at 88% 62%, rgba(201,164,92,.45), transparent 60%),
+    radial-gradient(1.5px 1.5px at 22% 78%, rgba(201,164,92,.5), transparent 60%),
+    radial-gradient(2.5px 2.5px at 62% 88%, rgba(201,164,92,.35), transparent 60%),
+    radial-gradient(1.5px 1.5px at 40% 8%, rgba(201,164,92,.45), transparent 60%),
+    radial-gradient(2px 2px at 5% 55%, rgba(201,164,92,.4), transparent 60%);
+}
+.stage{position:relative;z-index:1;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:56px 18px}
+
+/* A carta */
+.letter{
+  --rx:0deg; --ry:0deg;
+  position:relative;width:min(560px,100%);
+  background:
+    radial-gradient(90% 60% at 30% 0%, rgba(255,255,255,.06), transparent 60%),
+    linear-gradient(180deg,#111 0%,#0b0b0b 55%,#080808 100%);
+  box-shadow:0 50px 90px -30px rgba(40,18,10,.55),0 18px 40px -20px rgba(40,18,10,.45);
+  transform:rotateX(var(--rx)) rotateY(var(--ry));
+  transition:transform .6s cubic-bezier(.2,.7,.2,1);
+  animation:letterIn 1.2s cubic-bezier(.2,.8,.2,1) both;
+}
+@keyframes letterIn{from{opacity:0;transform:translateY(80px) rotateX(14deg)}to{opacity:1}}
+.letter-border{position:absolute;inset:14px;border:1px solid var(--gold-soft);pointer-events:none}
+.letter-border::before,.letter-border::after{content:"";position:absolute;width:22px;height:22px;border:1px solid var(--gold)}
+.letter-border::before{top:-5px;left:-5px;border-right:0;border-bottom:0}
+.letter-border::after{bottom:-5px;right:-5px;border-left:0;border-top:0}
+.letter-inner{position:relative;padding:62px 52px 48px;text-align:center}
+.layer{translate:calc(var(--px,0)*var(--d,0)*1px) calc(var(--py,0)*var(--d,0)*1px);transition:translate .6s cubic-bezier(.2,.7,.2,1)}
+.rise{opacity:0;animation:rise .9s cubic-bezier(.2,.8,.2,1) forwards;animation-delay:var(--delay,0s)}
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+
+.letter-logo{display:block;width:128px;height:auto;margin:0 auto;overflow:visible;filter:drop-shadow(0 0 10px rgba(201,164,92,.18))}
+.letter.just-paid .letter-logo{opacity:1;animation:goldFlash 1.4s ease}
+@keyframes goldFlash{40%{filter:drop-shadow(0 0 22px rgba(247,231,180,.75))}}
+.letter-rule{display:block;width:54px;height:1px;margin:22px auto 20px;background:linear-gradient(90deg,transparent,var(--gold),transparent)}
+.letter-kicker{margin:0 0 16px;font-size:9.5px;letter-spacing:.34em;color:var(--gold)}
+.letter-kicker .dot{display:inline-block;width:6px;height:6px;margin-right:9px;border-radius:50%;background:var(--gold);vertical-align:1px;animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25;transform:scale(.7)}}
+.letter-title{margin:0;font:italic 400 clamp(34px,7vw,46px)/1.05 "Playfair Display",Georgia,serif;letter-spacing:-.02em;color:var(--ivory)}
+.letter-text{max-width:400px;margin:18px auto 0;font-size:13.5px;line-height:1.75;color:var(--muted)}
+.letter-section{margin-top:34px;text-align:left}
+.letter-label{display:block;margin:0 0 12px;font-size:9px;letter-spacing:.3em;color:var(--gold)}
+.order-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;padding:16px 0;border-top:1px solid var(--gold-soft);border-bottom:1px solid var(--gold-soft)}
+.order-meta div{display:grid;gap:5px}
+.order-meta span{font-size:8.5px;letter-spacing:.24em;color:var(--muted)}
+.order-meta strong{font:400 15px/1.2 "Playfair Display",Georgia,serif;color:var(--ivory)}
+.item{display:grid;grid-template-columns:1fr auto;gap:4px 16px;padding:14px 0;border-bottom:1px solid rgba(201,164,92,.16)}
+.item:last-child{border-bottom:0}
+.item-name{font:400 17px/1.25 "Playfair Display",Georgia,serif;color:var(--ivory)}
+.item-meta{grid-column:1;font-size:11px;letter-spacing:.06em;color:var(--muted)}
+.item-price{grid-row:1 / span 2;grid-column:2;align-self:center;font-size:13px;color:var(--ivory)}
+.totals{margin-top:6px;padding-top:14px;border-top:1px solid var(--gold-soft);display:grid;gap:8px}
+.totals div{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted)}
+.totals .grand{margin-top:6px;align-items:baseline;color:var(--ivory)}
+.totals .grand span{font-size:9px;letter-spacing:.3em;color:var(--gold)}
+.totals .grand strong{font:400 30px/1 "Playfair Display",Georgia,serif;color:var(--gold)}
+.letter-sign{margin:40px 0 0;font:italic 400 16px/1.4 "Playfair Display",Georgia,serif;color:var(--muted)}
+.letter-sign span{display:block;margin-top:6px;font:normal 400 11px/1 "DM Sans",Arial,sans-serif;letter-spacing:.5em;color:var(--gold);padding-left:.5em}
+.letter-actions{margin-top:34px;display:grid;justify-items:center;gap:14px}
+.letter-return{appearance:none;cursor:pointer;min-width:240px;padding:16px 28px;border:1px solid var(--gold);background:transparent;color:var(--gold);font:500 10px/1 "DM Sans",Arial,sans-serif;letter-spacing:.32em;transition:background .3s ease,color .3s ease}
+.letter-return:hover,.letter-return:focus-visible{background:var(--gold);color:var(--ink);outline:none}
+.letter-return:disabled{cursor:default}
+.letter-link{font-size:11px;letter-spacing:.08em;color:var(--muted);text-decoration:none;border-bottom:1px solid rgba(167,159,149,.35);padding-bottom:3px}
+.letter-link:hover{color:var(--ivory)}
+.loading-line{display:block;height:10px;margin:10px 0;background:linear-gradient(90deg,rgba(255,255,255,.04),rgba(255,255,255,.1),rgba(255,255,255,.04));background-size:200% 100%;animation:shimmer 1.4s linear infinite}
+@keyframes shimmer{to{background-position:-200% 0}}
+
+/* Fechamento: conteúdo some, a carta dobra em três e recebe o selo */
+.letter.is-closing{animation:letterOut .5s cubic-bezier(.4,0,.2,1) forwards;pointer-events:none}
+@keyframes letterOut{to{opacity:0;transform:translateY(12px) scale(.98)}}
+.fold-stage{position:fixed;inset:0;z-index:5;display:grid;place-items:center;pointer-events:none}
+.fold-stage[hidden]{display:none}
+.fold{position:relative;perspective:1600px;transform-style:preserve-3d;transition:transform .7s cubic-bezier(.6,0,.2,1),opacity .6s ease;animation:foldIn .5s ease both}
+@keyframes foldIn{from{opacity:0;transform:scale(.96)}}
+.fold-panel{position:absolute;left:0;right:0;background:linear-gradient(180deg,#121212,#0a0a0a);backface-visibility:visible;box-shadow:inset 0 0 0 1px rgba(201,164,92,.22)}
+.fold-panel.top{top:0;transform-origin:50% 100%;z-index:2;transition:transform .75s cubic-bezier(.65,0,.35,1)}
+.fold-panel.mid{z-index:1}
+.fold-panel.bottom{transform-origin:50% 0;z-index:3;transition:transform .75s cubic-bezier(.65,0,.35,1) .32s}
+.fold-panel.bottom::after,.fold-panel.top::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.05),transparent 40%);opacity:0;transition:opacity .75s ease}
+.fold.is-folded .fold-panel.top{transform:rotateX(-178deg)}
+.fold.is-folded .fold-panel.bottom{transform:rotateX(178deg)}
+.fold.is-folded .fold-panel::after{opacity:1}
+.fold.is-sealed{animation:thud .35s ease}
+@keyframes thud{40%{translate:0 4px}}
+.fold.is-leaving,.seal-wrap.is-leaving{transform:translateY(-70px) scale(.94);opacity:0}
+.seal-wrap{position:absolute;left:50%;top:50%;width:0;height:0;z-index:4;transition:transform .7s cubic-bezier(.6,0,.2,1),opacity .6s ease}
+.seal{position:absolute;left:0;top:0;width:92px;height:92px;margin:-46px 0 0 -46px;opacity:0;transform:scale(2.4) rotate(-24deg);filter:drop-shadow(0 6px 8px rgba(0,0,0,.45))}
+.seal.is-stamped{animation:stamp .5s cubic-bezier(.3,1.5,.5,1) forwards}
+@keyframes stamp{to{opacity:1;transform:scale(1) rotate(-8deg)}}
+.seal-ring{position:absolute;left:0;top:0;width:92px;height:92px;margin:-46px 0 0 -46px;border-radius:50%;border:1px solid rgba(201,164,92,.6);opacity:0}
+.seal-ring.is-on{animation:ring .9s ease-out forwards}
+@keyframes ring{from{opacity:.9;transform:scale(.9)}to{opacity:0;transform:scale(2.3)}}
+.veil{position:fixed;inset:0;z-index:20;background:#fff;opacity:0;pointer-events:none;transition:opacity .55s ease}
+.veil.is-on{opacity:1}
+
+@media (max-width:600px){
+  .stage{padding:28px 12px;align-items:flex-start}
+  .letter-inner{padding:52px 24px 40px}
+  .letter-border{inset:10px}
+  .order-meta{grid-template-columns:1fr 1fr}
+  .order-meta div:last-child{grid-column:1 / -1}
+  .letter-return{min-width:0;width:100%}
+}
+@media (prefers-reduced-motion:reduce){
+  .letter,.rise{animation:none;opacity:1}
+  .letter,.layer,.bg-monogram,.dust{transition:none;translate:none;transform:none}
+  .letter-kicker .dot,.loading-line{animation:none}
+}
 </style>
 </head>
 <body>
-<main class="page"><section class="card">
-<div class="logo">MONTÊ</div>
-<div id="content"><div class="check">✓</div><h1 id="title">Pedido recebido</h1><p class="subtitle" id="subtitle">Estamos carregando os detalhes do seu pedido.</p>
-<div id="orderBox" class="order">Carregando pedido...</div><div id="items" class="items"></div><a class="back" href="/">Voltar para a MONTÊ</a></div>
-</section></main>
+<div class="scene" id="scene">
+  <div class="backdrop" aria-hidden="true">
+  <svg class="bg-monogram" viewBox="0 0 64 64" aria-hidden="true"><path d="M20.95 54L12.16 54L12.16 10L14.94 10L32.04 29.03L49.12 10L51.84 10L51.84 54L43.05 54L43.11 29.83L32.04 41.45L20.95 29.83L20.95 54Z"/></svg>
+  <div class="dust" aria-hidden="true"></div>
+  </div>
+
+  <main class="stage">
+    <article class="letter" id="letter" aria-live="polite">
+      <div class="letter-border" aria-hidden="true"></div>
+      <div class="letter-inner">
+        <svg class="letter-logo layer rise" style="--d:7;--delay:.45s" viewBox="8 -90.3 402.4 91.8" role="img" aria-label="MONTÊ">
+          <defs>
+            <linearGradient id="goldBase" x1="0" y1="-90" x2="0" y2="2" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#f4e3ad"/><stop offset=".45" stop-color="#c9a45c"/><stop offset=".62" stop-color="#8f6d2f"/><stop offset="1" stop-color="#d9b56d"/>
+            </linearGradient>
+            <linearGradient id="goldShine" x1="0" y1="0" x2="160" y2="0" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#fff6d8" stop-opacity="0"/><stop offset=".5" stop-color="#fff6d8" stop-opacity=".95"/><stop offset="1" stop-color="#fff6d8" stop-opacity="0"/>
+              <animateTransform attributeName="gradientTransform" type="translate" values="-200 0; 460 0; 460 0" keyTimes="0; .55; 1" dur="3.6s" repeatCount="indefinite"/>
+            </linearGradient>
+          </defs>
+          <path fill="url(#goldBase)" d="M22.5 0L8.0 0L8.0-72.6L12.6-72.6L40.8-41.2L69.0-72.6L73.5-72.6L73.5 0L59.0 0L59.1-39.9L40.8-20.7L22.5-39.9L22.5 0Z M107.9-22.3Q105.5-29.0 105.5-35.9Q105.5-42.8 107.9-49.4Q110.3-56.0 114.8-61.2Q119.2-66.4 126.4-69.5Q133.6-72.7 142.5-72.7Q151.4-72.7 158.6-69.5Q165.8-66.4 170.2-61.2Q174.7-56.0 177.1-49.4Q179.5-42.8 179.5-35.9Q179.5-29.0 177.1-22.3Q174.7-15.7 170.2-10.5Q165.8-5.4 158.6-2.2Q151.4 1.0 142.5 1.0Q133.6 1.0 126.4-2.2Q119.2-5.4 114.8-10.5Q110.3-15.7 107.9-22.3ZM122.4-44.0Q121.0-40.0 121.0-35.9Q121.0-31.8 122.4-27.8Q123.8-23.8 126.4-20.7Q129.0-17.6 133.1-15.7Q137.3-13.8 142.5-13.8Q147.7-13.8 151.8-15.7Q156.0-17.6 158.6-20.7Q161.2-23.8 162.6-27.8Q164.0-31.8 164.0-35.9Q164.0-40.0 162.6-44.0Q161.2-48.0 158.6-51.1Q156.0-54.2 151.8-56.1Q147.7-58.0 142.5-58.0Q137.3-58.0 133.1-56.1Q129.0-54.2 126.4-51.1Q123.8-48.0 122.4-44.0Z M225.6 0L211.3 0L211.3-73.0L215.1-73.0L251.2-31.0L251.2-71.4L265.6-71.4L265.6 1.5L261.8 1.5L225.6-38.9L225.6 0Z M312.0-57.2L294.2-57.2L294.2-71.4L344.1-71.4L344.1-57.2L326.3-57.2L326.3 0L312.0 0L312.0-57.2Z M388.1-76.9L373.2-76.9L387.1-90.3L396.2-90.3L410.3-76.9L395.3-76.9L391.6-81.4L388.1-76.9ZM410.4 0L373.4 0L373.4-71.5L409.2-71.5L409.2-57.2L387.7-57.2L387.7-42.9L406.5-42.9L406.5-28.6L387.7-28.6L387.7-14.3L410.4-14.3L410.4 0Z"/>
+          <path fill="url(#goldShine)" d="M22.5 0L8.0 0L8.0-72.6L12.6-72.6L40.8-41.2L69.0-72.6L73.5-72.6L73.5 0L59.0 0L59.1-39.9L40.8-20.7L22.5-39.9L22.5 0Z M107.9-22.3Q105.5-29.0 105.5-35.9Q105.5-42.8 107.9-49.4Q110.3-56.0 114.8-61.2Q119.2-66.4 126.4-69.5Q133.6-72.7 142.5-72.7Q151.4-72.7 158.6-69.5Q165.8-66.4 170.2-61.2Q174.7-56.0 177.1-49.4Q179.5-42.8 179.5-35.9Q179.5-29.0 177.1-22.3Q174.7-15.7 170.2-10.5Q165.8-5.4 158.6-2.2Q151.4 1.0 142.5 1.0Q133.6 1.0 126.4-2.2Q119.2-5.4 114.8-10.5Q110.3-15.7 107.9-22.3ZM122.4-44.0Q121.0-40.0 121.0-35.9Q121.0-31.8 122.4-27.8Q123.8-23.8 126.4-20.7Q129.0-17.6 133.1-15.7Q137.3-13.8 142.5-13.8Q147.7-13.8 151.8-15.7Q156.0-17.6 158.6-20.7Q161.2-23.8 162.6-27.8Q164.0-31.8 164.0-35.9Q164.0-40.0 162.6-44.0Q161.2-48.0 158.6-51.1Q156.0-54.2 151.8-56.1Q147.7-58.0 142.5-58.0Q137.3-58.0 133.1-56.1Q129.0-54.2 126.4-51.1Q123.8-48.0 122.4-44.0Z M225.6 0L211.3 0L211.3-73.0L215.1-73.0L251.2-31.0L251.2-71.4L265.6-71.4L265.6 1.5L261.8 1.5L225.6-38.9L225.6 0Z M312.0-57.2L294.2-57.2L294.2-71.4L344.1-71.4L344.1-57.2L326.3-57.2L326.3 0L312.0 0L312.0-57.2Z M388.1-76.9L373.2-76.9L387.1-90.3L396.2-90.3L410.3-76.9L395.3-76.9L391.6-81.4L388.1-76.9ZM410.4 0L373.4 0L373.4-71.5L409.2-71.5L409.2-57.2L387.7-57.2L387.7-42.9L406.5-42.9L406.5-28.6L387.7-28.6L387.7-14.3L410.4-14.3L410.4 0Z"/>
+        </svg>
+        <span class="letter-rule rise" style="--delay:.65s"></span>
+        <p class="letter-kicker layer rise" id="kicker" style="--d:3;--delay:.75s">SEU PEDIDO</p>
+        <h1 class="letter-title layer rise" id="title" style="--d:5;--delay:.85s">Um momento…</h1>
+        <p class="letter-text layer rise" id="subtitle" style="--d:2.5;--delay:.95s">Estamos abrindo a sua carta.</p>
+
+        <section class="letter-section layer rise" style="--d:1.5;--delay:1.05s">
+          <span class="letter-label">PEDIDO</span>
+          <div class="order-meta" id="orderMeta"><span class="loading-line"></span></div>
+        </section>
+
+        <section class="letter-section layer rise" style="--d:1.2;--delay:1.15s">
+          <span class="letter-label">O QUE VOCÊ LEVOU</span>
+          <div id="items"><span class="loading-line"></span><span class="loading-line"></span></div>
+          <div class="totals" id="totals"></div>
+        </section>
+
+        <p class="letter-sign layer rise" style="--d:3;--delay:1.3s">Com carinho,<span>MONTÊ</span></p>
+
+        <div class="letter-actions rise" style="--delay:1.4s">
+          <button type="button" class="letter-return" id="returnButton">RETORNAR AO SITE</button>
+          <a class="letter-link" href="/minhas-compras.html">Acompanhar em Minhas compras</a>
+        </div>
+      </div>
+    </article>
+  </main>
+
+  <div class="fold-stage" id="foldStage" hidden aria-hidden="true">
+    <div class="fold" id="fold">
+      <div class="fold-panel top"></div>
+      <div class="fold-panel mid"></div>
+      <div class="fold-panel bottom"></div>
+    </div>
+    <div class="seal-wrap" id="sealWrap">
+      <span class="seal-ring" id="sealRing"></span>
+      <svg class="seal" id="seal" viewBox="0 0 120 120">
+        <defs>
+          <radialGradient id="wax" cx="38%" cy="32%" r="75%">
+            <stop offset="0" stop-color="#a8455a"/><stop offset=".5" stop-color="#6D2234"/><stop offset="1" stop-color="#3a0d18"/>
+          </radialGradient>
+          <filter id="waxEdge" x="-20%" y="-20%" width="140%" height="140%">
+            <feTurbulence type="fractalNoise" baseFrequency=".045" numOctaves="2" seed="11"/>
+            <feDisplacementMap in="SourceGraphic" scale="10"/>
+          </filter>
+        </defs>
+        <circle cx="60" cy="60" r="50" fill="url(#wax)" filter="url(#waxEdge)"/>
+        <circle cx="60" cy="60" r="35" fill="#5e1b2c"/>
+        <circle cx="60" cy="60" r="35" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="2.4"/>
+        <circle cx="59.2" cy="59.2" r="35" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="1"/>
+        <g transform="translate(28 28)">
+          <path d="M24.46 47L18.47 47L18.47 17L20.37 17L32.03 29.97L43.67 17L45.53 17L45.53 47L39.54 47L39.58 30.52L32.03 38.45L24.46 30.52L24.46 47Z" fill="rgba(0,0,0,.4)" transform="translate(1.1 1.3)"/>
+          <path d="M24.46 47L18.47 47L18.47 17L20.37 17L32.03 29.97L43.67 17L45.53 17L45.53 47L39.54 47L39.58 30.52L32.03 38.45L24.46 30.52L24.46 47Z" fill="rgba(255,255,255,.2)" transform="translate(-.7 -.7)"/>
+          <path d="M24.46 47L18.47 47L18.47 17L20.37 17L32.03 29.97L43.67 17L45.53 17L45.53 47L39.54 47L39.58 30.52L32.03 38.45L24.46 30.52L24.46 47Z" fill="#7a2a3d"/>
+        </g>
+        <ellipse cx="44" cy="36" rx="15" ry="7" fill="rgba(255,255,255,.16)" transform="rotate(-32 44 36)"/>
+      </svg>
+    </div>
+  </div>
+  <div class="veil" id="veil"></div>
+</div>
+
 <script>
 const money=v=>new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(v||0));
 const params=new URLSearchParams(location.search);
 const orderNsu=params.get("order_nsu");
+const reduceMotion=window.matchMedia("(prefers-reduced-motion: reduce)");
 let lastOrder=null;
+let wasPaid=null;
 let pollTimer=null;
 let pollCount=0;
+
+function esc(v){
+  return String(v??"").replace(/[&<>"']/g,m=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"
+  }[m]));
+}
 
 async function fetchOrder(){
   if(!orderNsu) throw new Error("Não foi possível localizar o pedido.");
@@ -52,41 +254,74 @@ function isPaid(o){
   return ["paid","processing","shipped","delivered"].includes(o.status);
 }
 
+function firstName(name){
+  const first=String(name||"").trim().split(/\s+/)[0]||"";
+  return first ? first.charAt(0).toUpperCase()+first.slice(1).toLowerCase() : "";
+}
+
+function formatDate(value){
+  const date=value?new Date(value):new Date();
+  return isNaN(date)?"—":date.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric"});
+}
+
 function renderOrder(o){
   lastOrder=o;
   const paid=isPaid(o);
+  const name=firstName(o.customer_name);
+  const letter=document.getElementById("letter");
 
+  document.getElementById("kicker").innerHTML=paid
+    ? "COMPRA CONFIRMADA"
+    : '<span class="dot" aria-hidden="true"></span>PAGAMENTO EM CONFIRMAÇÃO';
   document.getElementById("title").textContent=paid
-    ?"Pagamento recebido"
-    :"Pagamento em processamento";
-
+    ? (name ? "Obrigada, "+name+"." : "Obrigada pela sua compra.")
+    : (name ? "Recebemos seu pedido, "+name+"." : "Recebemos seu pedido.");
   document.getElementById("subtitle").textContent=paid
-    ?"Pagamento confirmado. Recebemos seu pagamento e seu pedido está registrado na MONTÊ."
-    :"Seu pedido foi criado e estamos aguardando a confirmação do pagamento pela InfinitePay. Você receberá um e-mail assim que ele for confirmado.";
+    ? "Sua compra foi confirmada. Cada peça MONTÊ é separada à mão e embalada com cuidado para chegar até você."
+    : "Assim que a InfinitePay confirmar o pagamento, esta carta se atualiza sozinha e você recebe um e-mail.";
 
-  document.getElementById("orderBox").innerHTML=
-    '<div class="row"><span class="label">Pedido</span><span class="value">'+esc(o.order_code)+'</span></div>'+
-    '<div class="row"><span class="label">Status</span><span class="value">'+(paid?"PAGO":"PAGAMENTO PENDENTE")+'</span></div>'+
-    '<div class="row"><span class="label">Frete</span><span class="value">'+money(o.shipping)+'</span></div>'+
-    '<div class="total"><span>Total</span><span>'+money(o.total)+'</span></div>';
+  const payment=o.payment_method==="pix"?"Pix":o.payment_method==="credit_card"?"Cartão":"—";
+  document.getElementById("orderMeta").innerHTML=
+    '<div><span>NÚMERO</span><strong>'+esc(o.order_code||"—")+'</strong></div>'+
+    '<div><span>DATA</span><strong>'+esc(formatDate(o.created_at))+'</strong></div>'+
+    '<div><span>PAGAMENTO</span><strong>'+esc(payment)+(paid?" · pago":" · pendente")+'</strong></div>';
 
-  document.getElementById("items").innerHTML=(o.items||[]).map(i=>
-    '<div class="item"><div><div class="item-name">'+esc(i.product_name)+'</div><div class="item-meta">'+
-    (i.variant_color?esc(i.variant_color)+" · ":"")+"Qtd. "+i.quantity+
-    '</div></div><strong>'+money(i.total_price)+'</strong></div>'
-  ).join("");
+  const items=o.items||[];
+  document.getElementById("items").innerHTML=items.length ? items.map(i=>
+    '<div class="item"><span class="item-name">'+esc(i.product_name)+'</span>'+
+    '<span class="item-price">'+money(i.total_price)+'</span>'+
+    '<span class="item-meta">'+(i.variant_color?esc(i.variant_color)+" · ":"")+Number(i.quantity||0)+(Number(i.quantity)===1?" peça":" peças")+'</span></div>'
+  ).join("") : '<p class="letter-text" style="margin:0">Itens do pedido indisponíveis no momento.</p>';
 
-  if(!paid){
-    startPaymentPolling();
-  } else {
-    stopPolling();
+  const subtotal=Number(o.subtotal||0), shipping=Number(o.shipping||0), total=Number(o.total||0);
+  const discount=Math.round((subtotal+shipping-total)*100)/100;
+  document.getElementById("totals").innerHTML=
+    (subtotal?'<div><span>Peças</span><span>'+money(subtotal)+'</span></div>':"")+
+    (discount>0?'<div><span>Desconto Pix</span><span>-'+money(discount)+'</span></div>':"")+
+    '<div><span>Frete</span><span>'+money(shipping)+'</span></div>'+
+    '<div class="grand"><span>TOTAL</span><strong>'+money(total)+'</strong></div>';
+
+  if(wasPaid===false && paid){
+    letter.classList.remove("just-paid");
+    void letter.offsetWidth;
+    letter.classList.add("just-paid");
   }
+  wasPaid=paid;
+
+  if(!paid) startPaymentPolling(); else stopPolling();
+}
+
+function showError(msg){
+  stopPolling();
+  document.getElementById("kicker").textContent="PEDIDO";
+  document.getElementById("title").textContent="Não encontramos seu pedido.";
+  document.getElementById("subtitle").textContent=msg+" Se você concluiu o pagamento, confira seu e-mail ou fale com a MONTÊ.";
+  document.querySelectorAll(".letter-section").forEach(el=>el.hidden=true);
 }
 
 async function loadOrder(){
   try{
-    const o=await fetchOrder();
-    renderOrder(o);
+    renderOrder(await fetchOrder());
   }catch(e){
     showError(e.message||"Não foi possível carregar o pedido agora.");
   }
@@ -110,19 +345,83 @@ function stopPolling(){
   if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
 }
 
-function esc(v){
-  return String(v??"").replace(/[&<>"']/g,m=>({
-    "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"
-  }[m]));
+/* Parallax: a carta inclina com o ponteiro; camadas internas, monograma e
+   poeira dourada se movem em profundidades diferentes. */
+(function setupParallax(){
+  const letter=document.getElementById("letter");
+  const monogram=document.querySelector(".bg-monogram");
+  const dust=document.querySelector(".dust");
+  window.addEventListener("pointermove",e=>{
+    if(reduceMotion.matches||e.pointerType==="touch"||letter.classList.contains("is-closing"))return;
+    const x=e.clientX/window.innerWidth-.5, y=e.clientY/window.innerHeight-.5;
+    letter.style.setProperty("--ry",(x*7).toFixed(2)+"deg");
+    letter.style.setProperty("--rx",(y*-5).toFixed(2)+"deg");
+    letter.style.setProperty("--px",(x*2).toFixed(2));
+    letter.style.setProperty("--py",(y*2).toFixed(2));
+    monogram.style.setProperty("--bx",(x*-40).toFixed(1)+"px");
+    monogram.style.setProperty("--by",(y*-30).toFixed(1)+"px");
+    dust.style.setProperty("--dx",(x*24).toFixed(1)+"px");
+    dust.style.setProperty("--dy",(y*18).toFixed(1)+"px");
+  },{passive:true});
+  let ticking=false;
+  window.addEventListener("scroll",()=>{
+    if(ticking||reduceMotion.matches)return;
+    ticking=true;
+    requestAnimationFrame(()=>{
+      ticking=false;
+      monogram.style.setProperty("--by",(scrollY*-.25).toFixed(1)+"px");
+      dust.style.setProperty("--dy",(scrollY*-.12).toFixed(1)+"px");
+    });
+  },{passive:true});
+})();
+
+/* Retornar ao site: a carta dobra em três, recebe o selo de cera e volta à loja. */
+function homeUrl(){
+  return /onrender\.com$/i.test(location.hostname) ? "https://oficialmontee.com.br/" : "/";
 }
 
-function showError(msg){
-  stopPolling();
-  document.getElementById("content").innerHTML=
-    '<div class="error"><div class="check">!</div><h1>Pedido</h1><p>'+
-    esc(msg)+'</p><a class="back" href="/">Voltar para a MONTÊ</a></div>';
+function closeLetter(){
+  const button=document.getElementById("returnButton");
+  if(button.disabled)return;
+  button.disabled=true;
+  if(reduceMotion.matches){ location.href=homeUrl(); return; }
+
+  const letter=document.getElementById("letter");
+  const stage=document.getElementById("foldStage");
+  const fold=document.getElementById("fold");
+  const seal=document.getElementById("seal");
+  const ring=document.getElementById("sealRing");
+  const veil=document.getElementById("veil");
+  const rect=letter.getBoundingClientRect();
+
+  letter.classList.add("is-closing");
+  ["--rx","--ry","--px","--py"].forEach(n=>letter.style.removeProperty(n));
+
+  // A folha dobrada cabe na tela, com a proporção da carta.
+  const width=Math.min(rect.width, window.innerWidth*.9);
+  const height=Math.min(rect.height, window.innerHeight*.78, width*1.55);
+  fold.style.width=width+"px";
+  fold.style.height=height+"px";
+  const third=height/3;
+  fold.querySelectorAll(".fold-panel").forEach((panel,i)=>{
+    panel.style.height=(third+.5)+"px";
+    panel.style.top=(i*third)+"px";
+  });
+
+  const sealWrap=document.getElementById("sealWrap");
+  const at=(ms,fn)=>setTimeout(fn,ms);
+  at(250,()=>{ stage.hidden=false; });
+  at(820,()=>fold.classList.add("is-folded"));
+  at(1950,()=>{
+    seal.classList.add("is-stamped");
+    at(260,()=>{ ring.classList.add("is-on"); fold.classList.add("is-sealed"); });
+  });
+  at(3000,()=>{ fold.classList.add("is-leaving"); sealWrap.classList.add("is-leaving"); veil.classList.add("is-on"); });
+  at(3650,()=>{ location.href=homeUrl(); });
 }
 
+document.getElementById("returnButton").addEventListener("click",closeLetter);
 loadOrder();
 </script>
-</body></html>
+</body>
+</html>

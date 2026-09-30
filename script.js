@@ -2286,7 +2286,7 @@ document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
     };
 
     // A animação começa na primeira pintura; o script pode carregar depois.
-    const duration = root.classList.contains("intro-reduced") ? 1400 : 3200;
+    const duration = root.classList.contains("intro-reduced") ? 1400 : 4500;
     let timer = setTimeout(finish, Math.max(300, duration - performance.now()));
 
     intro.addEventListener("animationend", event => {
