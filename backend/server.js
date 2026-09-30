@@ -1905,6 +1905,256 @@ app.post("/api/admin/olist/products/delete", requireAdmin, async (req, res) => {
         return res.status(500).json({ success: false, message: "Não foi possível excluir os produtos da Olist." });
     }
 });
+/* =====================================================
+   SKUs — COMPARAÇÃO SITE × OLIST
+   A Olist é só consultada (nenhuma escrita lá). Cada produto do
+   site é casado pelo nome com um produto da Olist e cada variação
+   pela cor; quando o SKU diverge, a correção é feita apenas no
+   site e apenas em produtos que já existem.
+===================================================== */
+const OLIST_SKU_COMPARE_TTL = 15 * 60 * 1000;
+const olistSkuComparisons = new Map();
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+function skuKey(value) {
+    return safeString(value).toUpperCase();
+}
+
+function nameKey(value) {
+    return safeString(value)
+        .normalize("NFD").replace(/[̀-ͯ]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim();
+}
+
+// "preta" e "preto", "marrom" e "marrons": compara sem a última vogal.
+function stemKey(value) {
+    return nameKey(value).split(" ").map(word => word.length > 3 ? word.replace(/[aeos]$/, "") : word).join(" ");
+}
+
+// Tira o nome do produto e a palavra "cor" do começo: "Bag Cannes - café" → "cafe".
+function colorKey(color, productName) {
+    let key = nameKey(color);
+    const base = nameKey(productName);
+    if (base && (key === base || key.startsWith(base + " "))) key = key.slice(base.length).trim();
+    return key.replace(/^cor\s+/, "").trim();
+}
+
+async function olistRead(endpoint) {
+    for (let attempt = 0; ; attempt++) {
+        try {
+            return await olistRequest(endpoint);
+        } catch (error) {
+            if (error?.status === 429 && attempt < 4) {
+                await pause(2500 * (attempt + 1));
+                continue;
+            }
+            throw error;
+        }
+    }
+}
+
+async function listOlistProductsForSku() {
+    const all = [];
+    for (let offset = 0; offset < 5000; offset += 100) {
+        const data = await olistRead("/produtos?limit=100&offset=" + offset);
+        const items = olistItemsFromResponse(data);
+        all.push(...items);
+        const total = Number(data?.paginacao?.total || 0);
+        if (items.length < 100 || (total && all.length >= total)) break;
+        await pause(350);
+    }
+    return all.filter(item => item && item.id && safeString(item.situacao).toUpperCase() !== "E");
+}
+
+function variationColor(variation, parentName) {
+    const grade = Array.isArray(variation?.grade) ? variation.grade : [];
+    const color = grade.find(g => /cor/i.test(safeString(g?.chave))) || (grade.length === 1 ? grade[0] : null);
+    if (color?.valor) return colorKey(color.valor, parentName);
+    return colorKey(variation?.descricao, parentName);
+}
+
+function pickByColor(options, siteColor) {
+    const exact = options.filter(o => o.color === siteColor);
+    if (exact.length === 1) return { match: exact[0] };
+    if (exact.length > 1) return { ambiguous: true };
+    const stem = stemKey(siteColor);
+    const loose = options.filter(o => stemKey(o.color) === stem);
+    if (loose.length === 1) return { match: loose[0] };
+    if (loose.length > 1) return { ambiguous: true };
+    return {};
+}
+
+async function buildOlistSkuComparison() {
+    const [siteProducts, olistList] = await Promise.all([
+        supabaseRequest("products?select=id,name,sku,active,product_variants(id,color,sku,active)&order=name.asc", { method: "GET" }),
+        listOlistProductsForSku()
+    ]);
+    const products = Array.isArray(siteProducts) ? siteProducts : [];
+
+    const byName = new Map();
+    const bySku = new Map();
+    olistList.forEach(item => {
+        const key = nameKey(item.descricao);
+        if (!byName.has(key)) byName.set(key, []);
+        byName.get(key).push(item);
+        if (item.sku) bySku.set(skuKey(item.sku), item);
+    });
+
+    const rows = [];
+    const details = new Map();
+
+    for (const product of products) {
+        const variants = Array.isArray(product.product_variants) ? product.product_variants : [];
+        const candidates = (byName.get(nameKey(product.name)) || []).filter(item => safeString(item.situacao).toUpperCase() !== "I")
+            .concat((byName.get(nameKey(product.name)) || []).filter(item => safeString(item.situacao).toUpperCase() === "I"));
+        const withVariations = candidates.filter(item => safeString(item.tipo).toUpperCase() === "V");
+        let parent = variants.length > 1 ? (withVariations[0] || candidates[0]) : (candidates[0] || null);
+        if (!parent && product.sku && bySku.get(skuKey(product.sku))) {
+            const bySkuItem = bySku.get(skuKey(product.sku));
+            if (stemKey(bySkuItem.descricao) === stemKey(product.name)) parent = bySkuItem;
+        }
+        const ambiguousParent = !parent && candidates.length > 1;
+
+        const base = { product_id: product.id, product_name: product.name, product_active: product.active !== false };
+
+        if (!parent) {
+            rows.push({ ...base, kind: "produto", variant_id: null, color: "", site_sku: safeString(product.sku), olist_sku: "", olist_name: "",
+                status: "sem_par", note: ambiguousParent ? "Mais de um produto com esse nome na Olist." : "Produto não encontrado na Olist pelo nome." });
+            continue;
+        }
+
+        rows.push({ ...base, kind: "produto", variant_id: null, color: "", site_sku: safeString(product.sku), olist_sku: safeString(parent.sku),
+            olist_name: safeString(parent.descricao), status: skuKey(product.sku) === skuKey(parent.sku) ? "ok" : "divergente", note: "" });
+
+        // Variações da Olist: detalhe do produto pai (uma chamada por produto).
+        let options = [];
+        if (safeString(parent.tipo).toUpperCase() === "V") {
+            if (!details.has(parent.id)) {
+                await pause(350);
+                details.set(parent.id, await olistRead("/produtos/" + encodeURIComponent(parent.id)));
+            }
+            const detail = details.get(parent.id) || {};
+            options = (Array.isArray(detail.variacoes) ? detail.variacoes : [])
+                .filter(v => safeString(v?.sku))
+                .map(v => ({ sku: safeString(v.sku), name: safeString(v.descricao) || safeString(parent.descricao), color: variationColor(v, parent.descricao) }));
+        }
+        // Produtos avulsos por cor na Olist ("Bag Cannes - café").
+        olistList.forEach(item => {
+            const key = nameKey(item.descricao);
+            const baseKey = nameKey(product.name);
+            if (item.id !== parent.id && key.startsWith(baseKey + " ") && safeString(item.sku) && !options.some(o => skuKey(o.sku) === skuKey(item.sku))) {
+                options.push({ sku: safeString(item.sku), name: safeString(item.descricao), color: colorKey(item.descricao, product.name) });
+            }
+        });
+
+        for (const variant of variants) {
+            const row = { ...base, kind: "variacao", variant_id: variant.id, color: safeString(variant.color), site_sku: safeString(variant.sku) };
+            if (!options.length && variants.length === 1 && safeString(parent.tipo).toUpperCase() !== "V") {
+                rows.push({ ...row, olist_sku: safeString(parent.sku), olist_name: safeString(parent.descricao),
+                    status: skuKey(variant.sku) === skuKey(parent.sku) ? "ok" : "divergente", note: "Produto simples na Olist." });
+                continue;
+            }
+            let picked = pickByColor(options, colorKey(variant.color, product.name));
+            // Uma cor só dos dois lados: é a mesma peça, mesmo com nomes diferentes.
+            if (!picked.match && !picked.ambiguous && variants.length === 1 && options.length === 1) picked = { match: options[0] };
+            if (!picked.match) {
+                rows.push({ ...row, olist_sku: "", olist_name: "", status: "sem_par",
+                    note: picked.ambiguous ? "Mais de uma variação com essa cor na Olist." : "Cor não encontrada nas variações da Olist." });
+                continue;
+            }
+            rows.push({ ...row, olist_sku: picked.match.sku, olist_name: picked.match.name,
+                status: skuKey(variant.sku) === skuKey(picked.match.sku) ? "ok" : "divergente", note: "" });
+        }
+    }
+
+    // SKU de produto é único no site: não troca para um SKU que outro produto
+    // vai continuar usando.
+    const finalProductSku = new Map(products.map(p => [String(p.id), skuKey(p.sku)]));
+    rows.filter(r => r.kind === "produto" && r.status === "divergente").forEach(r => finalProductSku.set(String(r.product_id), skuKey(r.olist_sku)));
+    const owners = new Map();
+    finalProductSku.forEach((sku, id) => { if (sku) owners.set(sku, (owners.get(sku) || []).concat(id)); });
+    rows.forEach(r => {
+        if (r.kind === "produto" && r.status === "divergente" && (owners.get(skuKey(r.olist_sku)) || []).length > 1) {
+            r.status = "conflito";
+            r.note = "Outro produto do site já usa esse SKU.";
+        }
+    });
+
+    const summary = { ok: 0, divergente: 0, sem_par: 0, conflito: 0 };
+    rows.forEach(r => { summary[r.status] = (summary[r.status] || 0) + 1; });
+    return { rows, summary, olist_products: olistList.length };
+}
+
+app.get("/api/admin/olist/sku-compare", requireAdmin, async (req, res) => {
+    try {
+        const result = await buildOlistSkuComparison();
+        const token = crypto.randomBytes(16).toString("hex");
+        for (const [key, value] of olistSkuComparisons) {
+            if (Date.now() - value.createdAt > OLIST_SKU_COMPARE_TTL) olistSkuComparisons.delete(key);
+        }
+        olistSkuComparisons.set(token, { createdAt: Date.now(), rows: result.rows });
+        return res.json({ success: true, token, generated_at: new Date().toISOString(), ...result });
+    } catch (error) {
+        console.error("SKU site × Olist:", error);
+        const auth = /OLIST_AUTH_REQUIRED/.test(String(error.message));
+        return res.status(502).json({ success: false, message: auth
+            ? "A conexão com a Olist precisa ser autorizada de novo."
+            : "Não foi possível consultar os produtos na Olist agora. Tente de novo em alguns minutos." });
+    }
+});
+
+app.post("/api/admin/olist/sku-sync", requireAdmin, async (req, res) => {
+    try {
+        const saved = olistSkuComparisons.get(safeString(req.body?.token));
+        if (!saved || Date.now() - saved.createdAt > OLIST_SKU_COMPARE_TTL) {
+            return res.status(409).json({ success: false, message: "A comparação expirou. Compare de novo antes de corrigir." });
+        }
+        const pending = saved.rows.filter(r => r.status === "divergente" && r.olist_sku);
+        const updated = [];
+        const skipped = [];
+
+        // Variações: SKU não é único, atualiza direto se ninguém mexeu desde a comparação.
+        for (const row of pending.filter(r => r.kind === "variacao")) {
+            const current = await supabaseRequest("product_variants?id=eq." + encodeURIComponent(row.variant_id) + "&select=sku", { method: "GET" });
+            if (!Array.isArray(current) || !current.length) { skipped.push({ ...row, reason: "Variação não existe mais." }); continue; }
+            if (skuKey(current[0].sku) !== skuKey(row.site_sku)) { skipped.push({ ...row, reason: "SKU mudou desde a comparação." }); continue; }
+            await supabaseRequest("product_variants?id=eq." + encodeURIComponent(row.variant_id), { method: "PATCH", body: JSON.stringify({ sku: row.olist_sku }) });
+            updated.push(row);
+        }
+
+        // Produtos: SKU único. Primeiro libera os SKUs antigos, depois grava os novos.
+        const productRows = [];
+        for (const row of pending.filter(r => r.kind === "produto")) {
+            const current = await supabaseRequest("products?id=eq." + encodeURIComponent(row.product_id) + "&select=sku", { method: "GET" });
+            if (!Array.isArray(current) || !current.length) { skipped.push({ ...row, reason: "Produto não existe mais." }); continue; }
+            if (skuKey(current[0].sku) !== skuKey(row.site_sku)) { skipped.push({ ...row, reason: "SKU mudou desde a comparação." }); continue; }
+            productRows.push(row);
+        }
+        for (const row of productRows) {
+            await supabaseRequest("products?id=eq." + encodeURIComponent(row.product_id), { method: "PATCH", body: JSON.stringify({ sku: "SYNC-" + row.product_id }) });
+        }
+        for (const row of productRows) {
+            try {
+                await supabaseRequest("products?id=eq." + encodeURIComponent(row.product_id), { method: "PATCH", body: JSON.stringify({ sku: row.olist_sku }) });
+                updated.push(row);
+            } catch (error) {
+                console.error("SKU do produto não atualizado:", row.product_id, error.message);
+                await supabaseRequest("products?id=eq." + encodeURIComponent(row.product_id), { method: "PATCH", body: JSON.stringify({ sku: row.site_sku || null }) }).catch(() => {});
+                skipped.push({ ...row, reason: "Outro produto já usa esse SKU." });
+            }
+        }
+
+        olistSkuComparisons.delete(safeString(req.body?.token));
+        console.log("🔁 SKU site ← Olist:", { updated: updated.length, skipped: skipped.length });
+        return res.json({ success: true, updated: updated.length, skipped, changes: updated.map(r => ({ product_name: r.product_name, color: r.color, from: r.site_sku, to: r.olist_sku })) });
+    } catch (error) {
+        console.error("SKU sync:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível corrigir os SKUs no site." });
+    }
+});
+
 app.put("/api/admin/products/:id/variants",requireAdmin,async(req,res)=>{
     try{
         const productId=safeString(req.params.id);
