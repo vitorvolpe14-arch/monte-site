@@ -7731,3 +7731,72 @@ body.cart-open .toast { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); 
     #checkoutTotal.is-bumping { animation: none; transition: none; }
     #cartOverlay .cart { transform: none; }
 }
+
+/* =====================================================
+   CRÉDITO VOLPE — rodapé
+   Discreto: meio apagado até receber o ponteiro. A raposa
+   e o nome levam ao Instagram @volpe_____.
+===================================================== */
+
+.footer-bottom .footer-credit {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    opacity: .55;
+    transition: opacity .35s ease;
+}
+
+.footer-bottom .footer-credit:hover,
+.footer-bottom .footer-credit:focus-within { opacity: 1; }
+
+.footer-bottom .volpe-credit {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 0;
+    color: #fff;
+    font-weight: 500;
+    letter-spacing: .14em;
+    text-decoration: none;
+}
+
+.volpe-mark {
+    width: auto;
+    height: 14px;
+    fill: currentColor;
+    transform-origin: 50% 85%;
+    transition: transform .55s cubic-bezier(.3, 1.6, .5, 1);
+}
+
+.volpe-name { position: relative; }
+
+.volpe-name::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: .14em;
+    bottom: -2px;
+    height: 1px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform .35s ease;
+}
+
+.volpe-credit:hover .volpe-mark,
+.volpe-credit:focus-visible .volpe-mark { transform: rotate(-10deg) scale(1.12); }
+
+.volpe-credit:hover .volpe-name::after,
+.volpe-credit:focus-visible .volpe-name::after { transform: scaleX(1); }
+
+.volpe-credit:focus-visible { outline: 1px solid rgba(255, 255, 255, .6); outline-offset: 3px; }
+
+@media (max-width: 600px) {
+    .footer-bottom .footer-credit { gap: 5px; }
+    .volpe-mark { height: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .volpe-mark,
+    .volpe-name::after { transition: none; }
+}
