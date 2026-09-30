@@ -6492,7 +6492,7 @@ canvas {
     position: fixed;
     inset: 0;
     z-index: 10000;
-    animation: introGone 0s linear 3.15s forwards;
+    animation: introGone 0s linear 4.45s forwards;
 }
 
 .intro-seen .monte-intro {
@@ -6516,14 +6516,14 @@ html.intro-playing body {
 
 .intro-layer-wine {
     background: #6D2234;
-    animation: introLift 1s cubic-bezier(.76, 0, .24, 1) 2.34s forwards;
+    animation: introLift 1.3s cubic-bezier(.76, 0, .24, 1) 3.25s forwards;
 }
 
 .intro-layer-paper {
     background: #ffffff;
     display: grid;
     place-items: center;
-    animation: introLift .92s cubic-bezier(.76, 0, .24, 1) 2.2s forwards;
+    animation: introLift 1.2s cubic-bezier(.76, 0, .24, 1) 3.05s forwards;
 }
 
 @keyframes introLift {
@@ -6537,7 +6537,7 @@ html.intro-playing body {
     gap: 22px;
     translate: var(--ix, 0px) var(--iy, 0px);
     transition: translate .6s cubic-bezier(.2, .7, .2, 1);
-    animation: introStageOut .92s cubic-bezier(.76, 0, .24, 1) 2.2s forwards;
+    animation: introStageOut 1.2s cubic-bezier(.76, 0, .24, 1) 3.05s forwards;
 }
 
 /* A cortina sobe 100%; a logo desce 42% dentro dela: sobe mais devagar. */
@@ -6559,8 +6559,8 @@ html.intro-playing body {
     stroke-dasharray: 1;
     stroke-dashoffset: 1;
     animation:
-        introDraw 1s cubic-bezier(.65, 0, .35, 1) calc(.2s + var(--i) * .1s) forwards,
-        introFill .55s ease calc(1.05s + var(--i) * .07s) forwards;
+        introDraw 1.35s cubic-bezier(.65, 0, .35, 1) calc(.3s + var(--i) * .14s) forwards,
+        introFill .75s ease calc(1.5s + var(--i) * .09s) forwards;
 }
 
 @keyframes introDraw {
@@ -6577,7 +6577,7 @@ html.intro-playing body {
     height: 1px;
     background: #6D2234;
     transform: scaleX(0);
-    animation: introRule .7s cubic-bezier(.65, 0, .35, 1) 1.4s forwards;
+    animation: introRule .95s cubic-bezier(.65, 0, .35, 1) 2s forwards;
 }
 
 @keyframes introRule {
@@ -6591,7 +6591,7 @@ html.intro-playing body {
     letter-spacing: .62em;
     color: #6D2234;
     opacity: 0;
-    animation: introTag .9s ease 1.6s forwards;
+    animation: introTag 1.15s ease 2.25s forwards;
 }
 
 @keyframes introTag {
@@ -6601,12 +6601,12 @@ html.intro-playing body {
 
 /* O site aparece depois da cortina: foto do topo assenta, cabeçalho desce. */
 html:not(.intro-seen) #carouselSlides {
-    animation: introHero 1.7s cubic-bezier(.2, .7, .2, 1) 2.5s both;
+    animation: introHero 2s cubic-bezier(.2, .7, .2, 1) 3.45s both;
 }
 
 html:not(.intro-seen) .shipping-bar,
 html:not(.intro-seen) .header {
-    animation: introHeader .9s cubic-bezier(.2, .7, .2, 1) 2.75s both;
+    animation: introHeader 1s cubic-bezier(.2, .7, .2, 1) 3.8s both;
 }
 
 @keyframes introHero {
