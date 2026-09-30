@@ -1768,6 +1768,7 @@ function renderHomepageCarousel(images){
   carouselSlides.forEach((_,index)=>{
     const dot=document.createElement("button");
     dot.className="carousel-dot"+(index===0?" active":"");
+    dot.type="button";dot.setAttribute("aria-label","Mostrar banner "+(index+1));
     dot.addEventListener("click",()=>{currentSlide=index;showSlide(currentSlide)});
     dots.appendChild(dot);
   });

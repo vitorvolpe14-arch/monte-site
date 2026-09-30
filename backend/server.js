@@ -123,6 +123,11 @@ async function getOlistAccessToken() {
     let data = {};
     try { data = textResponse ? JSON.parse(textResponse) : {}; } catch { data = {raw:textResponse}; }
     if (!response.ok || !data.access_token) {
+        console.error("Olist OAuth: renovação recusada", {
+            status: response.status,
+            error: safeString(data.error) || null,
+            description: safeString(data.error_description || data.message) || null
+        });
         throw new Error("OLIST_AUTH_REFRESH_FAILED");
     }
     olistAccessToken = data.access_token;
@@ -515,7 +520,7 @@ async function runPendingOlistSync() {
     }
 }
 
-app.get("/api/olist/config-check", (req, res) => {
+app.get("/api/olist/config-check", requireAdmin, (req, res) => {
     return res.json({
         configured: Boolean(OLIST_CLIENT_ID && OLIST_CLIENT_SECRET),
         client_id_suffix: safeString(OLIST_CLIENT_ID).slice(-6) || null,
@@ -525,6 +530,10 @@ app.get("/api/olist/config-check", (req, res) => {
 });
 
 app.get("/api/olist/auth", (req, res) => {
+    // Só quem está logado no painel pode trocar a conta Olist que recebe os pedidos.
+    if (!getAdminSession(req)) {
+        return res.status(401).send("<p style=\"font-family:sans-serif\">Entre no painel da MONTÊ (<a href=\"/admin\">/admin</a>) e use o botão <strong>Reconectar Olist</strong> na aba Estoque.</p>");
+    }
     if (!OLIST_CLIENT_ID || !OLIST_CLIENT_SECRET) {
         return res.status(503).send("Olist OAuth não está configurado no servidor.");
     }
@@ -611,7 +620,7 @@ app.get("/api/olist/callback", async (req, res) => {
     }
 });
 
-app.get("/api/olist/health", async (req,res) => {
+app.get("/api/olist/health", requireAdmin, async (req,res) => {
     try {
         if (!OLIST_TOKEN && !(OLIST_CLIENT_ID && (olistRefreshToken || OLIST_REFRESH_TOKEN))) {
             return res.status(503).json({success:false,configured:false,message:"Credenciais Olist não configuradas."});
@@ -724,20 +733,6 @@ app.post("/api/admin/olist/sync-paid-order", requireAdmin, async (req, res) => {
     }
 });
 
-// TESTE TEMPORÁRIO — somente leitura. Aceita apenas o SKU real de teste MUNCH1.
-app.get("/api/olist/test-product", async (req, res) => {
-    try {
-        const sku = safeString(req.query.sku).toUpperCase();
-        if (!["MUNCH1"].includes(sku)) {
-            return res.status(400).json({success:false,message:"SKU de teste não permitido."});
-        }
-        const product = await findOlistProductBySku(sku);
-        return res.json({success:true,sku,product});
-    } catch (error) {
-        console.error("Olist test product:", error);
-        return res.status(502).json({success:false,message:String(error.message || "Falha ao consultar produto na Olist.")});
-    }
-});
 
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://uvrhougaurupvkxmezwy.supabase.co";
@@ -2098,9 +2093,9 @@ app.get("/api/admin/olist/sku-compare", requireAdmin, async (req, res) => {
         return res.json({ success: true, token, generated_at: new Date().toISOString(), ...result });
     } catch (error) {
         console.error("SKU site × Olist:", error);
-        const auth = /OLIST_AUTH_REQUIRED/.test(String(error.message));
-        return res.status(502).json({ success: false, message: auth
-            ? "A conexão com a Olist precisa ser autorizada de novo."
+        const auth = /OLIST_AUTH_(REQUIRED|REFRESH_FAILED)/.test(String(error.message));
+        return res.status(502).json({ success: false, reconnect: auth, message: auth
+            ? "A conexão com a Olist expirou. Clique em RECONECTAR OLIST, entre na Olist e autorize de novo."
             : "Não foi possível consultar os produtos na Olist agora. Tente de novo em alguns minutos." });
     }
 });
@@ -4421,7 +4416,7 @@ ${image ? `<meta property="og:image" content="${xmlEscape(image)}">` : ""}
 <meta name="twitter:title" content="${xmlEscape(title)}">
 <meta name="twitter:description" content="${xmlEscape(description.slice(0, 200))}">
 ${image ? `<meta name="twitter:image" content="${xmlEscape(image)}">` : ""}
-<script type="application/ld+json">${JSON.stringify(schema)}</script>
+<script type="application/ld+json">${JSON.stringify(schema).replace(/</g, "\\u003c")}</script>
 </head>
 <body>
 <main style="max-width:900px;margin:40px auto;padding:20px;font-family:Arial,sans-serif">
@@ -4513,12 +4508,26 @@ app.use("/backend", (req, res, next) => {
     return res.status(404).send("Não encontrado.");
 });
 
+// Arquivos e pastas ocultos (.git, .env...) nunca são públicos.
+app.use((req, res, next) => {
+    if (/(^|\/)\.(?!well-known\/)/.test(req.path)) return res.status(404).send("Não encontrado.");
+    return next();
+});
+
 app.use(
     express.static(
         path.join(
             __dirname,
             ".."
-        )
+        ),
+        {
+            dotfiles: "deny",
+            maxAge: "1d",
+            setHeaders: (res, filePath) => {
+                // Páginas sempre revalidadas; CSS, JS e imagens ficam 1 dia no navegador.
+                if (filePath.endsWith(".html")) res.setHeader("Cache-Control", "no-cache");
+            }
+        }
     )
 );
 
@@ -4545,5 +4554,16 @@ app.listen(
         // são processados automaticamente, sem tocar no fluxo do pagamento.
         setTimeout(() => runPendingOlistSync().catch(() => {}), 10000);
         setInterval(() => runPendingOlistSync().catch(() => {}), 60000);
+
+        // O refresh token da Olist vence se ficar sem uso; renova a cada 3 horas
+        // enquanto o servidor estiver no ar, mesmo sem vendas.
+        setInterval(() => {
+            if (!OLIST_CLIENT_ID || !OLIST_CLIENT_SECRET) return;
+            olistAccessToken = null;
+            olistAccessTokenExpiresAt = 0;
+            getOlistAccessToken()
+                .then(() => console.log("🔑 Acesso Olist renovado."))
+                .catch(error => console.warn("Olist: renovação periódica falhou:", error.message));
+        }, 3 * 60 * 60 * 1000);
 }
 );
