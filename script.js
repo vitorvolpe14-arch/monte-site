@@ -2281,12 +2281,19 @@ document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
         intro.remove();
     };
 
-    // A animação começa na primeira pintura; o script pode carregar depois.
+    // A animação começa quando a página aparece, o que no celular pode levar
+    // alguns segundos depois da navegação. Conta o tempo pela própria animação.
     const duration = root.classList.contains("intro-reduced") ? 1400 : 4500;
-    let timer = setTimeout(finish, Math.max(300, duration - performance.now()));
+    const own = intro.getAnimations ? intro.getAnimations().find(a => a.effect && a.effect.target === intro && !a.effect.pseudoElement) : null;
+    let remaining = duration;
+    if (own && typeof own.currentTime === "number") {
+        const timing = own.effect.getComputedTiming();
+        remaining = Number(timing.endTime || duration) - own.currentTime + 50;
+    }
+    let timer = setTimeout(finish, Math.max(300, remaining));
 
     intro.addEventListener("animationend", event => {
-        if (event.target === intro) finish();
+        if (event.target === intro && !event.pseudoElement) finish();
     });
 
     const stage = intro.querySelector(".intro-stage");

@@ -7,8 +7,9 @@
     <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
     <script>
       (function () {
-        var root = document.documentElement, seen = false;
-        try { seen = sessionStorage.getItem("monteIntroSeen") === "1"; sessionStorage.setItem("monteIntroSeen", "1"); } catch (e) {}
+        // A abertura toca na chegada e de novo depois de 10 minutos fora do site.
+        var root = document.documentElement, seen = false, now = Date.now();
+        try { seen = now - Number(localStorage.getItem("monteIntroAt") || 0) < 600000; localStorage.setItem("monteIntroAt", String(now)); } catch (e) {}
         root.classList.add(seen || location.hash ? "intro-seen" : "intro-playing");
         if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) root.classList.add("intro-reduced");
       })();
@@ -40,7 +41,7 @@
     <meta name="twitter:description" content="Conheça a coleção MONTÊ e compre online.">
     <meta name="twitter:image" content="https://oficialmontee.com.br/backend/assets/carousel-photo-1.webp">
 
-    <link rel="stylesheet" href="style.css?v=20260930-checkout">
+    <link rel="stylesheet" href="style.css?v=20260930-abertura-mobile">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1049,7 +1050,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
-<script src="script.js?v=20260930-checkout"></script>
+<script src="script.js?v=20260930-abertura-mobile"></script>
 
 </body>
 </html>
