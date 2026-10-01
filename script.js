@@ -2268,6 +2268,9 @@ document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
         root.classList.add("intro-done");
         window.removeEventListener("pointermove", onMove);
         intro.remove();
+        // Link para uma seção (ex.: /#colecao): vai até ela quando a abertura termina.
+        const target = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)));
+        if (target) requestAnimationFrame(() => target.scrollIntoView());
     };
 
     // A animação começa quando a página aparece, o que no celular pode levar
