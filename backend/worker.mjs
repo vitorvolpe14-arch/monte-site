@@ -13,8 +13,19 @@ setSiteAssets(env.ASSETS);
 app.listen(3000);
 const http = httpServerHandler({ port: 3000 });
 
+// www e o endereço de teste (*.workers.dev) levam ao domínio da loja. Só GET/HEAD:
+// os avisos de pagamento (POST) de checkouts antigos continuam sendo atendidos.
+const SITE_HOST = "oficialmontee.com.br";
+
+function redirectToSite(request) {
+    if (request.method !== "GET" && request.method !== "HEAD") return null;
+    const url = new URL(request.url);
+    if (url.hostname !== "www." + SITE_HOST && !url.hostname.endsWith(".workers.dev")) return null;
+    return Response.redirect("https://" + SITE_HOST + url.pathname + url.search, 301);
+}
+
 export default {
-    fetch: (request, env, ctx) => http.fetch(request, env, ctx),
+    fetch: (request, env, ctx) => redirectToSite(request) || http.fetch(request, env, ctx),
     scheduled(controller, env, ctx) {
         ctx.waitUntil(runScheduledTask(controller.cron));
     }
