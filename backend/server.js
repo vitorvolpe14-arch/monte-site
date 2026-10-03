@@ -1946,12 +1946,14 @@ app.post("/api/admin/olist/products/delete", requireAdmin, async (req, res) => {
 /* =====================================================
    SKUs — COMPARAÇÃO SITE × OLIST
    A Olist é só consultada (nenhuma escrita lá). Cada produto do
-   site é casado pelo nome com um produto da Olist e cada variação
-   pela cor; quando o SKU diverge, a correção é feita apenas no
-   site e apenas em produtos que já existem.
+   site é casado com um produto da Olist (mesmo nome, nome parecido
+   ou mesmo SKU) e cada variação com uma variação dele (mesmo SKU,
+   mesma cor ou cor equivalente). Quando o SKU diverge, a correção é
+   feita apenas no site e apenas em produtos que já existem. Pares
+   incertos ficam como sugestão e itens sem par podem ser escolhidos
+   à mão no painel.
 ===================================================== */
-const OLIST_SKU_COMPARE_TTL = 15 * 60 * 1000;
-const olistSkuComparisons = new Map();
+const OLIST_SKU_COMPARE_TTL = 30 * 60 * 1000;
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function skuKey(value) {
@@ -1971,12 +1973,54 @@ function stemKey(value) {
     return nameKey(value).split(" ").map(word => word.length > 3 ? word.replace(/[aeos]$/, "") : word).join(" ");
 }
 
+// Nome sem espaços e sem "Bag"/"Bolsa": "Bolsa Porto Fino" → "portofino".
+const GENERIC_NAME_WORDS = new Set(["bag", "bags", "bolsa", "bolsas"]);
+function coreKey(value) {
+    return nameKey(value).split(" ").filter(word => word && !GENERIC_NAME_WORDS.has(word)).join("");
+}
+
 // Tira o nome do produto e a palavra "cor" do começo: "Bag Cannes - café" → "cafe".
 function colorKey(color, productName) {
     let key = nameKey(color);
     const base = nameKey(productName);
     if (base && (key === base || key.startsWith(base + " "))) key = key.slice(base.length).trim();
     return key.replace(/^cor\s+/, "").trim();
+}
+
+// Cores que aparecem com nomes diferentes no site e na Olist.
+const COLOR_GROUPS = [
+    ["bordo", "vinho", "burgundy", "marsala", "bordeaux"],
+    ["off", "off white", "offwhite", "gelo"],
+    ["preta", "preto", "black", "negra"],
+    ["caramelo", "camel", "conhaque"],
+    ["ouro", "dourado", "dourada", "gold"],
+    ["prata", "prateado", "prateada", "silver"]
+].map(group => group.map(stemKey));
+function colorGroup(key) {
+    const stem = stemKey(key);
+    return COLOR_GROUPS.findIndex(group => group.includes(stem));
+}
+
+// Semelhança entre dois textos (0 a 1), por pares de letras.
+function similarity(a, b) {
+    if (!a || !b) return 0;
+    if (a === b) return 1;
+    const grams = text => {
+        const map = new Map();
+        for (let i = 0; i < text.length - 1; i++) map.set(text.slice(i, i + 2), (map.get(text.slice(i, i + 2)) || 0) + 1);
+        return map;
+    };
+    const ga = grams(a), gb = grams(b);
+    let both = 0;
+    ga.forEach((count, gram) => { both += Math.min(count, gb.get(gram) || 0); });
+    return (2 * both) / Math.max(1, a.length + b.length - 2);
+}
+
+function nameScore(a, b) {
+    const ca = coreKey(a), cb = coreKey(b);
+    let score = similarity(ca, cb);
+    if (ca.length >= 4 && cb.length >= 4 && (ca.startsWith(cb) || cb.startsWith(ca))) score = Math.max(score, 0.8);
+    return score;
 }
 
 async function olistRead(endpoint) {
@@ -2024,6 +2068,9 @@ function pickByColor(options, siteColor) {
     return {};
 }
 
+const isOlistTipo = (item, tipo) => safeString(item?.tipo).toUpperCase() === tipo;
+const isOlistInactive = item => safeString(item?.situacao).toUpperCase() === "I";
+
 async function buildOlistSkuComparison() {
     const [siteProducts, olistList] = await Promise.all([
         supabaseRequest("products?select=id,name,sku,active,product_variants(id,color,sku,active)&order=name.asc", { method: "GET" }),
@@ -2040,40 +2087,101 @@ async function buildOlistSkuComparison() {
         if (item.sku) bySku.set(skuKey(item.sku), item);
     });
 
-    const rows = [];
     const details = new Map();
+    async function detailOf(id) {
+        if (!details.has(String(id))) {
+            await pause(350);
+            details.set(String(id), await olistRead("/produtos/" + encodeURIComponent(id)));
+        }
+        return details.get(String(id)) || {};
+    }
+
+    // Se o item achado for uma variação, sobe para o produto pai.
+    async function parentOf(item) {
+        const detail = await detailOf(item.id);
+        const pai = detail?.produtoPai;
+        if (pai?.id && String(pai.id) !== String(item.id)) {
+            return olistList.find(o => String(o.id) === String(pai.id)) || { id: pai.id, sku: pai.sku, descricao: pai.descricao, tipo: "V" };
+        }
+        return item;
+    }
+
+    async function findBySku(sku) {
+        let item = bySku.get(sku);
+        if (!item) {
+            await pause(350);
+            const data = await olistRead("/produtos?codigo=" + encodeURIComponent(sku) + "&limit=20");
+            item = olistItemsFromResponse(data).find(p => skuKey(p.sku || p.codigo) === sku) || null;
+        }
+        if (!item || safeString(item.situacao).toUpperCase() === "E") return null;
+        return parentOf(item);
+    }
+
+    function preferred(list, variantCount) {
+        const sorted = list.filter(i => !isOlistInactive(i)).concat(list.filter(isOlistInactive));
+        const withVariations = sorted.filter(i => isOlistTipo(i, "V"));
+        return variantCount > 1 ? (withVariations[0] || sorted[0]) : sorted[0];
+    }
+
+    // Produto da Olist para um produto do site. sure=false vira sugestão no painel.
+    async function findParent(product, variants) {
+        const exact = byName.get(nameKey(product.name)) || [];
+        if (exact.length) return { item: preferred(exact, variants.length), sure: true, how: "" };
+
+        const core = coreKey(product.name);
+        const sameCore = core.length >= 3 ? olistList.filter(i => coreKey(i.descricao) === core) : [];
+        if (sameCore.length) return { item: preferred(sameCore, variants.length), sure: true, how: "Nome na Olist: " };
+
+        {
+            // SKU das cores só em produtos ativos: em rascunhos ele costuma estar repetido.
+            const skus = [...new Set([product.sku, ...(product.active !== false ? variants.map(v => v.sku) : [])].map(skuKey).filter(Boolean))];
+            for (const sku of skus) {
+                const item = await findBySku(sku);
+                if (item) {
+                    const sure = nameScore(product.name, item.descricao) >= 0.5;
+                    return { item, sure, how: sure ? "Achado pelo SKU " + sku + ". Na Olist: " : "Achado pelo SKU " + sku + ", mas o nome é diferente. Na Olist: " };
+                }
+            }
+        }
+
+        const scored = olistList
+            .filter(i => !/ - /.test(safeString(i.descricao)))
+            .map(i => ({ item: i, score: nameScore(product.name, i.descricao) }))
+            .sort((a, b) => b.score - a.score);
+        const [best, second] = scored;
+        if (best && best.score >= 0.75 && (!second || second.score < best.score - 0.1)) {
+            return { item: best.item, sure: false, how: "Nome parecido na Olist: " };
+        }
+        return { item: null, candidates: scored.filter(s => s.score >= 0.4).slice(0, 8).map(s => s.item) };
+    }
+
+    const rows = [];
+    const choiceOf = item => ({ sku: safeString(item.sku), name: safeString(item.descricao || item.name) });
 
     for (const product of products) {
         const variants = Array.isArray(product.product_variants) ? product.product_variants : [];
-        const candidates = (byName.get(nameKey(product.name)) || []).filter(item => safeString(item.situacao).toUpperCase() !== "I")
-            .concat((byName.get(nameKey(product.name)) || []).filter(item => safeString(item.situacao).toUpperCase() === "I"));
-        const withVariations = candidates.filter(item => safeString(item.tipo).toUpperCase() === "V");
-        let parent = variants.length > 1 ? (withVariations[0] || candidates[0]) : (candidates[0] || null);
-        if (!parent && product.sku && bySku.get(skuKey(product.sku))) {
-            const bySkuItem = bySku.get(skuKey(product.sku));
-            if (stemKey(bySkuItem.descricao) === stemKey(product.name)) parent = bySkuItem;
-        }
-        const ambiguousParent = !parent && candidates.length > 1;
-
         const base = { product_id: product.id, product_name: product.name, product_active: product.active !== false };
+        const found = await findParent(product, variants);
+        const parent = found.item;
 
         if (!parent) {
-            rows.push({ ...base, kind: "produto", variant_id: null, color: "", site_sku: safeString(product.sku), olist_sku: "", olist_name: "",
-                status: "sem_par", note: ambiguousParent ? "Mais de um produto com esse nome na Olist." : "Produto não encontrado na Olist pelo nome." });
+            rows.push({ ...base, key: "p:" + product.id, kind: "produto", variant_id: null, color: "", site_sku: safeString(product.sku),
+                olist_sku: "", olist_name: "", status: "sem_par",
+                note: found.candidates?.length ? "Não achamos o par sozinhos. Escolha o produto da Olist abaixo." : "Produto não encontrado na Olist.",
+                choices: (found.candidates || []).filter(i => safeString(i.sku)).map(choiceOf) });
             continue;
         }
 
-        rows.push({ ...base, kind: "produto", variant_id: null, color: "", site_sku: safeString(product.sku), olist_sku: safeString(parent.sku),
-            olist_name: safeString(parent.descricao), status: skuKey(product.sku) === skuKey(parent.sku) ? "ok" : "divergente", note: "" });
+        const sameProductSku = skuKey(product.sku) === skuKey(parent.sku);
+        rows.push({ ...base, key: "p:" + product.id, kind: "produto", variant_id: null, color: "", site_sku: safeString(product.sku),
+            olist_sku: safeString(parent.sku), olist_name: safeString(parent.descricao),
+            status: sameProductSku ? "ok" : (found.sure ? "divergente" : "sugerido"),
+            note: found.how ? found.how + safeString(parent.descricao) : "" });
 
-        // Variações da Olist: detalhe do produto pai (uma chamada por produto).
+        // Variações da Olist: detalhe do produto pai.
         let options = [];
-        if (safeString(parent.tipo).toUpperCase() === "V") {
-            if (!details.has(parent.id)) {
-                await pause(350);
-                details.set(parent.id, await olistRead("/produtos/" + encodeURIComponent(parent.id)));
-            }
-            const detail = details.get(parent.id) || {};
+        if (isOlistTipo(parent, "V")) {
+            const detail = await detailOf(parent.id);
             options = (Array.isArray(detail.variacoes) ? detail.variacoes : [])
                 .filter(v => safeString(v?.sku))
                 .map(v => ({ sku: safeString(v.sku), name: safeString(v.descricao) || safeString(parent.descricao), color: variationColor(v, parent.descricao) }));
@@ -2087,40 +2195,96 @@ async function buildOlistSkuComparison() {
             }
         });
 
-        for (const variant of variants) {
-            const row = { ...base, kind: "variacao", variant_id: variant.id, color: safeString(variant.color), site_sku: safeString(variant.sku) };
-            if (!options.length && variants.length === 1 && safeString(parent.tipo).toUpperCase() !== "V") {
-                rows.push({ ...row, olist_sku: safeString(parent.sku), olist_name: safeString(parent.descricao),
-                    status: skuKey(variant.sku) === skuKey(parent.sku) ? "ok" : "divergente", note: "Produto simples na Olist." });
-                continue;
-            }
-            let picked = pickByColor(options, colorKey(variant.color, product.name));
-            // Uma cor só dos dois lados: é a mesma peça, mesmo com nomes diferentes.
-            if (!picked.match && !picked.ambiguous && variants.length === 1 && options.length === 1) picked = { match: options[0] };
-            if (!picked.match) {
-                rows.push({ ...row, olist_sku: "", olist_name: "", status: "sem_par",
-                    note: picked.ambiguous ? "Mais de uma variação com essa cor na Olist." : "Cor não encontrada nas variações da Olist." });
-                continue;
-            }
-            rows.push({ ...row, olist_sku: picked.match.sku, olist_name: picked.match.name,
-                status: skuKey(variant.sku) === skuKey(picked.match.sku) ? "ok" : "divergente", note: "" });
+        const variantRow = (variant, option, how) => {
+            const row = { ...base, key: "v:" + variant.id, kind: "variacao", variant_id: variant.id, color: safeString(variant.color), site_sku: safeString(variant.sku) };
+            if (!option) return row;
+            const same = skuKey(variant.sku) === skuKey(option.sku);
+            const sure = found.sure && how.sure;
+            const note = same ? "" : (how.note || (found.sure ? "" : "Depende do produto sugerido acima."));
+            return { ...row, olist_sku: option.sku, olist_name: option.name, status: same ? "ok" : (sure ? "divergente" : "sugerido"), note };
+        };
+
+        if (!options.length && variants.length === 1 && !isOlistTipo(parent, "V")) {
+            rows.push(variantRow(variants[0], { sku: safeString(parent.sku), name: safeString(parent.descricao) }, { sure: true, note: "Produto simples na Olist." }));
+            continue;
         }
+
+        const used = new Set();
+        const free = () => options.filter(o => !used.has(o));
+        let pending = [];
+        const done = new Map();
+
+        // 1. Mesmo SKU dos dois lados: é a mesma peça, mesmo com a cor escrita diferente.
+        variants.forEach(variant => {
+            const option = skuKey(variant.sku) && free().find(o => skuKey(o.sku) === skuKey(variant.sku));
+            if (option) { used.add(option); done.set(variant.id, variantRow(variant, option, { sure: true, note: "" })); }
+            else pending.push(variant);
+        });
+
+        // 2. Mesma cor.
+        pending = pending.filter(variant => {
+            const picked = pickByColor(free(), colorKey(variant.color, product.name));
+            if (!picked.match) return true;
+            used.add(picked.match);
+            done.set(variant.id, variantRow(variant, picked.match, { sure: true, note: "" }));
+            return false;
+        });
+
+        // 3. Uma cor só dos dois lados: é a mesma peça, mesmo com nomes diferentes.
+        if (pending.length === 1 && variants.length === 1 && free().length === 1) {
+            const option = free()[0];
+            used.add(option);
+            done.set(pending[0].id, variantRow(pending[0], option, { sure: true, note: "Cor na Olist: " + option.name }));
+            pending = [];
+        }
+
+        // 4. Cor equivalente (Bordô ↔ Vinho...): sugestão.
+        pending = pending.filter(variant => {
+            const group = colorGroup(colorKey(variant.color, product.name));
+            if (group < 0) return true;
+            const same = free().filter(o => colorGroup(o.color) === group);
+            if (same.length !== 1) return true;
+            used.add(same[0]);
+            done.set(variant.id, variantRow(variant, same[0], { sure: false, note: "Cor parecida na Olist: " + same[0].name }));
+            return false;
+        });
+
+        // 5. Sobrou uma variação de cada lado: sugestão.
+        if (pending.length === 1 && free().length === 1) {
+            const option = free()[0];
+            used.add(option);
+            done.set(pending[0].id, variantRow(pending[0], option, { sure: false, note: "Única variação sem par dos dois lados. Na Olist: " + option.name }));
+            pending = [];
+        }
+
+        // 6. Sem par: escolha manual entre as variações da Olist que sobraram.
+        pending.forEach(variant => {
+            const remaining = free().length ? free() : options;
+            done.set(variant.id, { ...variantRow(variant, null), olist_sku: "", olist_name: "", status: "sem_par",
+                note: remaining.length ? "Cor não encontrada na Olist. Escolha a variação abaixo." : "Cor não encontrada nas variações da Olist.",
+                choices: remaining.map(o => ({ sku: o.sku, name: o.name })) });
+        });
+
+        variants.forEach(variant => rows.push(done.get(variant.id)));
     }
 
     // SKU de produto é único no site: não troca para um SKU que outro produto
-    // vai continuar usando.
-    const finalProductSku = new Map(products.map(p => [String(p.id), skuKey(p.sku)]));
-    rows.filter(r => r.kind === "produto" && r.status === "divergente").forEach(r => finalProductSku.set(String(r.product_id), skuKey(r.olist_sku)));
-    const owners = new Map();
-    finalProductSku.forEach((sku, id) => { if (sku) owners.set(sku, (owners.get(sku) || []).concat(id)); });
-    rows.forEach(r => {
-        if (r.kind === "produto" && r.status === "divergente" && (owners.get(skuKey(r.olist_sku)) || []).length > 1) {
-            r.status = "conflito";
-            r.note = "Outro produto do site já usa esse SKU.";
-        }
+    // vai continuar usando. Em empate, o par certo ganha da sugestão.
+    const changing = rows.filter(r => r.kind === "produto" && (r.status === "divergente" || r.status === "sugerido"));
+    const holders = new Map();
+    products.forEach(p => {
+        if (!skuKey(p.sku) || changing.some(r => r.product_id === p.id)) return;
+        holders.set(skuKey(p.sku), (holders.get(skuKey(p.sku)) || 0) + 1);
+    });
+    const bySkuChanging = new Map();
+    changing.forEach(r => bySkuChanging.set(skuKey(r.olist_sku), (bySkuChanging.get(skuKey(r.olist_sku)) || []).concat(r)));
+    bySkuChanging.forEach((list, sku) => {
+        const sure = list.filter(r => r.status === "divergente");
+        const blocked = holders.get(sku) ? list : (list.length > 1 ? (sure.length === 1 ? list.filter(r => r.status !== "divergente") : list) : []);
+        blocked.forEach(r => { r.status = "conflito"; r.note = "Outro produto do site já usa esse SKU."; });
     });
 
-    const summary = { ok: 0, divergente: 0, sem_par: 0, conflito: 0 };
+    const summary = { ok: 0, divergente: 0, sugerido: 0, sem_par: 0, conflito: 0 };
     rows.forEach(r => { summary[r.status] = (summary[r.status] || 0) + 1; });
     return { rows, summary, olist_products: olistList.length };
 }
@@ -2128,11 +2292,12 @@ async function buildOlistSkuComparison() {
 app.get("/api/admin/olist/sku-compare", requireAdmin, async (req, res) => {
     try {
         const result = await buildOlistSkuComparison();
-        const token = crypto.randomBytes(16).toString("hex");
-        for (const [key, value] of olistSkuComparisons) {
-            if (Date.now() - value.createdAt > OLIST_SKU_COMPARE_TTL) olistSkuComparisons.delete(key);
-        }
-        olistSkuComparisons.set(token, { createdAt: Date.now(), rows: result.rows });
+        // A comparação vai assinada para o painel: no Workers cada requisição
+        // pode cair em outra instância, então nada fica guardado em memória.
+        const actionable = result.rows
+            .filter(r => r.status === "divergente" || r.status === "sugerido" || (r.choices && r.choices.length))
+            .map(r => ({ k: r.key, t: r.kind === "produto" ? "p" : "v", p: r.product_id, v: r.variant_id, f: r.site_sku, s: r.status, o: r.olist_sku, c: (r.choices || []).map(c => c.sku), n: r.product_name, cor: r.color }));
+        const token = createSignedToken({ purpose: "sku-sync", rows: actionable }, OLIST_SKU_COMPARE_TTL);
         return res.json({ success: true, token, generated_at: new Date().toISOString(), ...result });
     } catch (error) {
         console.error("SKU site × Olist:", error);
@@ -2145,48 +2310,72 @@ app.get("/api/admin/olist/sku-compare", requireAdmin, async (req, res) => {
 
 app.post("/api/admin/olist/sku-sync", requireAdmin, async (req, res) => {
     try {
-        const saved = olistSkuComparisons.get(safeString(req.body?.token));
-        if (!saved || Date.now() - saved.createdAt > OLIST_SKU_COMPARE_TTL) {
+        const saved = verifySignedToken(req.body?.token);
+        if (!saved || saved.purpose !== "sku-sync" || !Array.isArray(saved.rows)) {
             return res.status(409).json({ success: false, message: "A comparação expirou. Compare de novo antes de corrigir." });
         }
-        const pending = saved.rows.filter(r => r.status === "divergente" && r.olist_sku);
+        const accept = new Set(Array.isArray(req.body?.accept) ? req.body.accept.map(safeString) : []);
+        const picks = req.body?.picks && typeof req.body.picks === "object" ? req.body.picks : {};
+
+        // Só entra o que a comparação permitiu: divergentes, sugestões aceitas e
+        // escolhas manuais entre as opções que ela mostrou.
+        const pending = [];
+        saved.rows.forEach(r => {
+            let target = "";
+            const pick = skuKey(picks[r.k]);
+            if (pick && Array.isArray(r.c) && r.c.some(sku => skuKey(sku) === pick)) target = r.c.find(sku => skuKey(sku) === pick);
+            else if (r.s === "divergente") target = r.o;
+            else if (r.s === "sugerido" && accept.has(r.k)) target = r.o;
+            if (target && skuKey(target) !== skuKey(r.f)) pending.push({ ...r, target });
+        });
+
         const updated = [];
         const skipped = [];
+        const label = r => ({ product_name: r.n, color: r.cor || "" });
 
-        // Variações: SKU não é único, atualiza direto se ninguém mexeu desde a comparação.
-        for (const row of pending.filter(r => r.kind === "variacao")) {
-            const current = await supabaseRequest("product_variants?id=eq." + encodeURIComponent(row.variant_id) + "&select=sku", { method: "GET" });
-            if (!Array.isArray(current) || !current.length) { skipped.push({ ...row, reason: "Variação não existe mais." }); continue; }
-            if (skuKey(current[0].sku) !== skuKey(row.site_sku)) { skipped.push({ ...row, reason: "SKU mudou desde a comparação." }); continue; }
-            await supabaseRequest("product_variants?id=eq." + encodeURIComponent(row.variant_id), { method: "PATCH", body: JSON.stringify({ sku: row.olist_sku }) });
-            updated.push(row);
+        // Variações: não deixa duas cores do mesmo produto com o mesmo SKU.
+        const variantRows = pending.filter(r => r.t === "v");
+        const takenInProduct = new Map();
+        for (const row of variantRows) {
+            const current = await supabaseRequest("product_variants?id=eq." + encodeURIComponent(row.v) + "&select=sku,product_id", { method: "GET" });
+            if (!Array.isArray(current) || !current.length) { skipped.push({ ...label(row), reason: "Variação não existe mais." }); continue; }
+            if (skuKey(current[0].sku) !== skuKey(row.f)) { skipped.push({ ...label(row), reason: "SKU mudou desde a comparação." }); continue; }
+            if (!takenInProduct.has(row.p)) {
+                const siblings = await supabaseRequest("product_variants?product_id=eq." + encodeURIComponent(row.p) + "&select=id,sku", { method: "GET" });
+                takenInProduct.set(row.p, new Map((Array.isArray(siblings) ? siblings : []).map(s => [String(s.id), skuKey(s.sku)])));
+            }
+            const taken = takenInProduct.get(row.p);
+            const clash = [...taken.entries()].some(([id, sku]) => id !== String(row.v) && sku === skuKey(row.target) && !variantRows.some(o => String(o.v) === id && skuKey(o.target) !== sku));
+            if (clash) { skipped.push({ ...label(row), reason: "Outra cor deste produto já usa esse SKU." }); continue; }
+            await supabaseRequest("product_variants?id=eq." + encodeURIComponent(row.v), { method: "PATCH", body: JSON.stringify({ sku: row.target }) });
+            taken.set(String(row.v), skuKey(row.target));
+            updated.push({ ...label(row), from: row.f, to: row.target });
         }
 
         // Produtos: SKU único. Primeiro libera os SKUs antigos, depois grava os novos.
         const productRows = [];
-        for (const row of pending.filter(r => r.kind === "produto")) {
-            const current = await supabaseRequest("products?id=eq." + encodeURIComponent(row.product_id) + "&select=sku", { method: "GET" });
-            if (!Array.isArray(current) || !current.length) { skipped.push({ ...row, reason: "Produto não existe mais." }); continue; }
-            if (skuKey(current[0].sku) !== skuKey(row.site_sku)) { skipped.push({ ...row, reason: "SKU mudou desde a comparação." }); continue; }
+        for (const row of pending.filter(r => r.t === "p")) {
+            const current = await supabaseRequest("products?id=eq." + encodeURIComponent(row.p) + "&select=sku", { method: "GET" });
+            if (!Array.isArray(current) || !current.length) { skipped.push({ ...label(row), reason: "Produto não existe mais." }); continue; }
+            if (skuKey(current[0].sku) !== skuKey(row.f)) { skipped.push({ ...label(row), reason: "SKU mudou desde a comparação." }); continue; }
             productRows.push(row);
         }
         for (const row of productRows) {
-            await supabaseRequest("products?id=eq." + encodeURIComponent(row.product_id), { method: "PATCH", body: JSON.stringify({ sku: "SYNC-" + row.product_id }) });
+            await supabaseRequest("products?id=eq." + encodeURIComponent(row.p), { method: "PATCH", body: JSON.stringify({ sku: "SYNC-" + row.p }) });
         }
         for (const row of productRows) {
             try {
-                await supabaseRequest("products?id=eq." + encodeURIComponent(row.product_id), { method: "PATCH", body: JSON.stringify({ sku: row.olist_sku }) });
-                updated.push(row);
+                await supabaseRequest("products?id=eq." + encodeURIComponent(row.p), { method: "PATCH", body: JSON.stringify({ sku: row.target }) });
+                updated.push({ ...label(row), from: row.f, to: row.target });
             } catch (error) {
-                console.error("SKU do produto não atualizado:", row.product_id, error.message);
-                await supabaseRequest("products?id=eq." + encodeURIComponent(row.product_id), { method: "PATCH", body: JSON.stringify({ sku: row.site_sku || null }) }).catch(() => {});
-                skipped.push({ ...row, reason: "Outro produto já usa esse SKU." });
+                console.error("SKU do produto não atualizado:", row.p, error.message);
+                await supabaseRequest("products?id=eq." + encodeURIComponent(row.p), { method: "PATCH", body: JSON.stringify({ sku: row.f || null }) }).catch(() => {});
+                skipped.push({ ...label(row), reason: "Outro produto já usa esse SKU." });
             }
         }
 
-        olistSkuComparisons.delete(safeString(req.body?.token));
         console.log("🔁 SKU site ← Olist:", { updated: updated.length, skipped: skipped.length });
-        return res.json({ success: true, updated: updated.length, skipped, changes: updated.map(r => ({ product_name: r.product_name, color: r.color, from: r.site_sku, to: r.olist_sku })) });
+        return res.json({ success: true, updated: updated.length, skipped, changes: updated });
     } catch (error) {
         console.error("SKU sync:", error);
         return res.status(500).json({ success: false, message: "Não foi possível corrigir os SKUs no site." });
