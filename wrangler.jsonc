@@ -7,9 +7,17 @@
   "main": "backend/worker.mjs",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
-  // As variáveis (SITE_URL, chaves do Supabase, InfinitePay, Olist...) ficam no painel do
-  // Cloudflare: Settings → Variables and Secrets. keep_vars evita que cada deploy as apague.
+  // Variáveis que não são segredo ficam aqui. As chaves e senhas (Supabase, SuperFrete,
+  // admin, Resend...) ficam no painel do Cloudflare como Secret: Settings → Runtime
+  // variables and secrets. keep_vars evita que cada deploy apague o que está no painel.
   "keep_vars": true,
+  "vars": {
+    // Endereço de teste. Na troca do domínio: "https://oficialmontee.com.br".
+    "SITE_URL": "https://monte-site.vitorvolpe14.workers.dev",
+    // Desligado enquanto o Render ainda envia os pedidos para a Olist.
+    // Na troca do domínio: "true" (e suspender o Render).
+    "OLIST_SYNC_ENABLED": "false"
+  },
   "assets": {
     "directory": "./",
     "binding": "ASSETS",
