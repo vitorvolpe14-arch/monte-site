@@ -714,11 +714,22 @@ function filterProducts(category) {
    MODAL PRODUTO
 ===================================================== */
 
+// Algumas cores estão cadastradas com o nome do produto ("Bag Vienna - preta"):
+// na loja aparece só a cor ("Preta"). O cadastro não muda.
+function colorLabel(color, productName) {
+    const text = String(color || "").trim();
+    const name = String(productName || "").trim();
+    const plain = value => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    if (!text || !name || text.length <= name.length || !plain(text).startsWith(plain(name))) return text;
+    const rest = text.slice(name.length).replace(/^[\s\-–—:|]+/, "").trim();
+    return rest ? rest.charAt(0).toUpperCase() + rest.slice(1) : text;
+}
+
 function openWhatsAppReservation(product = selectedProduct, variant = selectedVariant) {
     if (!product) return;
 
     const productName = product.name || "produto MONTÊ";
-    const color = variant?.color ? " — cor: " + variant.color : "";
+    const color = variant?.color ? " — cor: " + colorLabel(variant.color, product.name) : "";
     const message = "Olá, MONTÊ! Gostaria de reservar o produto \"" + productName + "\""+ color + ". Vi que ele está esgotado e gostaria de saber a disponibilidade para reserva.";
     const url = "https://wa.me/5585992163305?text=" + encodeURIComponent(message);
     window.open(url, "_blank", "noopener,noreferrer");
@@ -793,7 +804,8 @@ function openProductModal(productId) {
                 const variantAvailable = Number(variant.stock || 0) > 0;
                 const isSelected = selectedVariant?.id === variant.id;
                 button.className = "variant-option" + (isSelected ? " active" : "") + (variantAvailable ? "" : " unavailable");
-                button.textContent = variantAvailable ? variant.color : (variant.color || "Cor") + " — esgotado";
+                const label = colorLabel(variant.color, selectedProduct.name);
+                button.textContent = variantAvailable ? label : (label || "Cor") + " — esgotado";
                 button.disabled = false;
                 button.addEventListener("click", () => {
                     selectedVariant = variant;
@@ -1186,7 +1198,7 @@ function updateCart() {
                     ${escapeHTML(item.name)}
                 </div>
 
-                ${item.variant_color ? `<div class="cart-item-variant">${escapeHTML(item.variant_color)}</div>` : ""}
+                ${item.variant_color ? `<div class="cart-item-variant">${escapeHTML(colorLabel(item.variant_color, item.name))}</div>` : ""}
 
                 <div class="cart-item-row">
 
@@ -2388,7 +2400,7 @@ function renderCheckoutNote(summary) {
     const itemsBox = document.getElementById("noteItems");
     if (itemsBox) {
         itemsBox.innerHTML = cart.length
-            ? cart.map(item => `<div class="order-note-item"><span>${escapeHTML(item.name)}</span><span>${formatPrice(Number(item.price || 0) * Number(item.quantity || 0))}</span><small>${escapeHTML(item.variant_color || "Cor única")} · ${Number(item.quantity || 0)} un.</small></div>`).join("")
+            ? cart.map(item => `<div class="order-note-item"><span>${escapeHTML(item.name)}</span><span>${formatPrice(Number(item.price || 0) * Number(item.quantity || 0))}</span><small>${escapeHTML(colorLabel(item.variant_color, item.name) || "Cor única")} · ${Number(item.quantity || 0)} un.</small></div>`).join("")
             : '<div class="order-note-item"><span class="is-empty">Nenhuma peça na sacola</span></div>';
     }
 
