@@ -56,6 +56,7 @@ async function init(){
   const refreshOrders=$("refreshOrders"); if(refreshOrders) refreshOrders.onclick=loadOrders;
   const refreshStock=$("refreshStock"); if(refreshStock) refreshStock.onclick=loadStockMovements;
   const compareSkuButton=$("compareSkuButton"); if(compareSkuButton) compareSkuButton.onclick=compareSkus;
+  const stockSyncButton=$("stockSyncButton"); if(stockSyncButton) stockSyncButton.onclick=runStockSync;
   const refreshAnalytics=$("refreshAnalytics"); if(refreshAnalytics) refreshAnalytics.onclick=loadAnalytics;
   const analyticsDays=$("analyticsDays"); if(analyticsDays) analyticsDays.onchange=loadAnalytics;
   try{const s=await api("/api/admin/session");await enterApp(s)}catch{showLogin()}
@@ -64,7 +65,7 @@ function showLogin(){$("loginView").classList.remove("hidden");$("appView").clas
 async function login(e){e.preventDefault();$("loginError").textContent="";try{await enterApp(await api("/api/admin/login",{method:"POST",body:JSON.stringify({email:$("loginEmail").value.trim(),password:$("loginPassword").value})}))}catch(e){$("loginError").textContent=e.message}}
 async function logout(){try{await api("/api/admin/logout",{method:"POST"})}catch{}products=[];orders=[];showLogin();$("loginPassword").value=""}
 async function enterApp(s){$("loginView").classList.add("hidden");$("appView").classList.remove("hidden");$("adminEmail").textContent=s.email||"Administrador";try{await Promise.all([loadProducts(),loadOrders(),loadStockMovements()]);renderDashboard()}catch(e){console.error("Falha ao carregar dados do painel:",e);$("loginError").textContent="Login realizado, mas houve um erro ao carregar os dados. Atualize a página e tente novamente.";renderDashboard()}}
-function showSection(s){document.querySelectorAll(".section").forEach(x=>x.classList.add("hidden"));$(s+"Section").classList.remove("hidden");document.querySelectorAll(".nav-button").forEach(b=>b.classList.toggle("active",b.dataset.section===s));$("pageTitle").textContent={dashboard:"Visão geral",products:"Produtos",carousel:"Carrossel",orders:"Pedidos",stock:"Estoque",analytics:"Analytics & Financeiro"}[s];if(s==="analytics")loadAnalytics();if(s==="products")renderProducts();if(s==="carousel"&&typeof window.loadCarousel==="function")window.loadCarousel();if(s==="orders")renderOrders();if(s==="stock")renderStock()}
+function showSection(s){document.querySelectorAll(".section").forEach(x=>x.classList.add("hidden"));$(s+"Section").classList.remove("hidden");document.querySelectorAll(".nav-button").forEach(b=>b.classList.toggle("active",b.dataset.section===s));$("pageTitle").textContent={dashboard:"Visão geral",products:"Produtos",carousel:"Carrossel",orders:"Pedidos",stock:"Estoque",analytics:"Analytics & Financeiro"}[s];if(s==="analytics")loadAnalytics();if(s==="products")renderProducts();if(s==="carousel"&&typeof window.loadCarousel==="function")window.loadCarousel();if(s==="orders")renderOrders();if(s==="stock"){renderStock();loadStockSyncStatus()}}
 async function loadProducts(){const d=await api("/api/admin/products");products=d.products||[];renderProducts();renderStock();renderDashboard()}
 async function loadStockMovements(){try{const d=await api("/api/admin/stock/movements");renderStockMovements(d.movements||[])}catch(e){$("stockMovements").innerHTML='<p>'+esc(e.message)+'</p>'}}
 async function loadOrders(){const d=await api("/api/admin/orders");orders=d.orders||[];renderOrders();renderDashboard()}
@@ -298,4 +299,30 @@ async function applySkuSync(){
     $("skuSyncResult").innerHTML=`<div class="sku-done"><p><strong>${d.updated} SKU${d.updated===1?"":"s"} corrigido${d.updated===1?"":"s"} no site.</strong>${skipped?` ${skipped} não alterado${skipped>1?"s":""}.`:""}${pickedProducts?" Compare de novo para conferir as cores dos produtos que você escolheu.":""}</p>${(d.changes||[]).length?`<ul>${d.changes.map(c=>`<li>${esc(c.product_name)}${c.color?" · "+esc(c.color):""}: <code>${esc(c.from||"—")}</code> → <code>${esc(c.to)}</code></li>`).join("")}</ul>`:""}${skipped?`<ul class="sku-skipped">${d.skipped.map(r=>`<li>${esc(r.product_name)}${r.color?" · "+esc(r.color):""}: ${esc(r.reason)}</li>`).join("")}</ul>`:""}</div>`;
     await loadProducts();
   }catch(e){btn.disabled=false;btn.textContent="TENTAR DE NOVO";alert(e.message)}
+}
+
+/* Estoque da Olist → site (só baixa) */
+function renderStockSync(d){
+  const box=$("stockSyncStatus");if(!box)return;
+  if(d&&d.enabled===false){box.innerHTML='<p class="field-help">A integração com a Olist está desligada neste servidor.</p>';return}
+  const last=d&&d.last;
+  if(!last){box.innerHTML='<p class="field-help">Ainda não rodou. A primeira conferência acontece em até 10 minutos, ou clique em SINCRONIZAR AGORA.</p>';return}
+  const when=date(last.finished_at||last.ran_at),how=last.trigger==="painel"?"pelo painel":"automática";
+  const lowered=last.lowered||[],missing=last.not_found||[];
+  box.innerHTML=`<p class="stock-sync-line"><strong>Última conferência:</strong> ${esc(when)} (${how}) · ${last.checked||0} peça${last.checked===1?"":"s"} conferida${last.checked===1?"":"s"} · ${lowered.length} baixada${lowered.length===1?"":"s"}${missing.length?` · ${missing.length} sem SKU correspondente na Olist`:""}${last.errors?` · ${last.errors} com erro`:""}</p>
+  ${last.error?`<p class="error">${esc(last.error)}${/RECONECTAR/.test(last.error)?' <a class="secondary-link" href="/api/olist/auth" target="_blank" rel="noopener">RECONECTAR OLIST</a>':""}</p>`:""}
+  ${lowered.length?`<ul class="stock-sync-list">${lowered.map(x=>`<li>${esc(x.product)}${x.color?" · "+esc(x.color):""} <code>${esc(x.sku)}</code>: ${x.from} → <strong>${x.to}</strong></li>`).join("")}</ul>`:""}
+  ${missing.length?`<details class="stock-sync-missing"><summary>Peças do site sem SKU correspondente na Olist (não são conferidas)</summary><ul>${missing.map(x=>`<li>${esc(x.product)}${x.color?" · "+esc(x.color):""} <code>${esc(x.sku)}</code></li>`).join("")}</ul></details>`:""}`;
+}
+async function loadStockSyncStatus(){
+  const box=$("stockSyncStatus");if(!box)return;
+  try{renderStockSync(await api("/api/admin/olist/stock-sync"))}catch(e){box.innerHTML='<p class="error">'+esc(e.message)+'</p>'}
+}
+async function runStockSync(){
+  const btn=$("stockSyncButton"),box=$("stockSyncStatus");
+  btn.disabled=true;btn.textContent="CONFERINDO NA OLIST...";
+  box.innerHTML='<p class="sku-loading">Conferindo o estoque de cada peça na Olist. Pode levar alguns minutos.</p>';
+  try{const d=await api("/api/admin/olist/stock-sync",{method:"POST"});renderStockSync({enabled:true,last:d.last});await loadProducts();loadStockMovements()}
+  catch(e){box.innerHTML='<p class="error">'+esc(e.message)+'</p>';setTimeout(loadStockSyncStatus,1500)}
+  finally{btn.disabled=false;btn.textContent="SINCRONIZAR AGORA"}
 }

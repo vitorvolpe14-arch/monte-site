@@ -1619,7 +1619,10 @@ async function checkout() {
         const responseText=await response.text();
         let data=null;
         try{data=JSON.parse(responseText);}catch{console.error("Resposta não é JSON:",responseText);}
-        if(!response.ok)throw new Error(data?.message||("Erro do servidor ("+response.status+")."));
+        if(!response.ok){
+            if(data?.stock_changed&&typeof loadProductsFromDatabase==="function")loadProductsFromDatabase().catch(()=>{});
+            throw new Error(data?.message||("Erro do servidor ("+response.status+")."));
+        }
 
         if(paymentMethod==="pix"&&data?.pix_checkout&&data?.url){
             closeCart();

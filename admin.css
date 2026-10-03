@@ -2323,3 +2323,14 @@ input:focus,select:focus,textarea:focus{
 .sku-pick{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--ad-ink);cursor:pointer}
 .sku-pick input{width:auto;margin:0}
 .sku-choice{display:block;width:100%;max-width:280px;margin-top:8px;padding:8px 10px;font-size:12px}
+
+/* Estoque da Olist → site */
+.stock-sync-panel{margin-bottom:18px}
+.stock-sync-panel .panel-head{align-items:flex-start;gap:16px}
+.stock-sync-panel .panel-head .field-help{max-width:680px;margin:6px 0 0;line-height:1.5}
+.stock-sync-status{margin-top:14px;font-size:13px;line-height:1.6}
+.stock-sync-line{margin:0}
+.stock-sync-list,.stock-sync-missing ul{margin:8px 0 0;padding-left:18px}
+.stock-sync-list code,.stock-sync-missing code{font:500 12px ui-monospace,SFMono-Regular,Menlo,monospace;background:#f2f2f2;padding:2px 5px;border-radius:5px}
+.stock-sync-missing{margin-top:10px;color:var(--ad-muted)}
+.stock-sync-missing summary{cursor:pointer}
