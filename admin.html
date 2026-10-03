@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="admin.css?v=20261003-sku-pares">
+<link rel="stylesheet" href="admin.css?v=20261003-estoque-olist">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -110,6 +110,10 @@
 </section>
     <section id="stockSection" class="section hidden">
       <div class="section-actions"><div><p class="eyebrow">INVENTÁRIO</p><h2>Estoque</h2></div></div>
+      <div class="panel stock-sync-panel">
+        <div class="panel-head"><div><h2>Estoque da Olist → site</h2><p class="field-help">A cada 10 minutos o site confere o estoque disponível na Olist e baixa no site as peças que tiverem menos unidades lá. Na hora da compra, as peças do carrinho são conferidas de novo. O site nunca aumenta o estoque sozinho e nada é alterado na Olist. As peças são reconhecidas pelo SKU.</p></div><button id="stockSyncButton" type="button">SINCRONIZAR AGORA</button></div>
+        <div id="stockSyncStatus" class="stock-sync-status"></div>
+      </div>
       <div class="panel sku-sync-panel">
         <div class="panel-head"><div><h2>SKUs site × Olist</h2><p class="field-help">Compara os SKUs dos produtos do site com os da Olist. Se houver diferença, corrige só no site, apenas nos produtos que já existem. Nada é alterado na Olist.</p></div><div class="sku-head-actions"><a class="secondary-link" href="/api/olist/auth" target="_blank" rel="noopener">RECONECTAR OLIST</a><button id="compareSkuButton" type="button">COMPARAR COM A OLIST</button></div></div>
         <div id="skuSyncResult"></div>
@@ -174,7 +178,7 @@
     if (date) date.textContent = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }).toUpperCase();
   })();
 </script>
-<script src="admin.js?v=20261003-sku-pares"></script>
+<script src="admin.js?v=20261003-estoque-olist"></script>
 <script src="admin-carousel.js?v=20260925-2"></script>
 </body>
 </html>

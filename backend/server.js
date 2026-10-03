@@ -2382,6 +2382,188 @@ app.post("/api/admin/olist/sku-sync", requireAdmin, async (req, res) => {
     }
 });
 
+/* =====================================================
+   ESTOQUE — OLIST → SITE (só baixa)
+   O site lê o estoque disponível de cada peça na Olist e, quando lá
+   houver menos unidades do que no site, baixa o site para o mesmo
+   número. Nunca aumenta o estoque do site e nunca escreve na Olist:
+   assim uma venda do site que a Olist ainda não processou não faz o
+   estoque voltar. Roda a cada 10 minutos e de novo na hora da compra,
+   para as peças do carrinho.
+===================================================== */
+const OLIST_STOCK_PAUSE_MS = 1100;
+const OLIST_STOCK_STATUS_KEY = "olist_stock_sync";
+let olistStockSyncRunning = false;
+
+function olistAvailableFrom(data) {
+    const value = ["disponivel", "saldo"].map(key => Number(data?.[key])).find(Number.isFinite);
+    return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null;
+}
+
+function withTimeout(promise, ms) {
+    let timer;
+    return Promise.race([
+        promise.finally(() => clearTimeout(timer)),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("OLIST_TIMEOUT")), ms); })
+    ]);
+}
+
+// Id da peça na Olist (variação ou produto simples) pelo SKU. Fica guardado
+// em product_variants.olist_product_id para as próximas consultas.
+async function olistItemIdForVariant(variant, { refresh = false } = {}) {
+    const sku = skuKey(variant.sku);
+    if (!sku) return null;
+    if (variant.olist_product_id && !refresh) return Number(variant.olist_product_id);
+    const data = await olistRead("/produtos?codigo=" + encodeURIComponent(safeString(variant.sku)) + "&limit=20");
+    const item = olistItemsFromResponse(data).find(p => skuKey(p.sku || p.codigo) === sku && safeString(p.situacao).toUpperCase() !== "E");
+    const id = item?.id ? Number(item.id) : null;
+    const saved = variant.olist_product_id ? Number(variant.olist_product_id) : null;
+    if (id !== saved) {
+        await supabaseRequest("product_variants?id=eq." + encodeURIComponent(variant.id), {
+            method: "PATCH",
+            headers: { "Prefer": "return=minimal" },
+            body: JSON.stringify({ olist_product_id: id })
+        });
+    }
+    variant.olist_product_id = id;
+    return id;
+}
+
+// Estoque disponível da peça na Olist. found=false quando o SKU não existe lá.
+async function olistAvailableForVariant(variant) {
+    let id = await olistItemIdForVariant(variant);
+    if (!id) return { available: null, found: false };
+    let data = null;
+    try {
+        data = await olistRead("/estoque/" + encodeURIComponent(id));
+    } catch (error) {
+        if (error?.status !== 404) throw error;
+    }
+    // O SKU mudou ou a peça foi apagada na Olist: procura de novo pelo SKU.
+    if (!data || (data.codigo && skuKey(data.codigo) !== skuKey(variant.sku))) {
+        id = await olistItemIdForVariant(variant, { refresh: true });
+        if (!id) return { available: null, found: false };
+        data = await olistRead("/estoque/" + encodeURIComponent(id));
+    }
+    return { available: olistAvailableFrom(data), found: true };
+}
+
+// Baixa o estoque da variação até "target" (nunca aumenta) e registra no histórico.
+async function lowerSiteStock(variant, target, reason) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const rows = await supabaseRequest("product_variants?id=eq." + encodeURIComponent(variant.id) + "&select=stock", { method: "GET" });
+        const current = Number(rows?.[0]?.stock || 0);
+        const delta = Math.max(0, target) - current;
+        if (delta >= 0) return { changed: false, from: current, to: current };
+        try {
+            await supabaseRequest("rpc/adjust_product_variant_stock", {
+                method: "POST",
+                body: JSON.stringify({ p_variant_id: variant.id, p_delta: delta, p_movement_type: "correction", p_reason: reason, p_created_by: "olist" })
+            });
+            return { changed: true, from: current, to: current + delta };
+        } catch (error) {
+            // Uma venda baixou o estoque no meio do caminho: lê de novo e tenta mais uma vez.
+            if (attempt || !/Estoque insuficiente/.test(String(error.message))) throw error;
+        }
+    }
+    return { changed: false };
+}
+
+async function saveOlistStockStatus(result) {
+    await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({ key: OLIST_STOCK_STATUS_KEY, value: result })
+    }).catch(error => console.error("Estoque Olist — status não salvo:", error.message));
+}
+
+async function syncOlistStock({ trigger = "agendada" } = {}) {
+    if (!OLIST_SYNC_ENABLED) return { skipped: "disabled" };
+    if (olistStockSyncRunning) return { skipped: "running" };
+    olistStockSyncRunning = true;
+    const result = { ran_at: new Date().toISOString(), trigger, checked: 0, lowered: [], not_found: [], errors: 0 };
+    try {
+        // Só peças ativas, com SKU e com estoque no site: as zeradas não têm o que baixar.
+        const variants = await supabaseRequest(
+            "product_variants?select=id,sku,stock,color,olist_product_id,products!inner(name,active)" +
+            "&active=eq.true&stock=gt.0&sku=not.is.null&products.active=eq.true&order=sku.asc",
+            { method: "GET" }
+        );
+        for (const variant of Array.isArray(variants) ? variants : []) {
+            if (!safeString(variant.sku)) continue;
+            const label = { product: safeString(variant.products?.name), color: safeString(variant.color), sku: safeString(variant.sku) };
+            try {
+                const { available, found } = await olistAvailableForVariant(variant);
+                result.checked++;
+                if (!found) result.not_found.push(label);
+                else if (available !== null && available < Number(variant.stock || 0)) {
+                    const change = await lowerSiteStock(variant, available, "Estoque da Olist: " + available + " disponível");
+                    if (change.changed) result.lowered.push({ ...label, from: change.from, to: change.to });
+                }
+            } catch (error) {
+                if (/OLIST_AUTH|OLIST_SYNC_DISABLED/.test(String(error.message))) throw error;
+                result.errors++;
+                console.error("Estoque Olist —", variant.sku, error.message);
+            }
+            await pause(OLIST_STOCK_PAUSE_MS);
+        }
+    } catch (error) {
+        result.error = /OLIST_AUTH/.test(String(error.message))
+            ? "A conexão com a Olist expirou. Clique em RECONECTAR OLIST."
+            : "Não foi possível consultar a Olist agora.";
+        console.error("Estoque Olist:", error.message);
+    } finally {
+        olistStockSyncRunning = false;
+    }
+    result.finished_at = new Date().toISOString();
+    result.not_found = result.not_found.slice(0, 60);
+    await saveOlistStockStatus(result);
+    if (result.lowered.length) console.log("📦 Estoque do site baixado pela Olist:", result.lowered);
+    return result;
+}
+
+// Na hora da compra: confere na Olist as peças do carrinho. Se a Olist estiver
+// fora do ar ou demorar, a compra segue com o estoque do site.
+async function checkCartAgainstOlistStock(entries) {
+    if (!OLIST_SYNC_ENABLED) return null;
+    const deadline = Date.now() + 6000;
+    for (const { item, variant } of entries) {
+        if (!safeString(variant?.sku)) continue;
+        const left = deadline - Date.now();
+        if (left < 400) break;
+        try {
+            const { available, found } = await withTimeout(olistAvailableForVariant(variant), left);
+            if (!found || available === null) continue;
+            if (available < Number(variant.stock || 0)) {
+                await lowerSiteStock(variant, available, "Estoque da Olist na hora da compra: " + available + " disponível").catch(error => console.error("Checkout — estoque não baixado:", error.message));
+            }
+            if (available < Number(item.quantity || 0)) return { item, variant, available };
+        } catch (error) {
+            console.warn("Checkout — estoque da Olist indisponível, seguindo com o do site:", error.message);
+            break;
+        }
+    }
+    return null;
+}
+
+app.get("/api/admin/olist/stock-sync", requireAdmin, async (req, res) => {
+    try {
+        const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + OLIST_STOCK_STATUS_KEY + "&select=value&limit=1", { method: "GET" });
+        return res.json({ success: true, enabled: OLIST_SYNC_ENABLED, last: rows?.[0]?.value || null });
+    } catch (error) {
+        console.error("Estoque Olist — status:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível ler a última sincronização." });
+    }
+});
+
+app.post("/api/admin/olist/stock-sync", requireAdmin, async (req, res) => {
+    const result = await syncOlistStock({ trigger: "painel" });
+    if (result.skipped === "running") return res.status(409).json({ success: false, message: "Uma sincronização já está em andamento. Aguarde alguns minutos." });
+    if (result.skipped) return res.status(409).json({ success: false, message: "A integração com a Olist está desligada neste servidor." });
+    if (result.error) return res.status(502).json({ success: false, message: result.error, last: result });
+    return res.json({ success: true, last: result });
+});
+
 app.put("/api/admin/products/:id/variants",requireAdmin,async(req,res)=>{
     try{
         const productId=safeString(req.params.id);
@@ -3303,6 +3485,7 @@ app.post(
             /* =================================================
                VALIDA VARIAÇÕES E ESTOQUE NO SUPABASE
             ================================================= */
+            const checkedVariants = [];
             for (const item of productItems) {
                 const productId = item.id || item.product_id || null;
                 if (!productId) {
@@ -3322,7 +3505,7 @@ app.post(
                     const variants = await supabaseRequest(
                         "product_variants?id=eq." + encodeURIComponent(item.variant_id) +
                         "&product_id=eq." + encodeURIComponent(item.id) +
-                        "&active=eq.true&select=id,color,sku,stock",
+                        "&active=eq.true&select=id,color,sku,stock,olist_product_id",
                         { method: "GET" }
                     );
 
@@ -3330,7 +3513,7 @@ app.post(
                 } else {
                     const variants = await supabaseRequest(
                         "product_variants?product_id=eq." + encodeURIComponent(item.id) +
-                        "&active=eq.true&stock=gt.0&select=id,color,sku,stock&order=created_at.asc",
+                        "&active=eq.true&stock=gt.0&select=id,color,sku,stock,olist_product_id&order=created_at.asc",
                         { method: "GET" }
                     );
 
@@ -3357,6 +3540,21 @@ app.post(
 
                 item.variant_color = variant.color;
                 item.variant_sku = variant.sku || item.sku || null;
+                checkedVariants.push({ item, variant });
+            }
+
+            // A peça pode ter sido vendida na Olist depois da última sincronização.
+            const olistShortage = await checkCartAgainstOlistStock(checkedVariants);
+            if (olistShortage) {
+                const { item, available } = olistShortage;
+                const name = item.description + (item.variant_color ? " (" + item.variant_color + ")" : "");
+                return res.status(409).json({
+                    success: false,
+                    stock_changed: true,
+                    message: available > 0
+                        ? "Restam só " + available + " unidade" + (available > 1 ? "s" : "") + " de " + name + ". Ajuste a quantidade na sacola."
+                        : name + " acabou de esgotar. Remova da sacola para continuar."
+                });
             }
 
 
@@ -4759,9 +4957,15 @@ async function refreshOlistAccess() {
 }
 
 // Tarefas periódicas. No Render rodam em timers; no Cloudflare, pelos Cron Triggers
-// do wrangler.jsonc ("* * * * *" = pedidos pagos pendentes, a cada 3 horas = acesso Olist).
+// do wrangler.jsonc ("* * * * *" = pedidos pagos pendentes e, a cada 10 minutos, estoque
+// Olist → site; a cada 3 horas = acesso Olist).
 async function runScheduledTask(cron) {
-    if (cron === "* * * * *") return runPendingOlistSync().catch(() => {});
+    if (cron === "* * * * *") {
+        const tasks = [runPendingOlistSync().catch(() => {})];
+        // Estoque Olist → site a cada 10 minutos (minutos 5, 15, 25...).
+        if (new Date().getUTCMinutes() % 10 === 5) tasks.push(syncOlistStock().catch(error => console.error("Estoque Olist:", error.message)));
+        return Promise.all(tasks);
+    }
     return refreshOlistAccess();
 }
 
@@ -4786,6 +4990,10 @@ function startNodeServer() {
             // O refresh token da Olist vence se ficar sem uso; renova a cada 3 horas
             // enquanto o servidor estiver no ar, mesmo sem vendas.
             setInterval(refreshOlistAccess, 3 * 60 * 60 * 1000);
+
+            // Estoque Olist → site (só baixa) a cada 10 minutos.
+            setTimeout(() => syncOlistStock().catch(() => {}), 30000);
+            setInterval(() => syncOlistStock().catch(() => {}), 10 * 60 * 1000);
         }
     );
 }
