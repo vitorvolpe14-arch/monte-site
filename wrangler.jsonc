@@ -12,8 +12,8 @@
   // variables and secrets. keep_vars evita que cada deploy apague o que está no painel.
   "keep_vars": true,
   "vars": {
-    // Endereço de teste. Na troca do domínio: "https://oficialmontee.com.br".
-    "SITE_URL": "https://monte-site.vitorvolpe14.workers.dev",
+    // Endereço da loja, usado no retorno e no aviso de pagamento da InfinitePay.
+    "SITE_URL": "https://oficialmontee.com.br",
     // O Worker envia os pedidos pagos para a Olist e renova o acesso (Cron Triggers).
     // No Render a mesma variável está "false": só um servidor pode falar com a Olist.
     "OLIST_SYNC_ENABLED": "true"
