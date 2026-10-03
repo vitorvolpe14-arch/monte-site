@@ -1,4 +1,5 @@
 const $=id=>document.getElementById(id);
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function api(path,options={}){const r=await fetch(path,{credentials:"same-origin",headers:{"Content-Type":"application/json",...(options.headers||{})},...options});let d=null;try{d=await r.json()}catch{}if(!r.ok){const e=new Error(d?.message||"Não foi possível concluir a operação.");e.status=r.status;throw e}return d}
 let products=[],orders=[],editingProduct=null,productImageDraft=[],productImageFiles=[];
 
@@ -258,7 +259,17 @@ async function compareSkus(){
   const btn=$("compareSkuButton"),box=$("skuSyncResult");
   btn.disabled=true;btn.textContent="CONSULTANDO A OLIST...";
   box.innerHTML='<p class="sku-loading">Buscando os produtos na Olist. Pode levar até um minuto.</p>';
-  try{skuCompare=await api("/api/admin/olist/sku-compare");skuAccept=new Set();skuPicks=new Map();renderSkuCompare()}
+  // A Olist é lida em passos (limite de chamadas por requisição no Cloudflare): o painel chama até fechar.
+  try{
+    let d=await api("/api/admin/olist/sku-compare?restart=1"),steps=0;
+    while(d.partial&&steps++<25){
+      box.innerHTML=`<p class="sku-loading">Lendo os produtos na Olist… ${d.read||0} consultas feitas.</p>`;
+      await sleep(d.wait?d.wait*1000:300);
+      d=await api("/api/admin/olist/sku-compare");
+    }
+    if(d.partial)throw new Error("A Olist está demorando para responder. Tente de novo em alguns minutos.");
+    skuCompare=d;skuAccept=new Set();skuPicks=new Map();renderSkuCompare();
+  }
   catch(e){skuCompare=null;box.innerHTML='<p class="error">'+esc(e.message)+'</p>'+(/RECONECTAR OLIST/.test(e.message)?'<p><a class="secondary-link" href="/api/olist/auth" target="_blank" rel="noopener">RECONECTAR OLIST</a></p>':'')}
   finally{btn.disabled=false;btn.textContent="COMPARAR DE NOVO"}
 }
@@ -292,7 +303,11 @@ async function applySkuSync(){
   if(!window.confirm(`Atualizar ${n} SKU${n>1?"s":""} no site para ficar${n>1?"em iguais":" igual"} à Olist?\n\nNada será alterado na Olist.`))return;
   const btn=$("applySkuButton");btn.disabled=true;btn.textContent="CORRIGINDO...";
   try{
-    const d=await api("/api/admin/olist/sku-sync",{method:"POST",body:JSON.stringify({token:skuCompare.token,accept:[...skuAccept],picks:Object.fromEntries([...skuPicks].filter(([,v])=>v))})});
+    // Muitas correções vão em partes: o servidor devolve quantas faltam e o painel chama de novo.
+    const body=JSON.stringify({token:skuCompare.token,accept:[...skuAccept],picks:Object.fromEntries([...skuPicks].filter(([,v])=>v))});
+    const d={updated:0,skipped:[],changes:[]};let part,rounds=0;
+    do{part=await api("/api/admin/olist/sku-sync",{method:"POST",body});d.updated+=part.updated||0;d.changes.push(...(part.changes||[]));if(!part.remaining)d.skipped=part.skipped||[]}
+    while(part.remaining&&rounds++<10);
     const pickedProducts=[...skuPicks.keys()].some(k=>k.startsWith("p:"));
     skuCompare=null;skuAccept=new Set();skuPicks=new Map();
     const skipped=(d.skipped||[]).length;
@@ -305,11 +320,12 @@ async function applySkuSync(){
 function renderStockSync(d){
   const box=$("stockSyncStatus");if(!box)return;
   if(d&&d.enabled===false){box.innerHTML='<p class="field-help">A integração com a Olist está desligada neste servidor.</p>';return}
-  const last=d&&d.last;
-  if(!last){box.innerHTML='<p class="field-help">Ainda não rodou. A primeira conferência acontece em até 10 minutos, ou clique em SINCRONIZAR AGORA.</p>';return}
+  const last=d&&d.last,cycle=d&&d.cycle;
+  const progress=cycle?`<p class="stock-sync-line"><strong>Conferência em andamento:</strong> começou ${esc(date(cycle.started_at))} (${cycle.trigger==="painel"?"pelo painel":"automática"}) · ${cycle.checked||0} peça${cycle.checked===1?"":"s"} conferida${cycle.checked===1?"":"s"} até agora${(cycle.lowered||[]).length?` · ${cycle.lowered.length} baixada${cycle.lowered.length===1?"":"s"}`:""}</p>`:"";
+  if(!last){box.innerHTML=progress||'<p class="field-help">Ainda não rodou. A primeira conferência começa em instantes, ou clique em SINCRONIZAR AGORA.</p>';return}
   const when=date(last.finished_at||last.ran_at),how=last.trigger==="painel"?"pelo painel":"automática";
   const lowered=last.lowered||[],missing=last.not_found||[];
-  box.innerHTML=`<p class="stock-sync-line"><strong>Última conferência:</strong> ${esc(when)} (${how}) · ${last.checked||0} peça${last.checked===1?"":"s"} conferida${last.checked===1?"":"s"} · ${lowered.length} baixada${lowered.length===1?"":"s"}${missing.length?` · ${missing.length} sem SKU correspondente na Olist`:""}${last.errors?` · ${last.errors} com erro`:""}</p>
+  box.innerHTML=`${progress}<p class="stock-sync-line"><strong>Última conferência completa:</strong> ${esc(when)} (${how}) · ${last.checked||0} peça${last.checked===1?"":"s"} conferida${last.checked===1?"":"s"} · ${lowered.length} baixada${lowered.length===1?"":"s"}${missing.length?` · ${missing.length} sem SKU correspondente na Olist`:""}${last.errors?` · ${last.errors} com erro`:""}</p>
   ${last.error?`<p class="error">${esc(last.error)}${/RECONECTAR/.test(last.error)?' <a class="secondary-link" href="/api/olist/auth" target="_blank" rel="noopener">RECONECTAR OLIST</a>':""}</p>`:""}
   ${lowered.length?`<ul class="stock-sync-list">${lowered.map(x=>`<li>${esc(x.product)}${x.color?" · "+esc(x.color):""} <code>${esc(x.sku)}</code>: ${x.from} → <strong>${x.to}</strong></li>`).join("")}</ul>`:""}
   ${missing.length?`<details class="stock-sync-missing"><summary>Peças do site sem SKU correspondente na Olist (não são conferidas)</summary><ul>${missing.map(x=>`<li>${esc(x.product)}${x.color?" · "+esc(x.color):""} <code>${esc(x.sku)}</code></li>`).join("")}</ul></details>`:""}`;
@@ -321,8 +337,21 @@ async function loadStockSyncStatus(){
 async function runStockSync(){
   const btn=$("stockSyncButton"),box=$("stockSyncStatus");
   btn.disabled=true;btn.textContent="CONFERINDO NA OLIST...";
-  box.innerHTML='<p class="sku-loading">Conferindo o estoque de cada peça na Olist. Pode levar alguns minutos.</p>';
-  try{const d=await api("/api/admin/olist/stock-sync",{method:"POST"});renderStockSync({enabled:true,last:d.last});await loadProducts();loadStockMovements()}
+  box.innerHTML='<p class="sku-loading">Conferindo o estoque de cada peça na Olist, em lotes. Pode levar alguns minutos.</p>';
+  // Cada chamada confere um lote; a primeira começa uma rodada nova e as seguintes continuam a mesma.
+  try{
+    let id="",d=null,rounds=0;
+    do{
+      d=await api("/api/admin/olist/stock-sync",{method:"POST",body:JSON.stringify(id?{cycle:id}:{restart:true})});
+      if(d.cycle_id)id=d.cycle_id;
+      if(!d.done){
+        if(d.waiting)box.innerHTML='<p class="sku-loading">A conferência automática está rodando um lote. Aguardando para continuar…</p>';
+        else renderStockSync({enabled:true,last:d.last,cycle:d.cycle});
+        await sleep(d.waiting?5000:500);
+      }
+    }while(!d.done&&rounds++<80);
+    renderStockSync({enabled:true,last:d.last,cycle:d.done?null:d.cycle});await loadProducts();loadStockMovements();
+  }
   catch(e){box.innerHTML='<p class="error">'+esc(e.message)+'</p>';setTimeout(loadStockSyncStatus,1500)}
   finally{btn.disabled=false;btn.textContent="SINCRONIZAR AGORA"}
 }
