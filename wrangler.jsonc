@@ -14,9 +14,9 @@
   "vars": {
     // Endereço de teste. Na troca do domínio: "https://oficialmontee.com.br".
     "SITE_URL": "https://monte-site.vitorvolpe14.workers.dev",
-    // Desligado enquanto o Render ainda envia os pedidos para a Olist.
-    // Na troca do domínio: "true" (e suspender o Render).
-    "OLIST_SYNC_ENABLED": "false"
+    // O Worker envia os pedidos pagos para a Olist e renova o acesso (Cron Triggers).
+    // No Render a mesma variável está "false": só um servidor pode falar com a Olist.
+    "OLIST_SYNC_ENABLED": "true"
   },
   "assets": {
     "directory": "./",
