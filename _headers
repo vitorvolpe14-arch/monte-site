@@ -1,0 +1,22 @@
+# Cabeçalhos das páginas e arquivos servidos direto dos assets do Worker.
+# Iguais aos que o servidor Express aplica (backend/server.js, "MIDDLEWARES").
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self' https://cdn.jsdelivr.net https://www.googletagmanager.com 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https://raw.githubusercontent.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://uvrhougaurupvkxmezwy.supabase.co https://viacep.com.br https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com; form-action 'self' https:; upgrade-insecure-requests
+  X-Permitted-Cross-Domain-Policies: none
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+# CSS, JS e imagens ficam 1 dia no navegador (as páginas sempre revalidam).
+/*.css
+  Cache-Control: public, max-age=86400
+/*.js
+  Cache-Control: public, max-age=86400
+/assets/*
+  Cache-Control: public, max-age=86400
+/fotos-site/*
+  Cache-Control: public, max-age=86400
+/backend/assets/*
+  Cache-Control: public, max-age=86400

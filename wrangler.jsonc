@@ -1,0 +1,37 @@
+{
+  // Loja MONTÊ no Cloudflare Workers.
+  // backend/worker.mjs roda o mesmo servidor Express do Render (backend/server.js);
+  // os arquivos do site (raiz do repositório) são servidos como assets estáticos.
+  // Workers Builds: build "cd backend && npm install", deploy "npx wrangler deploy".
+  "name": "monte-site",
+  "main": "backend/worker.mjs",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./",
+    "binding": "ASSETS",
+    // Endereços exatamente como no Render: /pagina.html continua /pagina.html (sem redirecionar).
+    // As páginas sem ".html" (/, /admin, /pagamento-sucesso) passam pelo servidor.
+    "html_handling": "none",
+    // Rotas do servidor; o resto (páginas, CSS, JS, fotos) sai direto dos assets.
+    "run_worker_first": [
+      "/api/*",
+      "/webhook-infinitepay",
+      "/webhook-pix",
+      "/produto/*",
+      "/sitemap.xml",
+      "/robots.txt",
+      "/pagamento-infinitepay",
+      "/",
+      "/admin",
+      "/admin/",
+      "/pagamento-sucesso"
+    ]
+  },
+  "triggers": {
+    // A cada minuto: pedidos pagos que ainda não chegaram à Olist.
+    // A cada 3 horas: renova o acesso à Olist (o refresh token vence sem uso).
+    "crons": ["* * * * *", "17 */3 * * *"]
+  },
+  "observability": { "enabled": true }
+}

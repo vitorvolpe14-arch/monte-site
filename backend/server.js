@@ -4,8 +4,33 @@ const express = require("express");
 const crypto = require("crypto");
 const path = require("path");
 const cors = require("cors");
-const sharp = require("sharp");
-require("dotenv").config();
+
+// Este servidor roda no Render (Node) e no Cloudflare Workers (nodejs_compat).
+// No Workers não há arquivos do projeto no disco nem timers fora de uma requisição:
+// as páginas saem dos assets do Worker e as tarefas periódicas viram Cron Triggers
+// (veja backend/worker.js e wrangler.jsonc).
+const IS_WORKERS = typeof navigator !== "undefined" && navigator.userAgent === "Cloudflare-Workers";
+if (!IS_WORKERS) require("dotenv").config();
+// Pasta dos arquivos do site. No Workers não existe __dirname: lá as páginas vêm dos assets.
+const SITE_DIR = IS_WORKERS ? "/" : path.join(__dirname, "..");
+
+// No Workers, o backend/worker.mjs entrega aqui o binding ASSETS dos arquivos do site.
+let siteAssets = null;
+function setSiteAssets(assets) { siteAssets = assets; }
+
+// Páginas com endereço sem ".html" (/, /admin, /pagamento-sucesso).
+async function sendSitePage(res, file) {
+    if (!IS_WORKERS) return res.sendFile(path.join(SITE_DIR, file));
+    try {
+        const response = await siteAssets.fetch(new Request("https://assets.local/" + file));
+        if (!response.ok) return res.status(404).send("Não encontrado.");
+        res.setHeader("Cache-Control", "no-cache");
+        return res.status(200).type("html").send(await response.text());
+    } catch (error) {
+        console.error("Página do site:", file, error);
+        return res.status(500).send("Não foi possível carregar a página.");
+    }
+}
 
 const app = express();
 app.disable("x-powered-by");
@@ -47,14 +72,17 @@ const OLIST_REFRESH_TOKEN = safeString(process.env.OLIST_REFRESH_TOKEN);
 const OLIST_REDIRECT_URI = safeString(process.env.OLIST_REDIRECT_URI || (SITE_URL.replace(/\/$/, "") + "/api/olist/callback"));
 const OLIST_OAUTH_AUTH_URL = "https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect/auth";
 const OLIST_OAUTH_TOKEN_URL = "https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect/token";
-const olistOAuthStates = new Map();
+// "false" desliga toda chamada à Olist neste servidor (pedidos, catálogo e renovação do
+// acesso). Usado no Worker de teste enquanto o Render ainda atende a loja: o refresh
+// token da Olist muda a cada renovação, e dois servidores renovando se atrapalham.
+const OLIST_SYNC_ENABLED = safeString(process.env.OLIST_SYNC_ENABLED || "true").toLowerCase() !== "false";
 
 let olistAccessToken = OLIST_TOKEN || null;
 let olistAccessTokenExpiresAt = OLIST_TOKEN ? Number.MAX_SAFE_INTEGER : 0;
 let olistRefreshToken = null;
 
-async function loadPersistedOlistRefreshToken() {
-    if (olistRefreshToken) return olistRefreshToken;
+async function loadPersistedOlistRefreshToken(force = false) {
+    if (olistRefreshToken && !force) return olistRefreshToken;
     if (!SUPABASE_SERVICE_ROLE_KEY) return OLIST_REFRESH_TOKEN || null;
 
     try {
@@ -62,7 +90,14 @@ async function loadPersistedOlistRefreshToken() {
             "kv_store_48db9b7e?key=eq.olist_oauth_tokens&select=value&limit=1",
             {method:"GET"}
         );
-        const token = safeString(rows?.[0]?.value?.refresh_token);
+        const value = rows?.[0]?.value || {};
+        const token = safeString(value.refresh_token);
+        // Outra instância (o Worker roda em várias) pode já ter renovado: reaproveita o acesso dela.
+        const accessExpiresAt = Number(value.access_expires_at) || 0;
+        if (safeString(value.access_token) && accessExpiresAt - 60000 > Date.now()) {
+            olistAccessToken = safeString(value.access_token);
+            olistAccessTokenExpiresAt = accessExpiresAt;
+        }
         if (token) {
             olistRefreshToken = token;
             return token;
@@ -75,7 +110,7 @@ async function loadPersistedOlistRefreshToken() {
     }
 }
 
-async function persistOlistRefreshToken(refreshToken) {
+async function persistOlistRefreshToken(refreshToken, access = null) {
     const token = safeString(refreshToken);
     if (!token || !SUPABASE_SERVICE_ROLE_KEY) return;
 
@@ -87,7 +122,11 @@ async function persistOlistRefreshToken(refreshToken) {
                 headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},
                 body:JSON.stringify({
                     key:"olist_oauth_tokens",
-                    value:{refresh_token:token,updated_at:new Date().toISOString()}
+                    value:{
+                        refresh_token:token,
+                        ...(access ? {access_token:access.token, access_expires_at:access.expiresAt} : {}),
+                        updated_at:new Date().toISOString()
+                    }
                 })
             }
         );
@@ -96,13 +135,17 @@ async function persistOlistRefreshToken(refreshToken) {
     }
 }
 
-async function getOlistAccessToken() {
-    if (olistAccessToken && Date.now() < olistAccessTokenExpiresAt - 60000) {
+async function getOlistAccessToken(retried = false, forceRefresh = false) {
+    if (!OLIST_SYNC_ENABLED) throw new Error("OLIST_SYNC_DISABLED");
+    if (!forceRefresh && olistAccessToken && Date.now() < olistAccessTokenExpiresAt - 60000) {
         return olistAccessToken;
     }
 
-    if (!olistRefreshToken) {
-        await loadPersistedOlistRefreshToken();
+    // Sempre relê o Supabase antes de renovar: o refresh token muda a cada renovação
+    // e outra instância pode ter renovado (e guardado um acesso válido) há pouco.
+    await loadPersistedOlistRefreshToken(true);
+    if (!forceRefresh && olistAccessToken && Date.now() < olistAccessTokenExpiresAt - 60000) {
+        return olistAccessToken;
     }
 
     if (!OLIST_CLIENT_ID || !OLIST_CLIENT_SECRET || !olistRefreshToken) {
@@ -122,6 +165,12 @@ async function getOlistAccessToken() {
     const textResponse = await response.text();
     let data = {};
     try { data = textResponse ? JSON.parse(textResponse) : {}; } catch { data = {raw:textResponse}; }
+    if ((!response.ok || !data.access_token) && !retried) {
+        // Pode ter perdido a corrida para outra instância: relê o token guardado e tenta de novo.
+        olistAccessToken = null;
+        olistAccessTokenExpiresAt = 0;
+        return getOlistAccessToken(true, false);
+    }
     if (!response.ok || !data.access_token) {
         console.error("Olist OAuth: renovação recusada", {
             status: response.status,
@@ -133,7 +182,7 @@ async function getOlistAccessToken() {
     olistAccessToken = data.access_token;
     olistRefreshToken = data.refresh_token || olistRefreshToken;
     olistAccessTokenExpiresAt = Date.now() + (Number(data.expires_in) || 3600) * 1000;
-    await persistOlistRefreshToken(olistRefreshToken);
+    await persistOlistRefreshToken(olistRefreshToken, {token:olistAccessToken, expiresAt:olistAccessTokenExpiresAt});
     return olistAccessToken;
 }
 
@@ -420,6 +469,7 @@ async function createOrGetOlistOrder(order) {
 ===================================================== */
 
 async function syncPaidOrderToOlist(order) {
+    if (!OLIST_SYNC_ENABLED) throw new Error("OLIST_SYNC_DISABLED");
     if (!order) throw new Error("OLIST_ORDER_MISSING");
     if (safeString(order.status).toLowerCase() !== "paid") {
         throw new Error("OLIST_ORDER_NOT_PAID");
@@ -453,6 +503,7 @@ const OLIST_RETRY_DELAY_MS = 10 * 60 * 1000;
 const OLIST_RATE_LIMIT_DELAY_MS = 2 * 60 * 1000;
 
 async function processPendingOlistOrder(order) {
+    if (!OLIST_SYNC_ENABLED) return {skipped:true};
     if (!order?.id || olistSyncLocks.has(String(order.id))) return {skipped:true};
     if (safeString(order.status).toLowerCase() !== "paid") return {skipped:true};
 
@@ -493,6 +544,7 @@ async function processPendingOlistOrder(order) {
 }
 
 async function runPendingOlistSync() {
+    if (!OLIST_SYNC_ENABLED) return;
     // Após um reinício, o refresh token obtido via OAuth existe apenas no Supabase.
     if (!OLIST_TOKEN && OLIST_CLIENT_ID && OLIST_CLIENT_SECRET && !olistRefreshToken) {
         await loadPersistedOlistRefreshToken();
@@ -537,11 +589,8 @@ app.get("/api/olist/auth", (req, res) => {
     if (!OLIST_CLIENT_ID || !OLIST_CLIENT_SECRET) {
         return res.status(503).send("Olist OAuth não está configurado no servidor.");
     }
-    const state = crypto.randomBytes(32).toString("hex");
-    olistOAuthStates.set(state, Date.now() + 10 * 60 * 1000);
-    for (const [key, expiresAt] of olistOAuthStates.entries()) {
-        if (expiresAt < Date.now()) olistOAuthStates.delete(key);
-    }
+    // Estado assinado (vale 10 minutos): funciona mesmo se a volta da Olist cair em outra instância.
+    const state = createSignedToken({purpose:"olist-oauth"}, 10 * 60 * 1000);
     const params = new URLSearchParams({
         client_id: OLIST_CLIENT_ID,
         redirect_uri: OLIST_REDIRECT_URI,
@@ -556,8 +605,8 @@ app.get("/api/olist/callback", async (req, res) => {
     const state = safeString(req.query.state);
     const code = safeString(req.query.code);
     const oauthError = safeString(req.query.error);
-    const expiresAt = olistOAuthStates.get(state);
-    olistOAuthStates.delete(state);
+    const statePayload = verifySignedToken(state);
+    const expiresAt = statePayload?.purpose === "olist-oauth" ? statePayload.exp : 0;
 
     if (oauthError) return res.status(400).send("Autorização Olist não concluída.");
     if (!state || !expiresAt || expiresAt < Date.now()) return res.status(400).send("Solicitação de autorização expirada.");
@@ -1308,9 +1357,12 @@ app.get("/pagamento-infinitepay", (req, res) => {
 
 const allowedOrigins = new Set([
     SITE_URL.replace(/\/$/, ""),
+    PUBLIC_SITE_URL,
     "https://oficialmontee.com.br",
     "https://www.oficialmontee.com.br",
-    "https://monte-site-itjk.onrender.com"
+    "https://monte-site-itjk.onrender.com",
+    "https://monte-site.vitorvolpe14.workers.dev",
+    ...safeString(process.env.ALLOWED_ORIGINS).split(",").map(origin => origin.trim().replace(/\/$/, "")).filter(Boolean)
 ]);
 
 app.use((req, res, next) => {
@@ -1332,7 +1384,7 @@ app.use((req, res, next) => {
         "upgrade-insecure-requests"
     ].join("; "));
     res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
-    if (req.secure || req.headers["x-forwarded-proto"] === "https") {
+    if (IS_WORKERS || req.secure || req.headers["x-forwarded-proto"] === "https") {
         res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     }
     if (req.path.startsWith("/api/admin/")) {
@@ -1360,7 +1412,12 @@ app.use(express.json({ limit: "30mb" }));
 /* =====================================================
    RATE LIMITING — proteção contra abuso de endpoints
 ===================================================== */
-function createRateLimiter({ windowMs, max, keyFn = req => req.ip || "unknown" }) {
+// IP real do visitante: no Cloudflare vem no cabeçalho CF-Connecting-IP.
+function clientIp(req) {
+    return safeString(req.headers["cf-connecting-ip"]) || req.ip || "unknown";
+}
+
+function createRateLimiter({ windowMs, max, keyFn = req => clientIp(req) }) {
     const buckets = new Map();
 
     const cleanup = () => {
@@ -1370,9 +1427,11 @@ function createRateLimiter({ windowMs, max, keyFn = req => req.ip || "unknown" }
         }
     };
 
-    setInterval(cleanup, Math.min(windowMs, 5 * 60 * 1000)).unref();
+    // No Workers não há timer de fundo: a limpeza acontece durante as próprias requisições.
+    if (!IS_WORKERS) setInterval(cleanup, Math.min(windowMs, 5 * 60 * 1000)).unref();
 
     return (req, res, next) => {
+        if (IS_WORKERS && buckets.size > 500) cleanup();
         const key = String(keyFn(req) || "unknown");
         const now = Date.now();
         let bucket = buckets.get(key);
@@ -1446,10 +1505,14 @@ const analyticsRateLimit = createRateLimiter({
 const ADMIN_EMAIL = safeString(process.env.ADMIN_EMAIL);
 const ADMIN_PASSWORD_HASH = safeString(process.env.ADMIN_PASSWORD_HASH);
 const ADMIN_SESSION_TTL = 1000 * 60 * 60 * 8;
-const adminSessions = new Map();
+// Sessão do painel em cookie assinado (HMAC), sem estado no servidor: o Worker roda em
+// várias instâncias e o Render pode reiniciar, então guardar sessões na memória deslogava.
+function signingKey(){return crypto.createHash("sha256").update("monte-signing:"+safeString(process.env.ADMIN_SESSION_SECRET)+":"+ADMIN_PASSWORD_HASH+":"+SUPABASE_SERVICE_ROLE_KEY).digest()}
+function createSignedToken(data,ttlMs){const payload=Buffer.from(JSON.stringify({...data,exp:Date.now()+ttlMs,n:crypto.randomBytes(8).toString("hex")})).toString("base64url");const sig=crypto.createHmac("sha256",signingKey()).update(payload).digest("base64url");return payload+"."+sig}
+function verifySignedToken(token){const [payload,sig]=String(token||"").split(".");if(!payload||!sig)return null;const expected=Buffer.from(crypto.createHmac("sha256",signingKey()).update(payload).digest("base64url"));const given=Buffer.from(sig);if(given.length!==expected.length||!crypto.timingSafeEqual(given,expected))return null;try{const data=JSON.parse(Buffer.from(payload,"base64url").toString("utf8"));if(!data||typeof data.exp!=="number"||Date.now()>data.exp)return null;return data}catch{return null}}
 const adminLoginAttempts = new Map();
 function parseCookies(req){const h=req.headers.cookie||"";const o={};h.split(";").filter(Boolean).forEach(p=>{const i=p.indexOf("=");if(i<0)return;const v=p.slice(i+1).trim();try{o[p.slice(0,i).trim()]=decodeURIComponent(v)}catch{o[p.slice(0,i).trim()]=v}});return o}
-function getAdminSession(req){const t=parseCookies(req)["monte_admin_session"];if(!t)return null;const s=adminSessions.get(t);if(!s)return null;if(Date.now()>s.expiresAt){adminSessions.delete(t);return null}return {token:t,...s}}
+function getAdminSession(req){const t=parseCookies(req)["monte_admin_session"];if(!t||!ADMIN_EMAIL)return null;const s=verifySignedToken(t);if(!s||s.purpose!=="admin"||s.email!==ADMIN_EMAIL)return null;return {token:t,email:s.email,expiresAt:s.exp}}
 function requireAdmin(req,res,next){
     const origin = safeString(req.headers.origin);
     if (origin && !allowedOrigins.has(origin.replace(/\/$/, ""))) {
@@ -1483,14 +1546,14 @@ function isValidCpf(value){
     return digit===Number(cpf[10]);
 }
 function passwordMatches(password){try{const [salt,storedHex]=ADMIN_PASSWORD_HASH.split(":");if(!salt||!storedHex)return false;const stored=Buffer.from(storedHex,"hex");const derived=crypto.scryptSync(String(password||""),salt,stored.length);return crypto.timingSafeEqual(stored,derived)}catch{return false}}
-function loginKey(req,email){return `${req.ip||"unknown"}:${safeString(email).toLowerCase()}`}
+function loginKey(req,email){return `${clientIp(req)}:${safeString(email).toLowerCase()}`}
 function loginAllowed(req,email){const r=adminLoginAttempts.get(loginKey(req,email));if(!r)return true;if(r.lockedUntil&&Date.now()<r.lockedUntil)return false;if(r.lockedUntil)adminLoginAttempts.delete(loginKey(req,email));return true}
 function failedLogin(req,email){const k=loginKey(req,email);const r=adminLoginAttempts.get(k)||{count:0,lockedUntil:0};r.count++;if(r.count>=5){r.count=0;r.lockedUntil=Date.now()+15*60*1000}adminLoginAttempts.set(k,r)}
 function clearLoginFailures(req,email){adminLoginAttempts.delete(loginKey(req,email))}
 function setAdminCookie(res,t){res.setHeader("Set-Cookie",`monte_admin_session=${encodeURIComponent(t)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(ADMIN_SESSION_TTL/1000)}`)}
 function clearAdminCookie(res){res.setHeader("Set-Cookie","monte_admin_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0")}
-app.post("/api/admin/login",adminLoginRateLimit,(req,res)=>{const email=safeString(req.body?.email).toLowerCase(),password=req.body?.password;if(!ADMIN_EMAIL||!ADMIN_PASSWORD_HASH)return res.status(503).json({success:false,message:"Acesso administrativo não configurado no servidor."});if(!loginAllowed(req,email))return res.status(429).json({success:false,message:"Muitas tentativas. Tente novamente em 15 minutos."});if(email!==ADMIN_EMAIL.toLowerCase()||!passwordMatches(password)){failedLogin(req,email);return res.status(401).json({success:false,message:"E-mail ou senha incorretos."})}clearLoginFailures(req,email);const token=crypto.randomBytes(32).toString("hex");adminSessions.set(token,{email:ADMIN_EMAIL,expiresAt:Date.now()+ADMIN_SESSION_TTL});setAdminCookie(res,token);return res.json({success:true,email:ADMIN_EMAIL})});
-app.post("/api/admin/logout",(req,res)=>{const t=parseCookies(req).monte_admin_session;if(t)adminSessions.delete(t);clearAdminCookie(res);return res.json({success:true})});
+app.post("/api/admin/login",adminLoginRateLimit,(req,res)=>{const email=safeString(req.body?.email).toLowerCase(),password=req.body?.password;if(!ADMIN_EMAIL||!ADMIN_PASSWORD_HASH)return res.status(503).json({success:false,message:"Acesso administrativo não configurado no servidor."});if(!loginAllowed(req,email))return res.status(429).json({success:false,message:"Muitas tentativas. Tente novamente em 15 minutos."});if(email!==ADMIN_EMAIL.toLowerCase()||!passwordMatches(password)){failedLogin(req,email);return res.status(401).json({success:false,message:"E-mail ou senha incorretos."})}clearLoginFailures(req,email);const token=createSignedToken({purpose:"admin",email:ADMIN_EMAIL},ADMIN_SESSION_TTL);setAdminCookie(res,token);return res.json({success:true,email:ADMIN_EMAIL})});
+app.post("/api/admin/logout",(req,res)=>{clearAdminCookie(res);return res.json({success:true})});
 app.get("/api/admin/session",(req,res)=>{const s=getAdminSession(req);if(!s)return res.status(401).json({success:false});return res.json({success:true,email:s.email})});
 const CAROUSEL_KV_KEY = "site_carousel_images";
 
@@ -1595,8 +1658,6 @@ app.get("/api/admin/analytics",requireAdmin,async(req,res)=>{
 
 const PRODUCT_IMAGE_BUCKET = "product-images";
 
-const normalizedProductImageCache = new Map();
-
 function isAllowedProductImageUrl(value) {
     try {
         const parsed = new URL(String(value || ""));
@@ -1609,63 +1670,45 @@ function isAllowedProductImageUrl(value) {
     }
 }
 
-app.get("/api/product-image-normalized", imageNormalizeRateLimit, async (req, res) => {
+// Antes recortava as bordas da foto com o sharp, biblioteca nativa que não roda no
+// Cloudflare. O site não usa mais este endereço; ele só leva à foto original.
+app.get("/api/product-image-normalized", imageNormalizeRateLimit, (req, res) => {
     const sourceUrl = safeString(req.query?.url);
     if (!isAllowedProductImageUrl(sourceUrl)) {
         return res.status(400).json({ success: false, message: "Imagem inválida." });
     }
-
-    const cached = normalizedProductImageCache.get(sourceUrl);
-    if (cached) {
-        res.setHeader("Content-Type", cached.contentType);
-        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-        return res.end(cached.buffer);
-    }
-
-    try {
-        const response = await fetch(sourceUrl);
-        if (!response.ok) {
-            return res.status(404).end();
-        }
-
-        const contentType = String(response.headers.get("content-type") || "").split(";")[0].toLowerCase();
-        if (!["image/jpeg", "image/png", "image/webp"].includes(contentType)) {
-            return res.status(415).end();
-        }
-
-        const sourceBuffer = Buffer.from(await response.arrayBuffer());
-        if (!sourceBuffer.length || sourceBuffer.length > 20 * 1024 * 1024) {
-            return res.status(413).end();
-        }
-
-        const normalizedBuffer = await sharp(sourceBuffer)
-            .trim({
-                threshold: 18,
-                margin: 20
-            })
-            .toBuffer();
-
-        const result = {
-            buffer: normalizedBuffer,
-            contentType
-        };
-
-        normalizedProductImageCache.set(sourceUrl, result);
-        if (normalizedProductImageCache.size > 250) {
-            const oldestKey = normalizedProductImageCache.keys().next().value;
-            normalizedProductImageCache.delete(oldestKey);
-        }
-
-        res.setHeader("Content-Type", contentType);
-        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-        return res.end(normalizedBuffer);
-    } catch (error) {
-        console.error("Product image normalization:", error);
-        return res.redirect(sourceUrl);
-    }
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    return res.redirect(sourceUrl);
 });
 
-
+// Lê o formato e as dimensões no cabeçalho do arquivo (JPEG, PNG ou WebP), sem bibliotecas nativas.
+function readImageInfo(b) {
+    if (b.length >= 24 && b.readUInt32BE(0) === 0x89504e47 && b.toString("ascii", 12, 16) === "IHDR") {
+        return { format: "png", width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
+    }
+    if (b.length >= 30 && b.toString("ascii", 0, 4) === "RIFF" && b.toString("ascii", 8, 12) === "WEBP") {
+        const chunk = b.toString("ascii", 12, 16);
+        if (chunk === "VP8X") return { format: "webp", width: 1 + b.readUIntLE(24, 3), height: 1 + b.readUIntLE(27, 3) };
+        if (chunk === "VP8L") { const bits = b.readUInt32LE(21); return { format: "webp", width: 1 + (bits & 0x3fff), height: 1 + ((bits >>> 14) & 0x3fff) }; }
+        if (chunk === "VP8 ") return { format: "webp", width: b.readUInt16LE(26) & 0x3fff, height: b.readUInt16LE(28) & 0x3fff };
+        return { format: "webp" };
+    }
+    if (b.length >= 4 && b[0] === 0xff && b[1] === 0xd8) {
+        let o = 2;
+        while (o + 8 < b.length) {
+            if (b[o] !== 0xff) return { format: "jpeg" };
+            const marker = b[o + 1];
+            if (marker === 0xff) { o += 1; continue; }
+            if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) { o += 2; continue; }
+            if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+                return { format: "jpeg", width: b.readUInt16BE(o + 7), height: b.readUInt16BE(o + 5) };
+            }
+            o += 2 + b.readUInt16BE(o + 2);
+        }
+        return { format: "jpeg" };
+    }
+    return { format: null };
+}
 
 async function validateImageBuffer(buffer, declaredContentType) {
     if (!Buffer.isBuffer(buffer) || !buffer.length) {
@@ -1674,7 +1717,7 @@ async function validateImageBuffer(buffer, declaredContentType) {
     if (buffer.length > 20 * 1024 * 1024) {
         throw new Error("Cada imagem pode ter no máximo 20 MB.");
     }
-    const metadata = await sharp(buffer, { limitInputPixels: 40_000_000, sequentialRead: true }).metadata();
+    const metadata = readImageInfo(buffer);
     const detected = metadata?.format === "jpeg" ? "image/jpeg"
         : metadata?.format === "png" ? "image/png"
         : metadata?.format === "webp" ? "image/webp"
@@ -2481,33 +2524,16 @@ app.get("/api/instagram/feed", async (req, res) => {
    Rota explícita para o painel. O Render executa o backend em /backend,
    enquanto admin.html permanece na raiz do repositório.
 ===================================================== */
-app.get("/admin", (req, res) => {
-    res.sendFile(path.join(__dirname, "..", "admin.html"));
-});
+app.get("/admin", (req, res) => sendSitePage(res, "admin.html"));
 
-app.get("/admin/", (req, res) => {
-    res.sendFile(path.join(__dirname, "..", "admin.html"));
-});
+app.get("/admin/", (req, res) => sendSitePage(res, "admin.html"));
 
 
 /* =====================================================
    TESTE DO SERVIDOR
 ===================================================== */
 
-app.get(
-    "/",
-    (req, res) => {
-
-        res.sendFile(
-            path.join(
-                __dirname,
-                "..",
-                "index.html"
-            )
-        );
-
-    }
-);
+app.get("/", (req, res) => sendSitePage(res, "index.html"));
 
 
 /* =====================================================
@@ -2615,7 +2641,7 @@ function cleanupPendingOrders() {
     }
 }
 
-setInterval(
+if (!IS_WORKERS) setInterval(
     cleanupPendingOrders,
     1000 * 60 * 60
 );
@@ -4459,7 +4485,13 @@ app.get("/sitemap.xml", async (req, res) => {
     } catch (error) {
         console.error("❌ Sitemap:", error);
         // Sem acesso ao catálogo, publica ao menos as páginas institucionais.
-        return res.sendFile(path.join(__dirname, "..", "sitemap.xml"));
+        const pages = ["/", "/trocas-devolucoes.html", "/politica-privacidade.html", "/entrega-frete.html", "/termos-de-compra.html"];
+        res.set("Content-Type", "application/xml; charset=utf-8");
+        return res.status(200).send(
+            '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' +
+            pages.map(page => '<url><loc>' + xmlEscape(new URL(page, PUBLIC_SITE_URL).href) + '</loc></url>').join("") +
+            '</urlset>'
+        );
     }
 });
 
@@ -4481,18 +4513,7 @@ app.get("/robots.txt", (req, res) => {
 /* =====================================================
    PÁGINA DE SUCESSO
 ===================================================== */
-app.get(
-    "/pagamento-sucesso",
-    (req, res) => {
-        res.sendFile(
-            path.join(
-                __dirname,
-                "..",
-                "pagamento-sucesso.html"
-            )
-        );
-    }
-);
+app.get("/pagamento-sucesso", (req, res) => sendSitePage(res, "pagamento-sucesso.html"));
 
 
 /* =====================================================
@@ -4516,10 +4537,7 @@ app.use((req, res, next) => {
 
 app.use(
     express.static(
-        path.join(
-            __dirname,
-            ".."
-        ),
+        SITE_DIR,
         {
             dotfiles: "deny",
             maxAge: "1d",
@@ -4538,32 +4556,52 @@ app.use(
 
 // Olist catalog synchronization is intentionally disabled.
 
-app.listen(
-    PORT,
-    () => {
-
-        console.log(
-            `🚀 Backend MONTÊ rodando na porta ${PORT}`
-        );
-
-        console.log(
-            `💳 InfinitePay configurada para: ${INFINITEPAY_HANDLE}`
-        );
-
-        // Worker de segurança: pedidos pagos que não chegaram à Olist
-        // são processados automaticamente, sem tocar no fluxo do pagamento.
-        setTimeout(() => runPendingOlistSync().catch(() => {}), 10000);
-        setInterval(() => runPendingOlistSync().catch(() => {}), 60000);
-
-        // O refresh token da Olist vence se ficar sem uso; renova a cada 3 horas
-        // enquanto o servidor estiver no ar, mesmo sem vendas.
-        setInterval(() => {
-            if (!OLIST_CLIENT_ID || !OLIST_CLIENT_SECRET) return;
-            olistAccessToken = null;
-            olistAccessTokenExpiresAt = 0;
-            getOlistAccessToken()
-                .then(() => console.log("🔑 Acesso Olist renovado."))
-                .catch(error => console.warn("Olist: renovação periódica falhou:", error.message));
-        }, 3 * 60 * 60 * 1000);
+// Renova o acesso à Olist mesmo sem vendas: o refresh token vence se ficar sem uso.
+async function refreshOlistAccess() {
+    if (!OLIST_SYNC_ENABLED || !OLIST_CLIENT_ID || !OLIST_CLIENT_SECRET) return;
+    olistAccessToken = null;
+    olistAccessTokenExpiresAt = 0;
+    try {
+        await getOlistAccessToken(false, true);
+        console.log("🔑 Acesso Olist renovado.");
+    } catch (error) {
+        console.warn("Olist: renovação periódica falhou:", error.message);
+    }
 }
-);
+
+// Tarefas periódicas. No Render rodam em timers; no Cloudflare, pelos Cron Triggers
+// do wrangler.jsonc ("* * * * *" = pedidos pagos pendentes, a cada 3 horas = acesso Olist).
+async function runScheduledTask(cron) {
+    if (cron === "* * * * *") return runPendingOlistSync().catch(() => {});
+    return refreshOlistAccess();
+}
+
+function startNodeServer() {
+    app.listen(
+        PORT,
+        () => {
+
+            console.log(
+                `🚀 Backend MONTÊ rodando na porta ${PORT}`
+            );
+
+            console.log(
+                `💳 InfinitePay configurada para: ${INFINITEPAY_HANDLE}`
+            );
+
+            // Worker de segurança: pedidos pagos que não chegaram à Olist
+            // são processados automaticamente, sem tocar no fluxo do pagamento.
+            setTimeout(() => runPendingOlistSync().catch(() => {}), 10000);
+            setInterval(() => runPendingOlistSync().catch(() => {}), 60000);
+
+            // O refresh token da Olist vence se ficar sem uso; renova a cada 3 horas
+            // enquanto o servidor estiver no ar, mesmo sem vendas.
+            setInterval(refreshOlistAccess, 3 * 60 * 60 * 1000);
+        }
+    );
+}
+
+// "node server.js" (Render) sobe o servidor; o Worker importa o app (backend/worker.js).
+if (!IS_WORKERS && require.main === module) startNodeServer();
+
+module.exports = { app, runScheduledTask, setSiteAssets };
