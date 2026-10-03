@@ -7803,3 +7803,23 @@ body.cart-open .toast { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); 
 
 /* Texto só para leitores de tela e buscadores */
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+
+/* =====================================================
+   FOTOS DE PRODUTO EM FUNDO BRANCO
+   A galeria do produto, as miniaturas e a foto na sacola usavam um
+   fundo bege; nas fotos de fundo branco sobravam faixas nas laterais.
+   Agora tudo fica branco, como nos cards da loja.
+===================================================== */
+.gallery-main,
+.gallery-thumbnail {
+    background: #ffffff !important;
+}
+
+.gallery-thumbnail {
+    box-shadow: inset 0 0 0 1px #efefef;
+}
+
+#cartOverlay .cart-item-media {
+    background: #ffffff;
+    box-shadow: inset 0 0 0 1px var(--co-line);
+}
