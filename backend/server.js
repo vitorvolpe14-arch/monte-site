@@ -2937,7 +2937,7 @@ app.patch("/api/admin/orders/:id/status",requireAdmin,async(req,res)=>{
     try{
         const id=encodeURIComponent(req.params.id);
         const status=safeString(req.body?.status).toLowerCase();
-        const allowed=["pending","paid","processing","shipped","delivered"];
+        const allowed=["pending","expired","paid","processing","shipped","delivered"];
         if(!allowed.includes(status)) return res.status(400).json({success:false,message:"Status inválido."});
         const patch={status,updated_at:new Date().toISOString()};
         if(status==="processing") patch.processing_at=new Date().toISOString();
@@ -5162,6 +5162,8 @@ app.get("/sitemap.xml", async (req, res) => {
     }
 });
 
+// Minhas Compras e a confirmação de pagamento ficam fora do Google pela meta "noindex";
+// não entram no Disallow porque o Google precisa abrir a página para ler o noindex.
 app.get("/robots.txt", (req, res) => {
     const body = [
         "User-agent: *",
@@ -5169,8 +5171,6 @@ app.get("/robots.txt", (req, res) => {
         "Disallow: /admin",
         "Disallow: /admin/",
         "Disallow: /backend/",
-        "Disallow: /minhas-compras.html",
-        "Disallow: /pagamento-sucesso.html",
         "Sitemap: " + new URL("/sitemap.xml", PUBLIC_SITE_URL).href
     ].join("\n") + "\n";
     res.set("Content-Type", "text/plain; charset=utf-8");
@@ -5221,6 +5221,276 @@ app.use(
 
 
 /* =====================================================
+   LEMBRETES POR E-MAIL E LIMPEZA DOS PEDIDOS SEM PAGAMENTO
+   - Pedido aguardando pagamento (Pix gerado ou cartão não concluído):
+     um lembrete 1 hora depois, com um link que refaz a sacola.
+   - Sacola abandonada (e-mail preenchido no checkout, sem pedido):
+     um lembrete 2 horas depois da última mexida.
+   Só pedidos e sacolas das últimas 24 horas, um único e-mail por pedido
+   ou sacola, e só com as peças que ainda têm estoque.
+   - Pedido aguardando pagamento há mais de 2 dias vira "expired" e sai
+     da lista principal do painel. Se o pagamento chegar depois, o aviso
+     da InfinitePay confirma o pedido normalmente.
+===================================================== */
+const REMINDER_ORDER_AFTER_MS = 60 * 60 * 1000;
+const REMINDER_CART_AFTER_MS = 2 * 60 * 60 * 1000;
+const REMINDER_WINDOW_MS = 24 * 60 * 60 * 1000;
+const PENDING_ORDER_EXPIRE_MS = 2 * 24 * 60 * 60 * 1000;
+// Por lembrete: compras posteriores, estoque, e-mail e marcação = 4 chamadas.
+const REMINDER_CALLS_EACH = 4;
+const PAID_ORDER_STATUSES = ["paid", "processing", "shipped", "delivered"];
+const isEmailAddress = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeString(value));
+const isoAgo = ms => encodeURIComponent(new Date(Date.now() - ms).toISOString());
+
+// Mesma regra da loja: "Bag Vienna - preta" aparece como "Preta".
+function reminderColorLabel(color, productName) {
+    const text = safeString(color);
+    const name = safeString(productName);
+    const plain = value => value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    if (!text || !name || text.length <= name.length || !plain(text).startsWith(plain(name))) return text;
+    const rest = text.slice(name.length).replace(/^[\s\-–—:|]+/, "").trim();
+    return rest ? rest.charAt(0).toUpperCase() + rest.slice(1) : text;
+}
+
+// Peças do pedido ou da sacola que ainda podem ser compradas, com preço e foto atuais.
+async function availableReminderItems(items) {
+    const uuid = /^[0-9a-f-]{36}$/i;
+    const list = (Array.isArray(items) ? items : []).map(item => ({
+        productId: safeString(item?.id || item?.product_id),
+        variantId: safeString(item?.variant_id),
+        quantity: Math.max(1, Math.min(20, Math.floor(Number(item?.quantity) || 1)))
+    })).filter(item => uuid.test(item.productId) && (!item.variantId || uuid.test(item.variantId))).slice(0, 20);
+    if (!list.length) return [];
+    const rows = await supabaseRequest(
+        "products?id=in.(" + [...new Set(list.map(item => item.productId))].join(",") + ")" +
+        "&active=eq.true&select=id,name,price,sale_price,is_sale,images,product_variants(id,color,stock,active)",
+        { method: "GET" }
+    );
+    const productsById = new Map((Array.isArray(rows) ? rows : []).map(row => [String(row.id).toLowerCase(), row]));
+    const result = [];
+    list.forEach(item => {
+        const product = productsById.get(item.productId.toLowerCase());
+        if (!product) return;
+        const variants = (Array.isArray(product.product_variants) ? product.product_variants : []).filter(v => v.active !== false);
+        const variant = item.variantId ? variants.find(v => String(v.id).toLowerCase() === item.variantId.toLowerCase()) : null;
+        if (item.variantId && !variant) return;
+        const stock = variant ? Number(variant.stock || 0) : variants.reduce((sum, v) => sum + Number(v.stock || 0), 0);
+        if (stock <= 0) return;
+        const price = product.is_sale && product.sale_price != null ? Number(product.sale_price) : Number(product.price || 0);
+        result.push({
+            productId: product.id,
+            variantId: variant?.id || null,
+            quantity: Math.min(item.quantity, stock),
+            name: safeString(product.name),
+            color: reminderColorLabel(variant?.color, product.name),
+            price,
+            image: publicImageUrl(Array.isArray(product.images) ? product.images[0] : "")
+        });
+    });
+    return result;
+}
+
+// Link que refaz a sacola no site: ?sacola=[[produto, variação, quantidade], ...] em base64url.
+function cartRestoreUrl(items, campaign) {
+    const payload = Buffer.from(JSON.stringify(items.map(item => [item.productId, item.variantId, item.quantity]))).toString("base64url");
+    return PUBLIC_SITE_URL + "/?sacola=" + payload + "&utm_source=lembrete&utm_medium=email&utm_campaign=" + campaign;
+}
+
+function formatEmailMoney(value) {
+    return "R$ " + Number(value || 0).toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+function reminderEmailHtml({ eyebrow, title, paragraphs, items, buttonUrl, buttonText, footnote }) {
+    const rows = items.map(item =>
+        "<tr><td style=\"padding:12px 0;border-bottom:1px solid #eee;width:76px;vertical-align:top;\">" +
+        (item.image ? "<img src=\"" + escapeEmailHtml(item.image) + "\" alt=\"\" width=\"64\" height=\"64\" style=\"display:block;width:64px;height:64px;object-fit:cover;background:#fff;border:1px solid #eee;\">" : "") +
+        "</td><td style=\"padding:12px 0 12px 12px;border-bottom:1px solid #eee;vertical-align:top;font-size:14px;color:#171717;\"><strong style=\"font-weight:600;\">" + escapeEmailHtml(item.name) + "</strong>" +
+        (item.color ? "<br><span style=\"font-size:12px;color:#777;\">" + escapeEmailHtml(item.color) + "</span>" : "") +
+        "<br><span style=\"font-size:12px;color:#777;\">" + item.quantity + " × " + formatEmailMoney(item.price) + "</span></td></tr>"
+    ).join("");
+    return "<html><body style=\"margin:0;background:#f7f5f2;font-family:Arial,Helvetica,sans-serif;color:#171717;\">" +
+        "<div style=\"max-width:620px;margin:0 auto;padding:40px 20px;\"><div style=\"background:#111;color:#fff;text-align:center;padding:24px 20px;letter-spacing:6px;font-size:24px;\">MONTÊ</div>" +
+        "<div style=\"background:#fff;padding:38px 30px;\"><p style=\"margin:0 0 12px;font-size:12px;letter-spacing:2px;color:#777;\">" + escapeEmailHtml(eyebrow) + "</p>" +
+        "<h1 style=\"margin:0 0 18px;font-size:28px;font-weight:500;\">" + escapeEmailHtml(title) + "</h1>" +
+        paragraphs.map(text => "<p style=\"font-size:15px;line-height:1.7;color:#555;margin:0 0 14px;\">" + escapeEmailHtml(text) + "</p>").join("") +
+        "<table role=\"presentation\" cellspacing=\"0\" cellpadding=\"0\" style=\"width:100%;margin:22px 0 6px;border-collapse:collapse;\">" + rows + "</table>" +
+        "<div style=\"text-align:center;margin:30px 0 8px;\"><a href=\"" + escapeEmailHtml(buttonUrl) + "\" style=\"display:inline-block;background:#111;color:#fff;text-decoration:none;padding:15px 26px;font-size:13px;letter-spacing:1.5px;\">" + escapeEmailHtml(buttonText) + "</a></div></div>" +
+        "<p style=\"text-align:center;font-size:11px;line-height:1.6;color:#999;margin:20px 0;\">" + escapeEmailHtml(footnote) + "<br>MONTÊ — Bolsas e acessórios</p></div></body></html>";
+}
+
+async function sendReminderEmail({ to, subject, html, text, idempotencyKey, type }) {
+    const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json", "Accept": "application/json", "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({ from: RESEND_FROM_NAME + " <" + RESEND_FROM_EMAIL + ">", to: [to], subject, text, html, tags: [{ name: "type", value: type }] })
+    });
+    const responseText = await response.text();
+    if (!response.ok) throw new Error("Resend API " + response.status + ": " + responseText.slice(0, 300));
+}
+
+async function expireOldPendingOrders(budget) {
+    spend(budget);
+    const rows = await supabaseRequest(
+        "orders?status=eq.pending&created_at=lt." + isoAgo(PENDING_ORDER_EXPIRE_MS) + "&select=order_code",
+        { method: "PATCH", body: JSON.stringify({ status: "expired", updated_at: new Date().toISOString() }) }
+    );
+    const codes = (Array.isArray(rows) ? rows : []).map(row => row.order_code).filter(Boolean);
+    if (codes.length) console.log("🧹 Pedidos sem pagamento há mais de 2 dias marcados como expirados:", codes.join(", "));
+    return codes.length;
+}
+
+// Pedidos da mesma cliente feitos depois deste momento (para não lembrar o que ela já resolveu).
+async function laterOrdersOf(email, since, budget) {
+    spend(budget);
+    const rows = await supabaseRequest(
+        "orders?customer_email=ilike." + encodeURIComponent(safeString(email)) + "&created_at=gt." + encodeURIComponent(since) + "&select=id,status&limit=10",
+        { method: "GET" }
+    );
+    return Array.isArray(rows) ? rows : [];
+}
+
+async function remindPendingOrders(budget) {
+    spend(budget);
+    const rows = await supabaseRequest(
+        "orders?status=eq.pending&payment_reminder_sent_at=is.null" +
+        "&created_at=lt." + isoAgo(REMINDER_ORDER_AFTER_MS) + "&created_at=gt." + isoAgo(REMINDER_WINDOW_MS) +
+        "&select=id,order_nsu,order_code,customer_name,customer_email,items,payment_method,created_at&order=created_at.asc&limit=5",
+        { method: "GET" }
+    );
+    let sent = 0;
+    for (const order of Array.isArray(rows) ? rows : []) {
+        if (!budget.has(REMINDER_CALLS_EACH)) break;
+        const mark = status => {
+            spend(budget);
+            return supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
+                method: "PATCH",
+                headers: { "Prefer": "return=minimal" },
+                body: JSON.stringify({ payment_reminder_sent_at: new Date().toISOString(), payment_reminder_status: status })
+            });
+        };
+        if (!isEmailAddress(order.customer_email)) { await mark("skipped_invalid_email"); continue; }
+        const later = await laterOrdersOf(order.customer_email, order.created_at, budget);
+        if (later.length) { await mark(later.some(o => PAID_ORDER_STATUSES.includes(o.status)) ? "skipped_paid_later" : "skipped_newer_order"); continue; }
+        spend(budget);
+        const items = await availableReminderItems(order.items);
+        if (!items.length) { await mark("skipped_sold_out"); continue; }
+        const code = formatOrderCode(order.order_code || order.order_nsu);
+        const firstName = safeString(order.customer_name).split(/\s+/)[0] || "";
+        const url = cartRestoreUrl(items, "pagamento_pendente");
+        const pix = safeString(order.payment_method).toLowerCase() === "pix";
+        try {
+            spend(budget);
+            await sendReminderEmail({
+                to: safeString(order.customer_email).toLowerCase(),
+                subject: "Seu pedido " + code + " está esperando por você",
+                type: "payment_reminder",
+                idempotencyKey: "monte-payment-reminder-" + order.id,
+                html: reminderEmailHtml({
+                    eyebrow: "PAGAMENTO PENDENTE",
+                    title: "Sua seleção ainda está aqui" + (firstName ? ", " + firstName : "") + ".",
+                    paragraphs: [
+                        "O pagamento do pedido " + code + " não foi concluído" + (pix ? " (o Pix gerado não foi pago)" : "") + ". Se ainda quiser as peças, é só voltar: a sacola já está pronta para você.",
+                        "As peças não ficam reservadas e o estoque é limitado. No Pix, você ganha 5% de desconto."
+                    ],
+                    items,
+                    buttonUrl: url,
+                    buttonText: "FINALIZAR MINHA COMPRA",
+                    footnote: "Se você já pagou, desconsidere este e-mail. Dúvidas? É só responder esta mensagem."
+                }),
+                text: "Seu pedido " + code + " na MONTÊ ainda não foi pago.\n\n" + items.map(i => "- " + i.name + (i.color ? " (" + i.color + ")" : "") + " — " + i.quantity + " × " + formatEmailMoney(i.price)).join("\n") + "\n\nFinalize sua compra: " + url + "\n\nSe você já pagou, desconsidere este e-mail."
+            });
+            await mark("sent");
+            sent++;
+            console.log("✉️ Lembrete de pagamento enviado:", code);
+        } catch (error) {
+            console.error("Lembrete de pagamento —", code, error.message);
+            await mark("error").catch(() => {});
+        }
+    }
+    return sent;
+}
+
+async function remindAbandonedCarts(budget) {
+    spend(budget);
+    const rows = await supabaseRequest(
+        "cart_snapshots?status=eq.active&reminder_sent_at=is.null&customer_email=not.is.null" +
+        "&last_activity_at=lt." + isoAgo(REMINDER_CART_AFTER_MS) + "&last_activity_at=gt." + isoAgo(REMINDER_WINDOW_MS) +
+        "&select=id,customer_name,customer_email,items,created_at&order=last_activity_at.asc&limit=5",
+        { method: "GET" }
+    );
+    let sent = 0;
+    for (const cart of Array.isArray(rows) ? rows : []) {
+        if (!budget.has(REMINDER_CALLS_EACH)) break;
+        const mark = (status, extra = {}) => {
+            spend(budget);
+            return supabaseRequest("cart_snapshots?id=eq." + encodeURIComponent(cart.id), {
+                method: "PATCH",
+                headers: { "Prefer": "return=minimal" },
+                body: JSON.stringify({ reminder_sent_at: new Date().toISOString(), reminder_status: status, ...extra })
+            });
+        };
+        if (!isEmailAddress(cart.customer_email)) { await mark("skipped_invalid_email"); continue; }
+        // Já virou pedido: se foi pago, a sacola conta como convertida; se não, o lembrete do pedido cuida.
+        const orders = await laterOrdersOf(cart.customer_email, cart.created_at, budget);
+        const paid = orders.find(o => PAID_ORDER_STATUSES.includes(o.status));
+        if (paid) { await mark("skipped_purchased", { status: "converted", converted_order_id: paid.id }); continue; }
+        if (orders.length) { await mark("skipped_has_order"); continue; }
+        spend(budget);
+        const items = await availableReminderItems(cart.items);
+        if (!items.length) { await mark("skipped_sold_out"); continue; }
+        const firstName = safeString(cart.customer_name).split(/\s+/)[0] || "";
+        const url = cartRestoreUrl(items, "sacola_abandonada");
+        try {
+            spend(budget);
+            await sendReminderEmail({
+                to: safeString(cart.customer_email).toLowerCase(),
+                subject: "Você deixou peças na sacola da MONTÊ",
+                type: "cart_reminder",
+                idempotencyKey: "monte-cart-reminder-" + cart.id,
+                html: reminderEmailHtml({
+                    eyebrow: "SUA SACOLA",
+                    title: "Esqueceu alguma coisa" + (firstName ? ", " + firstName : "") + "?",
+                    paragraphs: [
+                        "Guardamos as peças que você escolheu. Elas ainda estão disponíveis, mas o estoque é limitado.",
+                        "No Pix, você ganha 5% de desconto."
+                    ],
+                    items,
+                    buttonUrl: url,
+                    buttonText: "VOLTAR PARA A SACOLA",
+                    footnote: "Você recebeu este lembrete único porque começou uma compra em oficialmontee.com.br."
+                }),
+                text: "Você deixou peças na sacola da MONTÊ.\n\n" + items.map(i => "- " + i.name + (i.color ? " (" + i.color + ")" : "") + " — " + i.quantity + " × " + formatEmailMoney(i.price)).join("\n") + "\n\nVolte para a sacola: " + url
+            });
+            await mark("sent");
+            sent++;
+            console.log("✉️ Lembrete de sacola enviado.");
+        } catch (error) {
+            console.error("Lembrete de sacola —", error.message);
+            await mark("error").catch(() => {});
+        }
+    }
+    return sent;
+}
+
+// Roda a cada 5 minutos no cron. Devolve quantas chamadas externas usou.
+async function runCustomerUpkeep(calls) {
+    const limit = Math.max(0, Math.floor(Number(calls) || 0));
+    const budget = createCallBudget(limit);
+    const steps = [expireOldPendingOrders];
+    // Sem o Resend configurado não há como enviar: os lembretes esperam (nada é marcado).
+    if (RESEND_API_KEY && RESEND_FROM_EMAIL) steps.push(remindPendingOrders, remindAbandonedCarts);
+    for (const step of steps) {
+        if (!budget.has(2)) break;
+        try {
+            await step(budget);
+        } catch (error) {
+            if (!error?.budget) console.error("Lembretes/limpeza de pedidos:", error.message);
+        }
+    }
+    return limit - budget.left;
+}
+
+/* =====================================================
    INICIAR SERVIDOR
 ===================================================== */
 
@@ -5246,7 +5516,13 @@ async function refreshOlistAccess() {
 async function runScheduledTask(cron) {
     if (cron === "* * * * *") {
         const orders = await runPendingOlistSync().catch(() => ({ calls: 25 }));
-        return syncOlistStockBatch({ calls: WORKER_CALL_LIMIT - 4 - (orders?.calls || 0) })
+        let used = orders?.calls || 0;
+        // A cada 5 minutos: pedidos sem pagamento antigos expiram e saem os lembretes por e-mail.
+        // Sobram pelo menos 17 chamadas para o lote de estoque.
+        if (new Date().getUTCMinutes() % 5 === 2) {
+            used += await runCustomerUpkeep(Math.min(25, WORKER_CALL_LIMIT - 4 - used - 17)).catch(() => 25);
+        }
+        return syncOlistStockBatch({ calls: WORKER_CALL_LIMIT - 4 - used })
             .catch(error => console.error("Estoque Olist:", error.message));
     }
     return refreshOlistAccess();
@@ -5276,6 +5552,9 @@ function startNodeServer() {
 
             // Estoque Olist → site (só baixa), um lote por minuto.
             setInterval(() => syncOlistStockBatch().catch(() => {}), 60000);
+
+            // Pedidos sem pagamento antigos e lembretes por e-mail, a cada 5 minutos.
+            setInterval(() => runCustomerUpkeep(40).catch(() => {}), 5 * 60 * 1000);
         }
     );
 }
@@ -5283,4 +5562,4 @@ function startNodeServer() {
 // "node server.js" (Render) sobe o servidor; o Worker importa o app (backend/worker.js).
 if (!IS_WORKERS && require.main === module) startNodeServer();
 
-module.exports = { app, runScheduledTask, setSiteAssets, setBackgroundRunner };
+module.exports = { app, runScheduledTask, runCustomerUpkeep, setSiteAssets, setBackgroundRunner };

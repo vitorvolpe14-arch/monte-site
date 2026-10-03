@@ -4,11 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
+<meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="admin.css?v=20261003-estoque-olist">
+<link rel="stylesheet" href="admin.css?v=20261003-lembretes">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -97,6 +98,7 @@
 
     <section id="ordersSection" class="section hidden">
       <div class="section-actions"><div><p class="eyebrow">VENDAS</p><h2>Pedidos</h2></div><button id="refreshOrders" class="secondary">ATUALIZAR</button></div>
+      <label id="ordersExpiredToggle" class="orders-expired-toggle" hidden></label>
       <div id="ordersTable" class="panel table-wrap"></div>
     </section>
 
@@ -178,7 +180,7 @@
     if (date) date.textContent = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }).toUpperCase();
   })();
 </script>
-<script src="admin.js?v=20261003-auditoria"></script>
+<script src="admin.js?v=20261003-lembretes"></script>
 <script src="admin-carousel.js?v=20260925-2"></script>
 </body>
 </html>
