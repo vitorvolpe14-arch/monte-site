@@ -7,6 +7,9 @@
   "main": "backend/worker.mjs",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
+  // As variáveis (SITE_URL, chaves do Supabase, InfinitePay, Olist...) ficam no painel do
+  // Cloudflare: Settings → Variables and Secrets. keep_vars evita que cada deploy as apague.
+  "keep_vars": true,
   "assets": {
     "directory": "./",
     "binding": "ASSETS",
