@@ -18,6 +18,38 @@ const SITE_DIR = IS_WORKERS ? "/" : path.join(__dirname, "..");
 let siteAssets = null;
 function setSiteAssets(assets) { siteAssets = assets; }
 
+// No Workers, o que continua depois da resposta precisa do waitUntil (senão é cancelado).
+// O backend/worker.mjs entrega essa função aqui; no Node a tarefa só segue rodando.
+let backgroundRunner = null;
+function setBackgroundRunner(fn) { backgroundRunner = typeof fn === "function" ? fn : null; }
+function runInBackground(promise) {
+    const task = Promise.resolve(promise).catch(error => console.error("Tarefa em segundo plano:", error?.message || error));
+    if (backgroundRunner) {
+        try { backgroundRunner(task); } catch (error) { console.warn("waitUntil indisponível:", error.message); }
+    }
+    return task;
+}
+
+// Plano gratuito do Cloudflare Workers: cada execução (uma requisição ou um minuto do
+// cron) faz no máximo 50 chamadas externas (Olist, Supabase, e-mail...). As rotinas
+// longas contam as próprias chamadas e param antes do limite; o resto fica para a próxima.
+const WORKER_CALL_LIMIT = 50;
+function createCallBudget(limit) {
+    return {
+        left: Math.max(0, Math.floor(limit)),
+        has(n = 1) { return this.left >= n; },
+        use(n = 1) {
+            if (this.left < n) {
+                const error = new Error("CALL_BUDGET_EXHAUSTED");
+                error.budget = true;
+                throw error;
+            }
+            this.left -= n;
+        }
+    };
+}
+function spend(budget, n = 1) { if (budget) budget.use(n); }
+
 // Páginas com endereço sem ".html" (/, /admin, /pagamento-sucesso).
 async function sendSitePage(res, file) {
     if (!IS_WORKERS) return res.sendFile(path.join(SITE_DIR, file));
@@ -240,6 +272,14 @@ async function olistRequest(endpoint, options = {}, allowRefresh = true) {
 
 function olistItemsFromResponse(data) {
     return Array.isArray(data?.itens) ? data.itens : (Array.isArray(data) ? data : []);
+}
+
+// Garante o acesso à Olist antes de um lote. Renovar usa até 3 chamadas
+// (Supabase, Olist e Supabase de novo); com o acesso em memória, nenhuma.
+async function ensureOlistAccess(budget) {
+    if (olistAccessToken && Date.now() < olistAccessTokenExpiresAt - 60000) return;
+    spend(budget, 3);
+    await getOlistAccessToken();
 }
 
 async function findOlistProductBySku(sku) {
@@ -497,7 +537,8 @@ async function syncPaidOrderToOlist(order) {
 
 const olistSyncLocks = new Set();
 // Espera entre tentativas automáticas de um pedido que falhou, para não
-// repetir a cada minuto e esgotar o limite de requisições da Olist.
+// repetir a cada minuto e esgotar o limite de requisições da Olist. No Workers a
+// memória não dura entre execuções, então a espera fica gravada no pedido (updated_at).
 const olistRetryAfter = new Map();
 const OLIST_RETRY_DELAY_MS = 10 * 60 * 1000;
 const OLIST_RATE_LIMIT_DELAY_MS = 2 * 60 * 1000;
@@ -515,7 +556,8 @@ async function processPendingOlistOrder(order) {
             method:"PATCH",
             body:JSON.stringify({
                 olist_sync_status:"processing",
-                olist_sync_error:null
+                olist_sync_error:null,
+                updated_at:new Date().toISOString()
             })
         });
 
@@ -527,14 +569,17 @@ async function processPendingOlistOrder(order) {
     } catch (error) {
         const message = String(error?.message || error);
         const rateLimited = error?.status === 429;
-        olistRetryAfter.set(String(order.id), Date.now() + (rateLimited ? OLIST_RATE_LIMIT_DELAY_MS : OLIST_RETRY_DELAY_MS));
+        const delay = rateLimited ? OLIST_RATE_LIMIT_DELAY_MS : OLIST_RETRY_DELAY_MS;
+        olistRetryAfter.set(String(order.id), Date.now() + delay);
         console.error("🔴 Olist — falha no pedido", order.order_nsu || order.id, message);
 
         await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
             method:"PATCH",
             body:JSON.stringify({
                 olist_sync_status:"error",
-                olist_sync_error:message
+                olist_sync_error:message,
+                // A próxima tentativa automática vem quando updated_at passar de 10 minutos.
+                updated_at:new Date(Date.now() - OLIST_RETRY_DELAY_MS + delay).toISOString()
             })
         }).catch(() => {});
         return {ok:false, rateLimited};
@@ -543,33 +588,40 @@ async function processPendingOlistOrder(order) {
     }
 }
 
+// Um pedido por execução: cada um usa umas 15 chamadas externas (Olist e Supabase).
+// Devolve quantas chamadas usou, para o lote de estoque do mesmo minuto usar o resto.
 async function runPendingOlistSync() {
-    if (!OLIST_SYNC_ENABLED) return;
+    let calls = 0;
+    if (!OLIST_SYNC_ENABLED) return {calls};
     // Após um reinício, o refresh token obtido via OAuth existe apenas no Supabase.
     if (!OLIST_TOKEN && OLIST_CLIENT_ID && OLIST_CLIENT_SECRET && !olistRefreshToken) {
+        calls++;
         await loadPersistedOlistRefreshToken();
     }
     if (!OLIST_TOKEN && !(OLIST_CLIENT_ID && OLIST_CLIENT_SECRET && (OLIST_REFRESH_TOKEN || olistRefreshToken))) {
-        return;
+        return {calls};
     }
 
     try {
+        calls++;
         const rows = await supabaseRequest(
             "orders?status=eq.paid&or=(olist_sync_status.is.null,olist_sync_status.neq.completed)&select=*&order=paid_at.asc&limit=10",
             {method:"GET"}
         );
 
-        if (!Array.isArray(rows) || !rows.length) return;
-
-        for (const order of rows) {
-            if ((olistRetryAfter.get(String(order.id)) || 0) > Date.now()) continue;
-            const result = await processPendingOlistOrder(order);
-            // Limite de requisições atingido: o restante fica para a próxima rodada.
-            if (result?.rateLimited) break;
-        }
+        // Nunca tentados entram na hora; os que falharam ou travaram, depois da espera.
+        const retryBefore = Date.now() - OLIST_RETRY_DELAY_MS;
+        const order = (Array.isArray(rows) ? rows : []).find(o =>
+            (olistRetryAfter.get(String(o.id)) || 0) <= Date.now() &&
+            (!o.olist_sync_status || !o.updated_at || Date.parse(o.updated_at) < retryBefore)
+        );
+        if (!order) return {calls};
+        calls += 16 + (Array.isArray(order.items) ? order.items.length : 0);
+        await processPendingOlistOrder(order);
     } catch (error) {
         console.error("🔴 Olist — erro no worker automático:", error.message || error);
     }
+    return {calls};
 }
 
 app.get("/api/olist/config-check", requireAdmin, (req, res) => {
@@ -1547,12 +1599,51 @@ function isValidCpf(value){
 }
 function passwordMatches(password){try{const [salt,storedHex]=ADMIN_PASSWORD_HASH.split(":");if(!salt||!storedHex)return false;const stored=Buffer.from(storedHex,"hex");const derived=crypto.scryptSync(String(password||""),salt,stored.length);return crypto.timingSafeEqual(stored,derived)}catch{return false}}
 function loginKey(req,email){return `${clientIp(req)}:${safeString(email).toLowerCase()}`}
-function loginAllowed(req,email){const r=adminLoginAttempts.get(loginKey(req,email));if(!r)return true;if(r.lockedUntil&&Date.now()<r.lockedUntil)return false;if(r.lockedUntil)adminLoginAttempts.delete(loginKey(req,email));return true}
-function failedLogin(req,email){const k=loginKey(req,email);const r=adminLoginAttempts.get(k)||{count:0,lockedUntil:0};r.count++;if(r.count>=5){r.count=0;r.lockedUntil=Date.now()+15*60*1000}adminLoginAttempts.set(k,r)}
-function clearLoginFailures(req,email){adminLoginAttempts.delete(loginKey(req,email))}
+// Bloqueio após 5 senhas erradas seguidas (mesmo IP e e-mail) por 15 minutos. Fica no
+// Supabase: no Workers cada requisição pode cair em outra instância e a memória se perde.
+// A chave guarda só um hash do IP e do e-mail. Se o Supabase falhar, vale a memória.
+const ADMIN_LOGIN_MAX_FAILURES=5;
+const ADMIN_LOGIN_LOCK_MS=15*60*1000;
+function loginKvKey(req,email){return "admin_login:"+crypto.createHash("sha256").update(loginKey(req,email)).digest("hex").slice(0,40)}
+async function readLoginRecord(req,email){
+    const memory=adminLoginAttempts.get(loginKey(req,email))||null;
+    try{
+        const rows=await supabaseRequest("kv_store_48db9b7e?key=eq."+loginKvKey(req,email)+"&select=value&limit=1",{method:"GET"});
+        const saved=rows?.[0]?.value||null;
+        if(!saved)return memory;
+        if(!memory)return saved;
+        return Number(saved.lockedUntil||0)>=Number(memory.lockedUntil||0)?saved:memory;
+    }catch(error){console.warn("Login admin — tentativas no Supabase indisponíveis:",error.message);return memory}
+}
+async function loginAllowed(req,email){const r=await readLoginRecord(req,email);return !(r&&r.lockedUntil&&Date.now()<Number(r.lockedUntil))}
+async function failedLogin(req,email){
+    const k=loginKey(req,email);
+    const prev=await readLoginRecord(req,email);
+    // Falhas antigas (fora da janela de 15 minutos) não contam mais.
+    const fresh=prev&&Date.now()-Number(prev.lastAt||0)<ADMIN_LOGIN_LOCK_MS&&!(prev.lockedUntil&&Date.now()>=Number(prev.lockedUntil));
+    const r={count:(fresh?Number(prev.count||0):0)+1,lockedUntil:0,lastAt:Date.now()};
+    if(r.count>=ADMIN_LOGIN_MAX_FAILURES){r.count=0;r.lockedUntil=Date.now()+ADMIN_LOGIN_LOCK_MS;console.warn("Login admin bloqueado por 15 minutos após "+ADMIN_LOGIN_MAX_FAILURES+" senhas erradas.")}
+    adminLoginAttempts.set(k,r);
+    await supabaseRequest("kv_store_48db9b7e?on_conflict=key",{method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({key:loginKvKey(req,email),value:r})}).catch(error=>console.warn("Login admin — tentativa não registrada:",error.message));
+}
+async function clearLoginFailures(req,email){
+    adminLoginAttempts.delete(loginKey(req,email));
+    await supabaseRequest("kv_store_48db9b7e?key=eq."+loginKvKey(req,email),{method:"DELETE",headers:{"Prefer":"return=minimal"}}).catch(()=>{});
+}
 function setAdminCookie(res,t){res.setHeader("Set-Cookie",`monte_admin_session=${encodeURIComponent(t)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(ADMIN_SESSION_TTL/1000)}`)}
 function clearAdminCookie(res){res.setHeader("Set-Cookie","monte_admin_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0")}
-app.post("/api/admin/login",adminLoginRateLimit,(req,res)=>{const email=safeString(req.body?.email).toLowerCase(),password=req.body?.password;if(!ADMIN_EMAIL||!ADMIN_PASSWORD_HASH)return res.status(503).json({success:false,message:"Acesso administrativo não configurado no servidor."});if(!loginAllowed(req,email))return res.status(429).json({success:false,message:"Muitas tentativas. Tente novamente em 15 minutos."});if(email!==ADMIN_EMAIL.toLowerCase()||!passwordMatches(password)){failedLogin(req,email);return res.status(401).json({success:false,message:"E-mail ou senha incorretos."})}clearLoginFailures(req,email);const token=createSignedToken({purpose:"admin",email:ADMIN_EMAIL},ADMIN_SESSION_TTL);setAdminCookie(res,token);return res.json({success:true,email:ADMIN_EMAIL})});
+app.post("/api/admin/login",adminLoginRateLimit,async(req,res)=>{
+    try{
+        const email=safeString(req.body?.email).toLowerCase(),password=req.body?.password;
+        if(!ADMIN_EMAIL||!ADMIN_PASSWORD_HASH)return res.status(503).json({success:false,message:"Acesso administrativo não configurado no servidor."});
+        if(!(await loginAllowed(req,email)))return res.status(429).json({success:false,message:"Muitas tentativas. Tente novamente em 15 minutos."});
+        if(email!==ADMIN_EMAIL.toLowerCase()||!passwordMatches(password)){await failedLogin(req,email);return res.status(401).json({success:false,message:"E-mail ou senha incorretos."})}
+        await clearLoginFailures(req,email);
+        const token=createSignedToken({purpose:"admin",email:ADMIN_EMAIL},ADMIN_SESSION_TTL);
+        setAdminCookie(res,token);
+        return res.json({success:true,email:ADMIN_EMAIL});
+    }catch(error){console.error("Login admin:",error);return res.status(500).json({success:false,message:"Não foi possível entrar agora."})}
+});
 app.post("/api/admin/logout",(req,res)=>{clearAdminCookie(res);return res.json({success:true})});
 app.get("/api/admin/session",(req,res)=>{const s=getAdminSession(req);if(!s)return res.status(401).json({success:false});return res.json({success:true,email:s.email})});
 const CAROUSEL_KV_KEY = "site_carousel_images";
@@ -1960,12 +2051,22 @@ function skuKey(value) {
     return safeString(value).toUpperCase();
 }
 
+// Os mesmos nomes são normalizados milhares de vezes por comparação: guarda o resultado
+// (o plano gratuito do Cloudflare dá poucos milissegundos de CPU por requisição).
+const nameKeyCache = new Map();
 function nameKey(value) {
-    return safeString(value)
-        .normalize("NFD").replace(/[̀-ͯ]/g, "")
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, " ")
-        .trim();
+    const raw = safeString(value);
+    let key = nameKeyCache.get(raw);
+    if (key === undefined) {
+        key = raw
+            .normalize("NFD").replace(/[̀-ͯ]/g, "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, " ")
+            .trim();
+        if (nameKeyCache.size > 5000) nameKeyCache.clear();
+        nameKeyCache.set(raw, key);
+    }
+    return key;
 }
 
 // "preta" e "preto", "marrom" e "marrons": compara sem a última vogal.
@@ -1975,8 +2076,16 @@ function stemKey(value) {
 
 // Nome sem espaços e sem "Bag"/"Bolsa": "Bolsa Porto Fino" → "portofino".
 const GENERIC_NAME_WORDS = new Set(["bag", "bags", "bolsa", "bolsas"]);
+const coreKeyCache = new Map();
 function coreKey(value) {
-    return nameKey(value).split(" ").filter(word => word && !GENERIC_NAME_WORDS.has(word)).join("");
+    const name = nameKey(value);
+    let key = coreKeyCache.get(name);
+    if (key === undefined) {
+        key = name.split(" ").filter(word => word && !GENERIC_NAME_WORDS.has(word)).join("");
+        if (coreKeyCache.size > 5000) coreKeyCache.clear();
+        coreKeyCache.set(name, key);
+    }
+    return key;
 }
 
 // Tira o nome do produto e a palavra "cor" do começo: "Bag Cannes - café" → "cafe".
@@ -2023,29 +2132,14 @@ function nameScore(a, b) {
     return score;
 }
 
-async function olistRead(endpoint) {
-    for (let attempt = 0; ; attempt++) {
-        try {
-            return await olistRequest(endpoint);
-        } catch (error) {
-            if (error?.status === 429 && attempt < 4) {
-                await pause(2500 * (attempt + 1));
-                continue;
-            }
-            throw error;
-        }
-    }
-}
-
-async function listOlistProductsForSku() {
+async function listOlistProductsForSku(read) {
     const all = [];
     for (let offset = 0; offset < 5000; offset += 100) {
-        const data = await olistRead("/produtos?limit=100&offset=" + offset);
+        const data = await read("/produtos?limit=100&offset=" + offset);
         const items = olistItemsFromResponse(data);
         all.push(...items);
         const total = Number(data?.paginacao?.total || 0);
         if (items.length < 100 || (total && all.length >= total)) break;
-        await pause(350);
     }
     return all.filter(item => item && item.id && safeString(item.situacao).toUpperCase() !== "E");
 }
@@ -2071,10 +2165,11 @@ function pickByColor(options, siteColor) {
 const isOlistTipo = (item, tipo) => safeString(item?.tipo).toUpperCase() === tipo;
 const isOlistInactive = item => safeString(item?.situacao).toUpperCase() === "I";
 
-async function buildOlistSkuComparison() {
+// "read" consulta a Olist (ou devolve a resposta guardada de um passo anterior).
+async function buildOlistSkuComparison(read) {
     const [siteProducts, olistList] = await Promise.all([
         supabaseRequest("products?select=id,name,sku,active,product_variants(id,color,sku,active)&order=name.asc", { method: "GET" }),
-        listOlistProductsForSku()
+        listOlistProductsForSku(read)
     ]);
     const products = Array.isArray(siteProducts) ? siteProducts : [];
 
@@ -2090,8 +2185,7 @@ async function buildOlistSkuComparison() {
     const details = new Map();
     async function detailOf(id) {
         if (!details.has(String(id))) {
-            await pause(350);
-            details.set(String(id), await olistRead("/produtos/" + encodeURIComponent(id)));
+            details.set(String(id), await read("/produtos/" + encodeURIComponent(id)));
         }
         return details.get(String(id)) || {};
     }
@@ -2109,8 +2203,7 @@ async function buildOlistSkuComparison() {
     async function findBySku(sku) {
         let item = bySku.get(sku);
         if (!item) {
-            await pause(350);
-            const data = await olistRead("/produtos?codigo=" + encodeURIComponent(sku) + "&limit=20");
+            const data = await read("/produtos?codigo=" + encodeURIComponent(sku) + "&limit=20");
             item = olistItemsFromResponse(data).find(p => skuKey(p.sku || p.codigo) === sku) || null;
         }
         if (!item || safeString(item.situacao).toUpperCase() === "E") return null;
@@ -2289,9 +2382,71 @@ async function buildOlistSkuComparison() {
     return { rows, summary, olist_products: olistList.length };
 }
 
+// A comparação consulta a Olist umas 40 vezes (lista de produtos e detalhe de cada um),
+// mais do que as 50 chamadas por requisição do plano gratuito do Cloudflare. Ela anda em
+// passos: cada passo faz até OLIST_SKU_STEP_CALLS consultas novas, guarda as respostas
+// (só os campos usados) no Supabase e o painel chama de novo até a comparação fechar.
+const OLIST_SKU_CACHE_KEY = "olist_sku_compare_cache";
+const OLIST_SKU_STEP_CALLS = 36;
+
+function trimOlistForSku(endpoint, data) {
+    if (/^\/produtos\/\d+$/.test(endpoint)) {
+        const pai = data?.produtoPai;
+        return {
+            produtoPai: pai?.id ? { id: pai.id, sku: pai.sku, descricao: pai.descricao } : null,
+            variacoes: (Array.isArray(data?.variacoes) ? data.variacoes : []).map(v => ({
+                sku: v?.sku,
+                descricao: v?.descricao,
+                grade: (Array.isArray(v?.grade) ? v.grade : []).map(g => ({ chave: g?.chave, valor: g?.valor }))
+            }))
+        };
+    }
+    return {
+        itens: olistItemsFromResponse(data).map(i => ({ id: i.id, sku: i.sku, codigo: i.codigo, descricao: i.descricao, tipo: i.tipo, situacao: i.situacao })),
+        paginacao: { total: Number(data?.paginacao?.total || 0) }
+    };
+}
+
+async function saveSkuCompareCache(value) {
+    await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({ key: OLIST_SKU_CACHE_KEY, value })
+    });
+}
+
 app.get("/api/admin/olist/sku-compare", requireAdmin, async (req, res) => {
     try {
-        const result = await buildOlistSkuComparison();
+        let cache = { started_at: Date.now(), entries: {} };
+        if (req.query.restart !== "1") {
+            const saved = (await supabaseRequest("kv_store_48db9b7e?key=eq." + OLIST_SKU_CACHE_KEY + "&select=value&limit=1", { method: "GET" }))?.[0]?.value;
+            if (saved?.entries && Date.now() - Number(saved.started_at || 0) < OLIST_SKU_COMPARE_TTL) cache = saved;
+        }
+        const budget = createCallBudget(OLIST_SKU_STEP_CALLS);
+        let fetched = 0;
+        const read = async endpoint => {
+            if (Object.prototype.hasOwnProperty.call(cache.entries, endpoint)) return cache.entries[endpoint];
+            if (!budget.has(1)) throw Object.assign(new Error("SKU_COMPARE_NEXT_STEP"), { nextStep: true });
+            if (fetched) await pause(350);
+            budget.use();
+            fetched++;
+            const data = trimOlistForSku(endpoint, await olistRequest(endpoint));
+            cache.entries[endpoint] = data;
+            return data;
+        };
+
+        let result;
+        try {
+            await ensureOlistAccess(budget);
+            result = await buildOlistSkuComparison(read);
+        } catch (error) {
+            const rateLimited = error?.status === 429;
+            if (!error?.nextStep && !rateLimited) throw error;
+            await saveSkuCompareCache(cache);
+            return res.json({ success: true, partial: true, read: Object.keys(cache.entries).length, wait: rateLimited ? 8 : 0 });
+        }
+        if (fetched) await saveSkuCompareCache(cache).catch(error => console.warn("SKU — cache não salvo:", error.message));
+
         // A comparação vai assinada para o painel: no Workers cada requisição
         // pode cair em outra instância, então nada fica guardado em memória.
         const actionable = result.rows
@@ -2307,6 +2462,8 @@ app.get("/api/admin/olist/sku-compare", requireAdmin, async (req, res) => {
             : "Não foi possível consultar os produtos na Olist agora. Tente de novo em alguns minutos." });
     }
 });
+
+const SKU_SYNC_WRITES = 36;
 
 app.post("/api/admin/olist/sku-sync", requireAdmin, async (req, res) => {
     try {
@@ -2332,32 +2489,57 @@ app.post("/api/admin/olist/sku-sync", requireAdmin, async (req, res) => {
         const updated = [];
         const skipped = [];
         const label = r => ({ product_name: r.n, color: r.cor || "" });
+        // Até 50 chamadas por requisição no Cloudflare: lê tudo em duas consultas e grava
+        // no máximo SKU_SYNC_WRITES por vez. O painel chama de novo enquanto sobrar algo;
+        // o que já foi gravado aparece com o SKU novo e é pulado em silêncio.
+        let writes = SKU_SYNC_WRITES;
+        let remaining = 0;
+        const idList = ids => [...new Set(ids.map(String))].map(encodeURIComponent).join(",");
 
         // Variações: não deixa duas cores do mesmo produto com o mesmo SKU.
         const variantRows = pending.filter(r => r.t === "v");
-        const takenInProduct = new Map();
+        const siblingsByProduct = new Map();
+        const currentVariant = new Map();
+        if (variantRows.length) {
+            const rows = await supabaseRequest("product_variants?product_id=in.(" + idList(variantRows.map(r => r.p)) + ")&select=id,sku,product_id", { method: "GET" });
+            (Array.isArray(rows) ? rows : []).forEach(v => {
+                currentVariant.set(String(v.id), v);
+                if (!siblingsByProduct.has(String(v.product_id))) siblingsByProduct.set(String(v.product_id), new Map());
+                siblingsByProduct.get(String(v.product_id)).set(String(v.id), skuKey(v.sku));
+            });
+        }
         for (const row of variantRows) {
-            const current = await supabaseRequest("product_variants?id=eq." + encodeURIComponent(row.v) + "&select=sku,product_id", { method: "GET" });
-            if (!Array.isArray(current) || !current.length) { skipped.push({ ...label(row), reason: "Variação não existe mais." }); continue; }
-            if (skuKey(current[0].sku) !== skuKey(row.f)) { skipped.push({ ...label(row), reason: "SKU mudou desde a comparação." }); continue; }
-            if (!takenInProduct.has(row.p)) {
-                const siblings = await supabaseRequest("product_variants?product_id=eq." + encodeURIComponent(row.p) + "&select=id,sku", { method: "GET" });
-                takenInProduct.set(row.p, new Map((Array.isArray(siblings) ? siblings : []).map(s => [String(s.id), skuKey(s.sku)])));
-            }
-            const taken = takenInProduct.get(row.p);
+            const current = currentVariant.get(String(row.v));
+            if (!current) { skipped.push({ ...label(row), reason: "Variação não existe mais." }); continue; }
+            if (skuKey(current.sku) === skuKey(row.target)) continue;
+            if (skuKey(current.sku) !== skuKey(row.f)) { skipped.push({ ...label(row), reason: "SKU mudou desde a comparação." }); continue; }
+            const taken = siblingsByProduct.get(String(current.product_id)) || new Map();
             const clash = [...taken.entries()].some(([id, sku]) => id !== String(row.v) && sku === skuKey(row.target) && !variantRows.some(o => String(o.v) === id && skuKey(o.target) !== sku));
             if (clash) { skipped.push({ ...label(row), reason: "Outra cor deste produto já usa esse SKU." }); continue; }
+            if (writes < 1) { remaining++; continue; }
+            writes--;
             await supabaseRequest("product_variants?id=eq." + encodeURIComponent(row.v), { method: "PATCH", body: JSON.stringify({ sku: row.target }) });
             taken.set(String(row.v), skuKey(row.target));
             updated.push({ ...label(row), from: row.f, to: row.target });
         }
 
-        // Produtos: SKU único. Primeiro libera os SKUs antigos, depois grava os novos.
+        // Produtos: SKU único. Primeiro libera os SKUs antigos, depois grava os novos
+        // (duas gravações por produto, todas na mesma requisição para permitir trocas).
+        const productRowsAll = pending.filter(r => r.t === "p");
+        const currentProduct = new Map();
+        if (productRowsAll.length) {
+            const rows = await supabaseRequest("products?id=in.(" + idList(productRowsAll.map(r => r.p)) + ")&select=id,sku", { method: "GET" });
+            (Array.isArray(rows) ? rows : []).forEach(p => currentProduct.set(String(p.id), p));
+        }
         const productRows = [];
-        for (const row of pending.filter(r => r.t === "p")) {
-            const current = await supabaseRequest("products?id=eq." + encodeURIComponent(row.p) + "&select=sku", { method: "GET" });
-            if (!Array.isArray(current) || !current.length) { skipped.push({ ...label(row), reason: "Produto não existe mais." }); continue; }
-            if (skuKey(current[0].sku) !== skuKey(row.f)) { skipped.push({ ...label(row), reason: "SKU mudou desde a comparação." }); continue; }
+        for (const row of productRowsAll) {
+            const current = currentProduct.get(String(row.p));
+            if (!current) { skipped.push({ ...label(row), reason: "Produto não existe mais." }); continue; }
+            if (skuKey(current.sku) === skuKey(row.target)) continue;
+            // "SYNC-<id>" sobra quando uma correção anterior parou no meio.
+            if (skuKey(current.sku) !== skuKey(row.f) && current.sku !== "SYNC-" + row.p) { skipped.push({ ...label(row), reason: "SKU mudou desde a comparação." }); continue; }
+            if (writes < 2) { remaining++; continue; }
+            writes -= 2;
             productRows.push(row);
         }
         for (const row of productRows) {
@@ -2374,8 +2556,8 @@ app.post("/api/admin/olist/sku-sync", requireAdmin, async (req, res) => {
             }
         }
 
-        console.log("🔁 SKU site ← Olist:", { updated: updated.length, skipped: skipped.length });
-        return res.json({ success: true, updated: updated.length, skipped, changes: updated });
+        console.log("🔁 SKU site ← Olist:", { updated: updated.length, skipped: skipped.length, remaining });
+        return res.json({ success: true, updated: updated.length, skipped, changes: updated, remaining });
     } catch (error) {
         console.error("SKU sync:", error);
         return res.status(500).json({ success: false, message: "Não foi possível corrigir os SKUs no site." });
@@ -2388,12 +2570,20 @@ app.post("/api/admin/olist/sku-sync", requireAdmin, async (req, res) => {
    houver menos unidades do que no site, baixa o site para o mesmo
    número. Nunca aumenta o estoque do site e nunca escreve na Olist:
    assim uma venda do site que a Olist ainda não processou não faz o
-   estoque voltar. Roda a cada 10 minutos e de novo na hora da compra,
-   para as peças do carrinho.
+   estoque voltar. Confere em lotes pequenos a cada minuto (o plano gratuito
+   do Cloudflare permite 50 chamadas externas por execução), recomeça a
+   rodada alguns minutos depois de terminar e confere de novo, na hora da
+   compra, as peças do carrinho.
 ===================================================== */
-const OLIST_STOCK_PAUSE_MS = 1100;
+const OLIST_STOCK_PAUSE_MS = 900;
 const OLIST_STOCK_STATUS_KEY = "olist_stock_sync";
-let olistStockSyncRunning = false;
+// Pior caso de uma peça: achar o SKU de novo (3 chamadas, duas vezes) e baixar com nova tentativa (4).
+const OLIST_STOCK_VARIANT_CALLS = 10;
+const OLIST_STOCK_PAGE = 60;
+const OLIST_STOCK_BATCH_MS = 40 * 1000;
+const OLIST_STOCK_LEASE_MS = 90 * 1000;
+// Intervalo entre o fim de uma rodada automática e o começo da próxima.
+const OLIST_STOCK_CYCLE_GAP_MS = 5 * 60 * 1000;
 
 function olistAvailableFrom(data) {
     const value = ["disponivel", "saldo"].map(key => Number(data?.[key])).find(Number.isFinite);
@@ -2410,15 +2600,17 @@ function withTimeout(promise, ms) {
 
 // Id da peça na Olist (variação ou produto simples) pelo SKU. Fica guardado
 // em product_variants.olist_product_id para as próximas consultas.
-async function olistItemIdForVariant(variant, { refresh = false } = {}) {
+async function olistItemIdForVariant(variant, { refresh = false, budget = null } = {}) {
     const sku = skuKey(variant.sku);
     if (!sku) return null;
     if (variant.olist_product_id && !refresh) return Number(variant.olist_product_id);
-    const data = await olistRead("/produtos?codigo=" + encodeURIComponent(safeString(variant.sku)) + "&limit=20");
+    spend(budget);
+    const data = await olistRequest("/produtos?codigo=" + encodeURIComponent(safeString(variant.sku)) + "&limit=20");
     const item = olistItemsFromResponse(data).find(p => skuKey(p.sku || p.codigo) === sku && safeString(p.situacao).toUpperCase() !== "E");
     const id = item?.id ? Number(item.id) : null;
     const saved = variant.olist_product_id ? Number(variant.olist_product_id) : null;
     if (id !== saved) {
+        spend(budget);
         await supabaseRequest("product_variants?id=eq." + encodeURIComponent(variant.id), {
             method: "PATCH",
             headers: { "Prefer": "return=minimal" },
@@ -2430,32 +2622,36 @@ async function olistItemIdForVariant(variant, { refresh = false } = {}) {
 }
 
 // Estoque disponível da peça na Olist. found=false quando o SKU não existe lá.
-async function olistAvailableForVariant(variant) {
-    let id = await olistItemIdForVariant(variant);
+async function olistAvailableForVariant(variant, budget = null) {
+    let id = await olistItemIdForVariant(variant, { budget });
     if (!id) return { available: null, found: false };
     let data = null;
     try {
-        data = await olistRead("/estoque/" + encodeURIComponent(id));
+        spend(budget);
+        data = await olistRequest("/estoque/" + encodeURIComponent(id));
     } catch (error) {
         if (error?.status !== 404) throw error;
     }
     // O SKU mudou ou a peça foi apagada na Olist: procura de novo pelo SKU.
     if (!data || (data.codigo && skuKey(data.codigo) !== skuKey(variant.sku))) {
-        id = await olistItemIdForVariant(variant, { refresh: true });
+        id = await olistItemIdForVariant(variant, { refresh: true, budget });
         if (!id) return { available: null, found: false };
-        data = await olistRead("/estoque/" + encodeURIComponent(id));
+        spend(budget);
+        data = await olistRequest("/estoque/" + encodeURIComponent(id));
     }
     return { available: olistAvailableFrom(data), found: true };
 }
 
 // Baixa o estoque da variação até "target" (nunca aumenta) e registra no histórico.
-async function lowerSiteStock(variant, target, reason) {
+async function lowerSiteStock(variant, target, reason, budget = null) {
     for (let attempt = 0; attempt < 2; attempt++) {
+        spend(budget);
         const rows = await supabaseRequest("product_variants?id=eq." + encodeURIComponent(variant.id) + "&select=stock", { method: "GET" });
         const current = Number(rows?.[0]?.stock || 0);
         const delta = Math.max(0, target) - current;
         if (delta >= 0) return { changed: false, from: current, to: current };
         try {
+            spend(budget);
             await supabaseRequest("rpc/adjust_product_variant_stock", {
                 method: "POST",
                 body: JSON.stringify({ p_variant_id: variant.id, p_delta: delta, p_movement_type: "correction", p_reason: reason, p_created_by: "olist" })
@@ -2469,73 +2665,131 @@ async function lowerSiteStock(variant, target, reason) {
     return { changed: false };
 }
 
-async function saveOlistStockStatus(result) {
+// Estado guardado no Supabase: a rodada em andamento (cycle, com o cursor "after"),
+// a última rodada concluída (last) e a trava do lote que está rodando (lease_until).
+async function readOlistStockState() {
+    const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + OLIST_STOCK_STATUS_KEY + "&select=value&limit=1", { method: "GET" });
+    const value = rows?.[0]?.value || {};
+    // Formato antigo (a rodada inteira de uma vez): vira a última rodada concluída.
+    if (value.ran_at && !value.version) return { version: 2, last: value, cycle: null, lease_until: 0 };
+    return { version: 2, last: value.last || null, cycle: value.cycle || null, lease_until: Number(value.lease_until) || 0 };
+}
+
+async function writeOlistStockState(state) {
     await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
-        body: JSON.stringify({ key: OLIST_STOCK_STATUS_KEY, value: result })
-    }).catch(error => console.error("Estoque Olist — status não salvo:", error.message));
+        body: JSON.stringify({ key: OLIST_STOCK_STATUS_KEY, value: { ...state, version: 2, updated_at: new Date().toISOString() } })
+    });
 }
 
-async function syncOlistStock({ trigger = "agendada" } = {}) {
+// Um lote da rodada: confere as próximas peças até gastar as chamadas ou o tempo.
+// restart começa uma rodada nova (botão do painel); cycleId diz qual rodada o painel acompanha.
+async function syncOlistStockBatch({ trigger = "agendada", calls = WORKER_CALL_LIMIT - 4, restart = false, cycleId = "", maxMs = OLIST_STOCK_BATCH_MS } = {}) {
     if (!OLIST_SYNC_ENABLED) return { skipped: "disabled" };
-    if (olistStockSyncRunning) return { skipped: "running" };
-    olistStockSyncRunning = true;
-    const result = { ran_at: new Date().toISOString(), trigger, checked: 0, lowered: [], not_found: [], errors: 0 };
+    const started = Date.now();
+    const budget = createCallBudget(calls);
+    // Ler e travar o estado, consultar as peças e gravar no fim: 4 chamadas, mais uma peça.
+    if (!budget.has(4 + 3 + OLIST_STOCK_VARIANT_CALLS)) return { skipped: "budget" };
+
+    budget.use();
+    const state = await readOlistStockState();
+    if (state.lease_until > Date.now()) return { skipped: "running", state };
+    // O painel acompanhava uma rodada que já terminou (o lote automático fechou).
+    if (cycleId && !restart && state.cycle?.id !== cycleId) return { done: true, state, cycle_id: cycleId };
+
+    let cycle = restart ? null : state.cycle;
+    if (!cycle) {
+        const lastEnd = Date.parse(state.last?.finished_at || "") || 0;
+        if (!restart && Date.now() - lastEnd < OLIST_STOCK_CYCLE_GAP_MS) return { skipped: "rest", state };
+        cycle = { id: new Date().toISOString(), started_at: new Date().toISOString(), trigger, after: "", checked: 0, lowered: [], not_found: [], errors: 0 };
+    }
+    budget.use();
+    await writeOlistStockState({ ...state, cycle, lease_until: Date.now() + OLIST_STOCK_LEASE_MS });
+
+    const loweredNow = [];
+    let finished = false;
+    budget.use(); // gravação final
     try {
+        await ensureOlistAccess(budget);
+        budget.use();
         // Só peças ativas, com SKU e com estoque no site: as zeradas não têm o que baixar.
         const variants = await supabaseRequest(
             "product_variants?select=id,sku,stock,color,olist_product_id,products!inner(name,active)" +
-            "&active=eq.true&stock=gt.0&sku=not.is.null&products.active=eq.true&order=sku.asc",
+            "&active=eq.true&stock=gt.0&sku=not.is.null&products.active=eq.true" +
+            (cycle.after ? "&id=gt." + encodeURIComponent(cycle.after) : "") +
+            "&order=id.asc&limit=" + OLIST_STOCK_PAGE,
             { method: "GET" }
         );
-        for (const variant of Array.isArray(variants) ? variants : []) {
-            if (!safeString(variant.sku)) continue;
-            const label = { product: safeString(variant.products?.name), color: safeString(variant.color), sku: safeString(variant.sku) };
-            try {
-                const { available, found } = await olistAvailableForVariant(variant);
-                result.checked++;
-                if (!found) result.not_found.push(label);
-                else if (available !== null && available < Number(variant.stock || 0)) {
-                    const change = await lowerSiteStock(variant, available, "Estoque da Olist: " + available + " disponível");
-                    if (change.changed) result.lowered.push({ ...label, from: change.from, to: change.to });
+        const list = Array.isArray(variants) ? variants : [];
+        let index = 0;
+        for (; index < list.length; index++) {
+            const variant = list[index];
+            if (!budget.has(OLIST_STOCK_VARIANT_CALLS) || Date.now() - started > maxMs) break;
+            if (safeString(variant.sku)) {
+                const label = { product: safeString(variant.products?.name), color: safeString(variant.color), sku: safeString(variant.sku) };
+                try {
+                    const { available, found } = await olistAvailableForVariant(variant, budget);
+                    cycle.checked++;
+                    if (!found) cycle.not_found.push(label);
+                    else if (available !== null && available < Number(variant.stock || 0)) {
+                        const change = await lowerSiteStock(variant, available, "Estoque da Olist: " + available + " disponível", budget);
+                        if (change.changed) loweredNow.push({ ...label, from: change.from, to: change.to });
+                    }
+                } catch (error) {
+                    // Limite da Olist ou das chamadas: a peça fica para o próximo lote.
+                    if (error?.status === 429 || error?.budget) break;
+                    if (/OLIST_AUTH|OLIST_SYNC_DISABLED/.test(String(error.message))) throw error;
+                    cycle.errors++;
+                    console.error("Estoque Olist —", variant.sku, error.message);
                 }
-            } catch (error) {
-                if (/OLIST_AUTH|OLIST_SYNC_DISABLED/.test(String(error.message))) throw error;
-                result.errors++;
-                console.error("Estoque Olist —", variant.sku, error.message);
+                await pause(OLIST_STOCK_PAUSE_MS);
             }
-            await pause(OLIST_STOCK_PAUSE_MS);
+            cycle.after = variant.id;
         }
+        finished = index >= list.length && list.length < OLIST_STOCK_PAGE;
     } catch (error) {
-        result.error = /OLIST_AUTH/.test(String(error.message))
+        // Sem acesso à Olist: encerra a rodada com o aviso para o painel.
+        cycle.error = /OLIST_AUTH/.test(String(error.message))
             ? "A conexão com a Olist expirou. Clique em RECONECTAR OLIST."
             : "Não foi possível consultar a Olist agora.";
         console.error("Estoque Olist:", error.message);
-    } finally {
-        olistStockSyncRunning = false;
+        finished = true;
     }
-    result.finished_at = new Date().toISOString();
-    result.not_found = result.not_found.slice(0, 60);
-    await saveOlistStockStatus(result);
-    if (result.lowered.length) console.log("📦 Estoque do site baixado pela Olist:", result.lowered);
-    return result;
+
+    cycle.lowered = cycle.lowered.concat(loweredNow).slice(-100);
+    cycle.not_found = cycle.not_found.slice(0, 60);
+    const next = { last: state.last, cycle, lease_until: 0 };
+    if (finished) {
+        next.last = { ...cycle, ran_at: cycle.started_at, finished_at: new Date().toISOString() };
+        next.cycle = null;
+    }
+    await writeOlistStockState(next).catch(error => console.error("Estoque Olist — status não salvo:", error.message));
+    if (loweredNow.length) console.log("📦 Estoque do site baixado pela Olist:", loweredNow);
+    return { done: finished, state: next, cycle_id: cycle.id, lowered: loweredNow };
 }
 
-// Na hora da compra: confere na Olist as peças do carrinho. Se a Olist estiver
-// fora do ar ou demorar, a compra segue com o estoque do site.
-async function checkCartAgainstOlistStock(entries) {
-    if (!OLIST_SYNC_ENABLED) return null;
+// Na hora da compra: confere na Olist as peças do carrinho, dentro das chamadas que
+// sobram na requisição. Se a Olist estiver fora do ar ou demorar, a compra segue com
+// o estoque do site.
+async function checkCartAgainstOlistStock(entries, budget) {
+    if (!OLIST_SYNC_ENABLED || !entries.length) return null;
     const deadline = Date.now() + 6000;
+    try {
+        await withTimeout(ensureOlistAccess(budget), 3000);
+    } catch (error) {
+        console.warn("Checkout — estoque da Olist não conferido:", error.message);
+        return null;
+    }
     for (const { item, variant } of entries) {
         if (!safeString(variant?.sku)) continue;
         const left = deadline - Date.now();
-        if (left < 400) break;
+        if (left < 400 || !budget.has(6)) break;
         try {
-            const { available, found } = await withTimeout(olistAvailableForVariant(variant), left);
+            const { available, found } = await withTimeout(olistAvailableForVariant(variant, budget), left);
             if (!found || available === null) continue;
-            if (available < Number(variant.stock || 0)) {
-                await lowerSiteStock(variant, available, "Estoque da Olist na hora da compra: " + available + " disponível").catch(error => console.error("Checkout — estoque não baixado:", error.message));
+            if (available < Number(variant.stock || 0) && budget.has(2)) {
+                await lowerSiteStock(variant, available, "Estoque da Olist na hora da compra: " + available + " disponível", budget).catch(error => console.error("Checkout — estoque não baixado:", error.message));
             }
             if (available < Number(item.quantity || 0)) return { item, variant, available };
         } catch (error) {
@@ -2546,22 +2800,39 @@ async function checkCartAgainstOlistStock(entries) {
     return null;
 }
 
+function olistStockStatusPayload(state) {
+    const cycle = state?.cycle ? { id: state.cycle.id, started_at: state.cycle.started_at, trigger: state.cycle.trigger, checked: state.cycle.checked, lowered: state.cycle.lowered, errors: state.cycle.errors } : null;
+    return { last: state?.last || null, cycle, running: Number(state?.lease_until || 0) > Date.now() };
+}
+
 app.get("/api/admin/olist/stock-sync", requireAdmin, async (req, res) => {
     try {
-        const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + OLIST_STOCK_STATUS_KEY + "&select=value&limit=1", { method: "GET" });
-        return res.json({ success: true, enabled: OLIST_SYNC_ENABLED, last: rows?.[0]?.value || null });
+        const state = await readOlistStockState();
+        return res.json({ success: true, enabled: OLIST_SYNC_ENABLED, ...olistStockStatusPayload(state) });
     } catch (error) {
         console.error("Estoque Olist — status:", error);
         return res.status(500).json({ success: false, message: "Não foi possível ler a última sincronização." });
     }
 });
 
+// O painel chama em sequência: a primeira com restart, as seguintes com o id da rodada,
+// até done. Cada chamada confere um lote (no Cloudflare, 50 chamadas por requisição).
 app.post("/api/admin/olist/stock-sync", requireAdmin, async (req, res) => {
-    const result = await syncOlistStock({ trigger: "painel" });
-    if (result.skipped === "running") return res.status(409).json({ success: false, message: "Uma sincronização já está em andamento. Aguarde alguns minutos." });
-    if (result.skipped) return res.status(409).json({ success: false, message: "A integração com a Olist está desligada neste servidor." });
-    if (result.error) return res.status(502).json({ success: false, message: result.error, last: result });
-    return res.json({ success: true, last: result });
+    try {
+        const result = await syncOlistStockBatch({
+            trigger: "painel",
+            restart: req.body?.restart === true,
+            cycleId: safeString(req.body?.cycle),
+            maxMs: 25 * 1000
+        });
+        if (result.skipped === "disabled") return res.status(409).json({ success: false, message: "A integração com a Olist está desligada neste servidor." });
+        if (result.skipped === "running") return res.json({ success: true, waiting: true, done: false, ...olistStockStatusPayload(result.state) });
+        if (result.skipped) return res.status(503).json({ success: false, message: "Não foi possível conferir agora. Tente de novo em instantes." });
+        return res.json({ success: true, done: result.done, cycle_id: result.cycle_id, ...olistStockStatusPayload(result.state) });
+    } catch (error) {
+        console.error("Estoque Olist — painel:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível conferir o estoque agora." });
+    }
 });
 
 app.put("/api/admin/products/:id/variants",requireAdmin,async(req,res)=>{
@@ -3378,13 +3649,18 @@ app.post(
                RECALCULA PREÇOS NO SERVIDOR
                Nunca confia no preço salvo no navegador.
             ================================================= */
+            // Uma consulta só para todos os produtos: no Cloudflare cada requisição faz
+            // no máximo 50 chamadas externas, e a sacola pode ter até 20 itens.
+            const priceKey = item => safeString(item.id || item.product_id).toLowerCase();
+            const priceIds = [...new Set(normalizedItems.filter(item => String(item.sku || "").toUpperCase() !== "FRETE").map(priceKey))];
+            const priceRows = priceIds.length ? await supabaseRequest(
+                "products?id=in.(" + priceIds.map(encodeURIComponent).join(",") + ")" +
+                "&active=eq.true&select=id,name,price,sale_price,is_sale"
+            ) : [];
+            const pricedProducts = new Map((Array.isArray(priceRows) ? priceRows : []).map(row => [String(row.id).toLowerCase(), row]));
             for (const item of normalizedItems) {
                 if (String(item.sku || "").toUpperCase() === "FRETE") continue;
-                const productRows = await supabaseRequest(
-                    "products?id=eq." + encodeURIComponent(item.id || item.product_id || "") +
-                    "&active=eq.true&select=id,name,price,sale_price,is_sale"
-                );
-                const product = Array.isArray(productRows) ? productRows[0] : null;
+                const product = pricedProducts.get(priceKey(item)) || null;
                 if (!product) {
                     return res.status(400).json({success:false,message:"Produto inválido ou indisponível."});
                 }
@@ -3544,7 +3820,13 @@ app.post(
             }
 
             // A peça pode ter sido vendida na Olist depois da última sincronização.
-            const olistShortage = await checkCartAgainstOlistStock(checkedVariants);
+            // A conferência usa só as chamadas que sobram na requisição: cada peça já usou
+            // 2 (variação e frete) e o resto do pedido usa umas 10 (preços, cotação do frete,
+            // número do pedido, pedido, itens, InfinitePay e folga).
+            const olistShortage = await checkCartAgainstOlistStock(
+                checkedVariants,
+                createCallBudget(WORKER_CALL_LIMIT - 10 - 2 * checkedVariants.length)
+            );
             if (olistShortage) {
                 const { item, available } = olistShortage;
                 const name = item.description + (item.variant_color ? " (" + item.variant_color + ")" : "");
@@ -4419,18 +4701,16 @@ app.post(
             // A venda MONTÊ já está confirmada. A Olist roda em segundo plano.
             // O webhook responde sem esperar a Olist, evitando que uma falha/lentidão
             // do ERP interfira no checkout, no estoque ou na confirmação da compra.
-            setImmediate(() => {
-                processPendingOlistOrder({
-                    ...order,
-                    status: "paid",
-                    payment_method: resolvedPaymentMethod,
-                    transaction_nsu: transactionNsu,
-                    customer_cpf: order.customer_cpf,
-                    customer_whatsapp: order.customer_whatsapp
-                }).catch(error => {
-                    console.error("🔴 Olist — tarefa em segundo plano:", error.message || error);
-                });
-            });
+            // No Workers o waitUntil mantém a tarefa viva depois da resposta; se ela
+            // não terminar, o cron de cada minuto envia o pedido.
+            runInBackground(processPendingOlistOrder({
+                ...order,
+                status: "paid",
+                payment_method: resolvedPaymentMethod,
+                transaction_nsu: transactionNsu,
+                customer_cpf: order.customer_cpf,
+                customer_whatsapp: order.customer_whatsapp
+            }));
 
             processedPayments.add(orderNsu);
 
@@ -4916,9 +5196,12 @@ app.use("/backend", (req, res, next) => {
     return res.status(404).send("Não encontrado.");
 });
 
-// Arquivos e pastas ocultos (.git, .env...) nunca são públicos.
+// Arquivos e pastas ocultos (.git, .env...) e a configuração do Cloudflare nunca são
+// públicos (no Workers eles já ficam fora dos assets; aqui vale para o Node).
 app.use((req, res, next) => {
-    if (/(^|\/)\.(?!well-known\/)/.test(req.path)) return res.status(404).send("Não encontrado.");
+    if (/(^|\/)\.(?!well-known\/)/.test(req.path) || /^\/(wrangler\.jsonc|_headers|_redirects)$/i.test(req.path)) {
+        return res.status(404).send("Não encontrado.");
+    }
     return next();
 });
 
@@ -4957,14 +5240,14 @@ async function refreshOlistAccess() {
 }
 
 // Tarefas periódicas. No Render rodam em timers; no Cloudflare, pelos Cron Triggers
-// do wrangler.jsonc ("* * * * *" = pedidos pagos pendentes e, a cada 10 minutos, estoque
-// Olist → site; a cada 3 horas = acesso Olist).
+// do wrangler.jsonc ("* * * * *" = um pedido pago pendente e um lote do estoque
+// Olist → site; a cada 3 horas = acesso Olist). Cada execução tem 50 chamadas externas:
+// o pedido vai primeiro e o lote de estoque usa o que sobrar.
 async function runScheduledTask(cron) {
     if (cron === "* * * * *") {
-        const tasks = [runPendingOlistSync().catch(() => {})];
-        // Estoque Olist → site a cada 10 minutos (minutos 5, 15, 25...).
-        if (new Date().getUTCMinutes() % 10 === 5) tasks.push(syncOlistStock().catch(error => console.error("Estoque Olist:", error.message)));
-        return Promise.all(tasks);
+        const orders = await runPendingOlistSync().catch(() => ({ calls: 25 }));
+        return syncOlistStockBatch({ calls: WORKER_CALL_LIMIT - 4 - (orders?.calls || 0) })
+            .catch(error => console.error("Estoque Olist:", error.message));
     }
     return refreshOlistAccess();
 }
@@ -4991,9 +5274,8 @@ function startNodeServer() {
             // enquanto o servidor estiver no ar, mesmo sem vendas.
             setInterval(refreshOlistAccess, 3 * 60 * 60 * 1000);
 
-            // Estoque Olist → site (só baixa) a cada 10 minutos.
-            setTimeout(() => syncOlistStock().catch(() => {}), 30000);
-            setInterval(() => syncOlistStock().catch(() => {}), 10 * 60 * 1000);
+            // Estoque Olist → site (só baixa), um lote por minuto.
+            setInterval(() => syncOlistStockBatch().catch(() => {}), 60000);
         }
     );
 }
@@ -5001,4 +5283,4 @@ function startNodeServer() {
 // "node server.js" (Render) sobe o servidor; o Worker importa o app (backend/worker.js).
 if (!IS_WORKERS && require.main === module) startNodeServer();
 
-module.exports = { app, runScheduledTask, setSiteAssets };
+module.exports = { app, runScheduledTask, setSiteAssets, setBackgroundRunner };

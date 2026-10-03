@@ -2,13 +2,18 @@
 // atendido pelo httpServerHandler, e as tarefas periódicas pelos Cron Triggers.
 // As páginas, o CSS, o JS e as fotos saem direto dos assets (veja wrangler.jsonc).
 import { env } from "cloudflare:workers";
+import * as cloudflareWorkers from "cloudflare:workers";
 import { httpServerHandler } from "cloudflare:node";
 import server from "./server.js";
 
-const { app, runScheduledTask, setSiteAssets } = server;
+const { app, runScheduledTask, setSiteAssets, setBackgroundRunner } = server;
 
 // Páginas sem ".html" no endereço (/, /admin, /pagamento-sucesso) são lidas dos assets.
 setSiteAssets(env.ASSETS);
+
+// Tarefas que seguem depois da resposta (ex.: enviar o pedido pago à Olist) usam o
+// waitUntil da requisição em andamento; sem ele o Cloudflare as cancela.
+setBackgroundRunner(cloudflareWorkers.waitUntil);
 
 app.listen(3000);
 const http = httpServerHandler({ port: 3000 });

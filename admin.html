@@ -111,7 +111,7 @@
     <section id="stockSection" class="section hidden">
       <div class="section-actions"><div><p class="eyebrow">INVENTÁRIO</p><h2>Estoque</h2></div></div>
       <div class="panel stock-sync-panel">
-        <div class="panel-head"><div><h2>Estoque da Olist → site</h2><p class="field-help">A cada 10 minutos o site confere o estoque disponível na Olist e baixa no site as peças que tiverem menos unidades lá. Na hora da compra, as peças do carrinho são conferidas de novo. O site nunca aumenta o estoque sozinho e nada é alterado na Olist. As peças são reconhecidas pelo SKU.</p></div><button id="stockSyncButton" type="button">SINCRONIZAR AGORA</button></div>
+        <div class="panel-head"><div><h2>Estoque da Olist → site</h2><p class="field-help">O site confere o estoque disponível na Olist em pequenos lotes, o dia todo (uma rodada completa a cada poucos minutos), e baixa no site as peças que tiverem menos unidades lá. Na hora da compra, as peças do carrinho são conferidas de novo. O site nunca aumenta o estoque sozinho e nada é alterado na Olist. As peças são reconhecidas pelo SKU.</p></div><button id="stockSyncButton" type="button">SINCRONIZAR AGORA</button></div>
         <div id="stockSyncStatus" class="stock-sync-status"></div>
       </div>
       <div class="panel sku-sync-panel">
@@ -178,7 +178,7 @@
     if (date) date.textContent = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }).toUpperCase();
   })();
 </script>
-<script src="admin.js?v=20261003-estoque-olist"></script>
+<script src="admin.js?v=20261003-auditoria"></script>
 <script src="admin-carousel.js?v=20260925-2"></script>
 </body>
 </html>
