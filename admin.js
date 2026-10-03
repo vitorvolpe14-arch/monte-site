@@ -250,38 +250,52 @@ async function syncPaidOrderOlist(id){
 async function sendTrackingWhatsApp(id){const errorBox=$("orderUpdateError");if(errorBox)errorBox.textContent="";try{const d=await api(`/api/admin/orders/${encodeURIComponent(id)}/tracking-whatsapp`,{method:"POST"});await loadOrders();openOrder(id);if(d.whatsapp?.status==="not_configured")alert("WhatsApp ainda não está configurado no Render.");}catch(e){if(errorBox)errorBox.textContent=e.message}}
 
 /* SKUs site × Olist — compara e corrige só no site */
-let skuCompare=null,skuShowAll=false;
-const SKU_STATUS={ok:["IGUAL","shipped"],divergente:["DIVERGENTE","paid"],sem_par:["SEM PAR NA OLIST","pending"],conflito:["CONFLITO","processing"]};
+let skuCompare=null,skuShowAll=false,skuAccept=new Set(),skuPicks=new Map();
+const SKU_STATUS={ok:["IGUAL","shipped"],divergente:["DIVERGENTE","paid"],sugerido:["SUGERIDO","delivered"],sem_par:["SEM PAR NA OLIST","pending"],conflito:["CONFLITO","processing"]};
+const SKU_PLURAL={ok:"IGUAIS",divergente:"DIVERGENTES",sugerido:"SUGERIDOS",sem_par:"SEM PAR NA OLIST",conflito:"CONFLITOS"};
 async function compareSkus(){
   const btn=$("compareSkuButton"),box=$("skuSyncResult");
   btn.disabled=true;btn.textContent="CONSULTANDO A OLIST...";
   box.innerHTML='<p class="sku-loading">Buscando os produtos na Olist. Pode levar até um minuto.</p>';
-  try{skuCompare=await api("/api/admin/olist/sku-compare");renderSkuCompare()}
+  try{skuCompare=await api("/api/admin/olist/sku-compare");skuAccept=new Set();skuPicks=new Map();renderSkuCompare()}
   catch(e){skuCompare=null;box.innerHTML='<p class="error">'+esc(e.message)+'</p>'+(/RECONECTAR OLIST/.test(e.message)?'<p><a class="secondary-link" href="/api/olist/auth" target="_blank" rel="noopener">RECONECTAR OLIST</a></p>':'')}
   finally{btn.disabled=false;btn.textContent="COMPARAR DE NOVO"}
+}
+function skuChangeCount(){if(!skuCompare)return 0;return (skuCompare.summary?.divergente||0)+skuAccept.size+[...skuPicks.values()].filter(Boolean).length}
+function skuSituation(r){
+  let extra="";
+  if(r.status==="sugerido")extra=`<label class="sku-pick"><input type="checkbox" data-accept="${esc(r.key)}" ${skuAccept.has(r.key)?"checked":""}> Usar este par</label>`;
+  if(r.choices&&r.choices.length)extra=`<select class="sku-choice" data-pick="${esc(r.key)}"><option value="">Escolher na Olist…</option>${r.choices.map(c=>`<option value="${esc(c.sku)}" ${skuPicks.get(r.key)===c.sku?"selected":""}>${esc(c.sku)} — ${esc(c.name)}</option>`).join("")}</select>`;
+  return `<span class="badge ${SKU_STATUS[r.status][1]}">${SKU_STATUS[r.status][0]}</span>${r.note?`<small>${esc(r.note)}</small>`:""}${extra}`;
+}
+function renderSkuActions(){
+  const box=$("skuActions");if(!box)return;const n=skuChangeCount();
+  box.innerHTML=n?`<p class="field-help">${n} SKU${n>1?"s":""} do site ${n>1?"passarão":"passará"} a usar o SKU da Olist: os divergentes, as sugestões marcadas e as escolhas feitas na lista. Nada é alterado na Olist.</p><button id="applySkuButton" type="button">CORRIGIR ${n} SKU${n>1?"S":""} NO SITE</button>`:`<p class="field-help">Marque "Usar este par" nas sugestões ou escolha o produto da Olist nos itens sem par para corrigir.</p>`;
+  if($("applySkuButton"))$("applySkuButton").onclick=applySkuSync;
 }
 function renderSkuCompare(){
   const box=$("skuSyncResult");if(!skuCompare)return;
   const s=skuCompare.summary||{},rows=skuCompare.rows||[];
   const visible=rows.filter(r=>skuShowAll||r.status!=="ok");
-  const fix=s.divergente||0;
-  const plural={ok:"IGUAIS",divergente:"DIVERGENTES",sem_par:"SEM PAR NA OLIST",conflito:"CONFLITOS"};
-  const chips=[["ok",s.ok],["divergente",s.divergente],["sem_par",s.sem_par],["conflito",s.conflito]].filter(([,n])=>n).map(([k,n])=>`<span class="badge ${SKU_STATUS[k][1]}">${n} ${n>1?plural[k]:SKU_STATUS[k][0]}</span>`).join("");
+  const chips=["ok","divergente","sugerido","sem_par","conflito"].filter(k=>s[k]).map(k=>`<span class="badge ${SKU_STATUS[k][1]}">${s[k]} ${s[k]>1?SKU_PLURAL[k]:SKU_STATUS[k][0]}</span>`).join("");
   box.innerHTML=`<div class="sku-summary"><div class="sku-chips">${chips}</div><label class="sku-toggle"><input id="skuShowAll" type="checkbox" ${skuShowAll?"checked":""}> Mostrar também os iguais</label></div>
-  ${visible.length?`<div class="table-wrap"><table class="table sku-table"><thead><tr><th>PRODUTO</th><th>COR</th><th>SKU NO SITE</th><th>SKU NA OLIST</th><th>SITUAÇÃO</th></tr></thead><tbody>${visible.map(r=>`<tr class="sku-${r.status}"><td>${esc(r.product_name)}${r.product_active?"":' <span class="chip chip-off">INATIVO</span>'}</td><td>${r.kind==="produto"?'<span class="sku-kind">produto</span>':esc(r.color||"—")}</td><td><code>${esc(r.site_sku||"—")}</code></td><td>${r.olist_sku?`<code>${esc(r.olist_sku)}</code>`:"—"}${r.olist_name?`<small>${esc(r.olist_name)}</small>`:""}</td><td><span class="badge ${SKU_STATUS[r.status][1]}">${SKU_STATUS[r.status][0]}</span>${r.note?`<small>${esc(r.note)}</small>`:""}</td></tr>`).join("")}</tbody></table></div>`:'<p class="sku-empty">Tudo certo: os SKUs do site estão iguais aos da Olist.</p>'}
-  ${fix?`<div class="sku-actions"><p class="field-help">Os ${fix} SKU${fix>1?"s":""} divergente${fix>1?"s":""} ${fix>1?"passarão":"passará"} a usar o SKU da Olist. Itens sem par ou em conflito não são alterados.</p><button id="applySkuButton" type="button">CORRIGIR ${fix} SKU${fix>1?"S":""} NO SITE</button></div>`:""}`;
+  ${visible.length?`<div class="table-wrap"><table class="table sku-table"><thead><tr><th>PRODUTO</th><th>COR</th><th>SKU NO SITE</th><th>SKU NA OLIST</th><th>SITUAÇÃO</th></tr></thead><tbody>${visible.map(r=>`<tr class="sku-${r.status}"><td>${esc(r.product_name)}${r.product_active?"":' <span class="chip chip-off">INATIVO</span>'}</td><td>${r.kind==="produto"?'<span class="sku-kind">produto</span>':esc(r.color||"—")}</td><td><code>${esc(r.site_sku||"—")}</code></td><td>${r.olist_sku?`<code>${esc(r.olist_sku)}</code>`:"—"}${r.olist_name?`<small>${esc(r.olist_name)}</small>`:""}</td><td>${skuSituation(r)}</td></tr>`).join("")}</tbody></table></div>`:'<p class="sku-empty">Tudo certo: os SKUs do site estão iguais aos da Olist.</p>'}
+  <div class="sku-actions" id="skuActions"></div>`;
   $("skuShowAll").onchange=e=>{skuShowAll=e.target.checked;renderSkuCompare()};
-  if($("applySkuButton"))$("applySkuButton").onclick=applySkuSync;
+  box.querySelectorAll("[data-accept]").forEach(el=>el.onchange=()=>{el.checked?skuAccept.add(el.dataset.accept):skuAccept.delete(el.dataset.accept);renderSkuActions()});
+  box.querySelectorAll("[data-pick]").forEach(el=>el.onchange=()=>{el.value?skuPicks.set(el.dataset.pick,el.value):skuPicks.delete(el.dataset.pick);renderSkuActions()});
+  renderSkuActions();
 }
 async function applySkuSync(){
-  if(!skuCompare)return;const n=skuCompare.summary?.divergente||0;
+  if(!skuCompare)return;const n=skuChangeCount();if(!n)return;
   if(!window.confirm(`Atualizar ${n} SKU${n>1?"s":""} no site para ficar${n>1?"em iguais":" igual"} à Olist?\n\nNada será alterado na Olist.`))return;
   const btn=$("applySkuButton");btn.disabled=true;btn.textContent="CORRIGINDO...";
   try{
-    const d=await api("/api/admin/olist/sku-sync",{method:"POST",body:JSON.stringify({token:skuCompare.token})});
-    skuCompare=null;
+    const d=await api("/api/admin/olist/sku-sync",{method:"POST",body:JSON.stringify({token:skuCompare.token,accept:[...skuAccept],picks:Object.fromEntries([...skuPicks].filter(([,v])=>v))})});
+    const pickedProducts=[...skuPicks.keys()].some(k=>k.startsWith("p:"));
+    skuCompare=null;skuAccept=new Set();skuPicks=new Map();
     const skipped=(d.skipped||[]).length;
-    $("skuSyncResult").innerHTML=`<div class="sku-done"><p><strong>${d.updated} SKU${d.updated===1?"":"s"} corrigido${d.updated===1?"":"s"} no site.</strong>${skipped?` ${skipped} não alterado${skipped>1?"s":""}.`:""}</p>${(d.changes||[]).length?`<ul>${d.changes.map(c=>`<li>${esc(c.product_name)}${c.color?" · "+esc(c.color):""}: <code>${esc(c.from||"—")}</code> → <code>${esc(c.to)}</code></li>`).join("")}</ul>`:""}${skipped?`<ul class="sku-skipped">${d.skipped.map(r=>`<li>${esc(r.product_name)}${r.color?" · "+esc(r.color):""}: ${esc(r.reason)}</li>`).join("")}</ul>`:""}</div>`;
+    $("skuSyncResult").innerHTML=`<div class="sku-done"><p><strong>${d.updated} SKU${d.updated===1?"":"s"} corrigido${d.updated===1?"":"s"} no site.</strong>${skipped?` ${skipped} não alterado${skipped>1?"s":""}.`:""}${pickedProducts?" Compare de novo para conferir as cores dos produtos que você escolheu.":""}</p>${(d.changes||[]).length?`<ul>${d.changes.map(c=>`<li>${esc(c.product_name)}${c.color?" · "+esc(c.color):""}: <code>${esc(c.from||"—")}</code> → <code>${esc(c.to)}</code></li>`).join("")}</ul>`:""}${skipped?`<ul class="sku-skipped">${d.skipped.map(r=>`<li>${esc(r.product_name)}${r.color?" · "+esc(r.color):""}: ${esc(r.reason)}</li>`).join("")}</ul>`:""}</div>`;
     await loadProducts();
   }catch(e){btn.disabled=false;btn.textContent="TENTAR DE NOVO";alert(e.message)}
 }
