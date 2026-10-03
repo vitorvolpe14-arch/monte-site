@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="description" content="Consulte seus pedidos e acompanhe sua entrega MONTÊ">
+<meta name="robots" content="noindex">
 <title>MONTÊ — Minhas Compras</title>
 <link rel="stylesheet" href="style.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -66,6 +67,7 @@ function esc(v) {
 function statusLabel(s) {
     return ({
         pending: "Aguardando pagamento",
+        expired: "Pagamento não concluído",
         paid: "Pagamento confirmado",
         processing: "Pedido em preparação",
         shipped: "Pedido enviado",

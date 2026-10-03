@@ -2020,6 +2020,86 @@ function showToast(message) {
 
 
 /* =====================================================
+   SACOLA PELO LINK DO E-MAIL DE LEMBRETE
+   ?sacola=[[produto, variação, quantidade], ...] em base64url.
+   Só entram as peças que ainda têm estoque; a sacola abre
+   quando a animação de abertura termina.
+===================================================== */
+
+function restoreCartFromLink() {
+    let encoded = "";
+    try { encoded = new URLSearchParams(location.search).get("sacola") || ""; } catch { return; }
+    if (!encoded) return;
+
+    // Tira o parâmetro do endereço: recarregar a página não refaz a sacola.
+    try {
+        const url = new URL(location.href);
+        url.searchParams.delete("sacola");
+        history.replaceState(null, "", url.pathname + url.search + url.hash);
+    } catch {}
+
+    let entries = [];
+    try {
+        entries = JSON.parse(atob(encoded.replace(/-/g, "+").replace(/_/g, "/")));
+    } catch {
+        return;
+    }
+
+    let restored = 0;
+    (Array.isArray(entries) ? entries : []).slice(0, 20).forEach(entry => {
+        const [productId, variantId, quantity] = Array.isArray(entry) ? entry : [];
+        const product = products.find(p => p.id === productId);
+        if (!product) return;
+        const variant = variantId
+            ? (product.variants || []).find(v => v.id === variantId && v.active !== false)
+            : null;
+        if (variantId && !variant) return;
+        const stock = variant ? Number(variant.stock || 0) : Number(product.stock || 0);
+        if (stock <= 0) return;
+        const wanted = Math.max(1, Math.min(Math.floor(Number(quantity) || 1), stock));
+        const key = variant?.id || "default";
+        const existing = cart.find(item => item.id === product.id && (item.variant_id || "default") === key);
+        if (existing) {
+            existing.quantity = Math.max(Number(existing.quantity || 0), wanted);
+        } else {
+            cart.push({
+                ...product,
+                variant_id: variant?.id || null,
+                variant_color: variant?.color || null,
+                variant_sku: variant?.sku || product.sku || null,
+                quantity: wanted
+            });
+        }
+        restored++;
+    });
+
+    const root = document.documentElement;
+    const whenIntroEnds = callback => {
+        let done = false;
+        const run = () => {
+            if (done) return;
+            done = true;
+            observer.disconnect();
+            callback();
+        };
+        const observer = new MutationObserver(() => {
+            if (!root.classList.contains("intro-playing")) run();
+        });
+        if (!root.classList.contains("intro-playing")) return run();
+        observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+        setTimeout(run, 9000);
+    };
+
+    if (!restored) {
+        whenIntroEnds(() => showToast("As peças do seu pedido esgotaram. Veja as novidades da MONTÊ."));
+        return;
+    }
+
+    updateCart();
+    whenIntroEnds(openCart);
+}
+
+/* =====================================================
    LOCAL STORAGE
 ===================================================== */
 
@@ -2088,6 +2168,8 @@ document.addEventListener(
         await loadProductsFromDatabase();
 
         loadCart();
+
+        restoreCartFromLink();
 
     }
 );
