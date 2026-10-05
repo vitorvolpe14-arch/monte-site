@@ -3307,7 +3307,7 @@ app.post("/api/frete/cotacao", shippingQuoteRateLimit, async (req,res)=>{
         const options=await calculateSuperfreteQuotes({toCep,items});
         if(!options.length)return res.status(422).json({success:false,message:"Nenhuma modalidade de frete disponível para este CEP."});
         return res.json({success:true,source:"superfrete",options});
-    }catch(error){console.error("❌ Erro na cotação SuperFrete:",error);return res.status(502).json({success:false,message:error.message||"Não foi possível calcular o frete."});}
+    }catch(error){console.error("❌ Erro na cotação SuperFrete:",error);return res.status(502).json({success:false,message:"Não foi possível calcular o frete agora. Tente novamente em instantes."});}
 });
 
 app.post("/api/newsletter", newsletterRateLimit, async (req, res) => {
@@ -4080,8 +4080,7 @@ app.post(
                     console.error("PIX — erro ao criar checkout InfinitePay:", pixResponse.status, pixData);
                     return res.status(pixResponse.ok ? 502 : pixResponse.status).json({
                         success: false,
-                        message: "A InfinitePay não conseguiu criar o checkout Pix.",
-                        error: pixData
+                        message: "A InfinitePay não conseguiu criar o checkout Pix."
                     });
                 }
 
@@ -4310,10 +4309,7 @@ app.post(
                         false,
 
                     message:
-                        "A InfinitePay recusou a criação do checkout.",
-
-                    error:
-                        data
+                        "A InfinitePay recusou a criação do checkout."
 
                 });
 
@@ -4349,10 +4345,7 @@ app.post(
                         false,
 
                     message:
-                        "A InfinitePay não retornou o link de pagamento.",
-
-                    error:
-                        data
+                        "A InfinitePay não retornou o link de pagamento."
 
                 });
 
