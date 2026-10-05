@@ -1562,6 +1562,8 @@ const ADMIN_SESSION_TTL = 1000 * 60 * 60 * 8;
 function signingKey(){return crypto.createHash("sha256").update("monte-signing:"+safeString(process.env.ADMIN_SESSION_SECRET)+":"+ADMIN_PASSWORD_HASH+":"+SUPABASE_SERVICE_ROLE_KEY).digest()}
 function createSignedToken(data,ttlMs){const payload=Buffer.from(JSON.stringify({...data,exp:Date.now()+ttlMs,n:crypto.randomBytes(8).toString("hex")})).toString("base64url");const sig=crypto.createHmac("sha256",signingKey()).update(payload).digest("base64url");return payload+"."+sig}
 function verifySignedToken(token){const [payload,sig]=String(token||"").split(".");if(!payload||!sig)return null;const expected=Buffer.from(crypto.createHmac("sha256",signingKey()).update(payload).digest("base64url"));const given=Buffer.from(sig);if(given.length!==expected.length||!crypto.timingSafeEqual(given,expected))return null;try{const data=JSON.parse(Buffer.from(payload,"base64url").toString("utf8"));if(!data||typeof data.exp!=="number"||Date.now()>data.exp)return null;return data}catch{return null}}
+function createOrderConfirmationToken(orderNsu){return createSignedToken({purpose:"order-confirmation",order_nsu:String(orderNsu)},30*60*1000)}
+function verifyOrderConfirmationToken(token,orderNsu){const data=verifySignedToken(token);return !!(data&&data.purpose==="order-confirmation"&&String(data.order_nsu)===String(orderNsu))}
 const adminLoginAttempts = new Map();
 function parseCookies(req){const h=req.headers.cookie||"";const o={};h.split(";").filter(Boolean).forEach(p=>{const i=p.indexOf("=");if(i<0)return;const v=p.slice(i+1).trim();try{o[p.slice(0,i).trim()]=decodeURIComponent(v)}catch{o[p.slice(0,i).trim()]=v}});return o}
 function getAdminSession(req){const t=parseCookies(req)["monte_admin_session"];if(!t||!ADMIN_EMAIL)return null;const s=verifySignedToken(t);if(!s||s.purpose!=="admin"||s.email!==ADMIN_EMAIL)return null;return {token:t,email:s.email,expiresAt:s.exp}}
@@ -4030,7 +4032,7 @@ app.post(
                     handle: INFINITEPAY_HANDLE,
                     order_nsu: orderNsu,
                     redirect_url:
-                        `${SITE_URL}/pagamento-sucesso?order_nsu=${encodeURIComponent(orderNsu)}&payment_method=pix`,
+                        `${SITE_URL}/pagamento-sucesso?order_nsu=${encodeURIComponent(orderNsu)}&confirmation_token=${encodeURIComponent(createOrderConfirmationToken(orderNsu))}&payment_method=pix`,
                     webhook_url:
                         `${SITE_URL}/webhook-infinitepay`,
                     items: pixItems,
@@ -4128,7 +4130,7 @@ app.post(
                     orderNsu,
 
                 redirect_url:
-                    `${SITE_URL}/pagamento-sucesso?order_nsu=${encodeURIComponent(orderNsu)}`,
+                    `${SITE_URL}/pagamento-sucesso?order_nsu=${encodeURIComponent(orderNsu)}&confirmation_token=${encodeURIComponent(createOrderConfirmationToken(orderNsu))}`,
 
                 webhook_url:
                     `${SITE_URL}/webhook-infinitepay`,
@@ -4896,7 +4898,12 @@ app.get("/api/minhas-compras", orderStatusRateLimit, async (req, res) => {
 app.get("/api/pedido-confirmacao", orderStatusRateLimit, async (req, res) => {
     try {
         const orderNsu = safeString(req.query.order_nsu);
-        if (!orderNsu) return res.status(400).json({ success: false, message: "Pedido não informado." });
+        const confirmationToken = safeString(req.query.confirmation_token);
+        res.setHeader("Cache-Control", "no-store");
+        res.setHeader("Pragma", "no-cache");
+        if (!orderNsu || !confirmationToken || !verifyOrderConfirmationToken(confirmationToken, orderNsu)) {
+            return res.status(401).json({ success: false, message: "Token de confirmação inválido ou expirado." });
+        }
 
         const rows = await supabaseRequest(
             "orders?order_nsu=eq." + encodeURIComponent(orderNsu) +
