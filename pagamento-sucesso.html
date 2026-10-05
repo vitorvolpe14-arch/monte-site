@@ -230,6 +230,7 @@ body{
 const money=v=>new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(v||0));
 const params=new URLSearchParams(location.search);
 const orderNsu=params.get("order_nsu");
+const confirmationToken=params.get("confirmation_token");
 const reduceMotion=window.matchMedia("(prefers-reduced-motion: reduce)");
 let lastOrder=null;
 let wasPaid=null;
@@ -243,8 +244,8 @@ function esc(v){
 }
 
 async function fetchOrder(){
-  if(!orderNsu) throw new Error("Não foi possível localizar o pedido.");
-  const r=await fetch("/api/pedido-confirmacao?order_nsu="+encodeURIComponent(orderNsu),{cache:"no-store"});
+  if(!orderNsu||!confirmationToken) throw new Error("Não foi possível validar a confirmação deste pedido.");
+  const r=await fetch("/api/pedido-confirmacao?order_nsu="+encodeURIComponent(orderNsu)+"&confirmation_token="+encodeURIComponent(confirmationToken),{cache:"no-store"});
   const d=await r.json();
   if(!r.ok||!d.success) throw new Error(d.message||"Pedido não encontrado.");
   return d.order;
