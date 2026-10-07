@@ -68,18 +68,11 @@ function renderCarouselImageManager(){
 
 function validateCarouselImage(file){validateProductImage(file)}
 
-// Medidas das fotos novas (largura e altura): a loja reserva o espaço do banner.
-let carouselSizesDraft={};
+// As fotos do banner vão exatamente como foram escolhidas (sem conversão).
 async function uploadCarouselImages(files){
   const urls=[];
   for(const file of files){
     validateCarouselImage(file);
-    try{
-      const optimized=await uploadOptimizedPhoto(file,"carousel");
-      carouselSizesDraft[optimized.url]=[optimized.width,optimized.height];
-      urls.push(optimized.url);
-      continue;
-    }catch(e){console.warn("Banner enviado sem otimizar:",e.message)}
     const dataUrl=await readFileAsDataUrl(file);
     const d=await api("/api/admin/uploads/carousel-image",{
       method:"POST",
@@ -172,7 +165,7 @@ async function saveCarousel(){
   try{
     const d=await api("/api/admin/carousel",{
       method:"PUT",
-      body:JSON.stringify({images:carouselImagesDraft,sizes:carouselSizesDraft})
+      body:JSON.stringify({images:carouselImagesDraft})
     });
     carouselImagesDraft=Array.isArray(d.images)?d.images:carouselImagesDraft;
     renderCarouselImageManager();

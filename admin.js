@@ -367,13 +367,14 @@ registerClickActions({openProduct,toggleProduct,adjustStock,openOrder,closeOrder
 
 /* =====================================================
    FOTOS LEVES
-   O navegador do painel reduz e converte as fotos para WebP antes de
-   enviar: uma versão grande (galeria e banner) e uma pequena (cards,
-   miniaturas, sacola e celular). O botão OTIMIZAR FOTOS DO SITE faz o
-   mesmo com as fotos que já estão no site; a lista original de cada
-   produto fica guardada no banco (images_original).
+   O navegador do painel reduz e converte as fotos dos PRODUTOS para WebP
+   antes de enviar: uma versão grande (galeria) e uma pequena (cards,
+   miniaturas e sacola). O botão OTIMIZAR FOTOS DO SITE faz o mesmo com as
+   fotos de produtos que já estão no site; a lista original de cada produto
+   fica guardada no banco (images_original). As fotos do banner (carrossel)
+   nunca são trocadas: continuam exatamente como foram enviadas.
 ===================================================== */
-const PHOTO_SIZES={product:{full:1600,small:640},carousel:{full:2000,small:960}};
+const PHOTO_SIZES={product:{full:1600,small:640}};
 function smallPhoto(url){return isOptimizedPhoto(url)?String(url).replace(/-full\.(webp|jpg)$/,"-small.$1"):url}
 function isOptimizedPhoto(url){return /\/opt\/[^?#]+-full\.(webp|jpg)$/.test(String(url||""))}
 async function loadImageSource(source){
@@ -427,13 +428,11 @@ function renderPhotoOptimizerInfo(){
 async function optimizeExistingPhotos(){
   const btn=$("optimizePhotosButton"),box=$("optimizePhotosStatus");
   const pending=photosToOptimize(),total=pending.reduce((n,x)=>n+x.urls.length,0);
-  let carousel=null;try{carousel=await api("/api/admin/carousel")}catch{}
-  const carouselTodo=(carousel?.images||[]).filter(u=>/^https:\/\//.test(u)&&!isOptimizedPhoto(u));
-  if(!total&&!carouselTodo.length){renderPhotoOptimizerInfo();return}
-  if(!window.confirm(`Otimizar ${total} foto${total===1?"":"s"} de produtos${carouselTodo.length?` e ${carouselTodo.length} do carrossel`:""}?\n\nO painel baixa cada foto, cria uma versão leve (WebP) e troca no site. As originais continuam guardadas. Deixe esta aba aberta até terminar (alguns minutos).`))return;
+  if(!total){renderPhotoOptimizerInfo();return}
+  if(!window.confirm(`Otimizar ${total} foto${total===1?"":"s"} de produtos?\n\nO painel baixa cada foto, cria uma versão leve (WebP) e troca no site. As originais continuam guardadas. As fotos do banner não são alteradas. Deixe esta aba aberta até terminar (alguns minutos).`))return;
   btn.dataset.running="1";btn.disabled=true;
   let done=0,failed=0;
-  const progress=()=>{box.textContent=`Otimizando… ${done+failed} de ${total+carouselTodo.length}${failed?` (${failed} sem sucesso)`:""}. Deixe esta aba aberta.`};
+  const progress=()=>{box.textContent=`Otimizando… ${done+failed} de ${total}${failed?` (${failed} sem sucesso)`:""}. Deixe esta aba aberta.`};
   progress();
   try{
     for(const {product} of pending){
@@ -448,16 +447,6 @@ async function optimizeExistingPhotos(){
         }));
       }
       if(images.some((u,i)=>u!==product.images[i]))await api("/api/admin/products/"+encodeURIComponent(product.id)+"/images",{method:"PUT",body:JSON.stringify({images})});
-    }
-    if(carouselTodo.length){
-      const images=[...carousel.images],sizes={...(carousel.sizes||{})};
-      for(let i=0;i<images.length;i++){
-        if(!carouselTodo.includes(images[i]))continue;
-        try{const r=await uploadOptimizedPhoto(await fetchPhotoBlob(images[i]),"carousel");images[i]=r.url;sizes[r.url]=[r.width,r.height];done++}
-        catch(e){failed++;console.warn("Banner não otimizado:",e.message)}
-        progress();
-      }
-      await api("/api/admin/carousel",{method:"PUT",body:JSON.stringify({images,sizes})});
     }
     box.textContent=`Pronto: ${done} foto${done===1?"":"s"} otimizada${done===1?"":"s"}${failed?`, ${failed} não puderam ser otimizadas (ficaram como estavam)`:""}.`;
   }catch(e){box.textContent="A otimização parou: "+e.message+". Clique de novo para continuar de onde parou."}
