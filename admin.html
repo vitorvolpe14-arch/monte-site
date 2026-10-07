@@ -6,10 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="admin.css?v=20261003-lembretes">
+<link rel="stylesheet" href="admin.css?v=20261007-seguranca">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -92,6 +89,7 @@
     <section id="productsSection" class="section hidden">
       <div class="section-actions"><div><p class="eyebrow">CATÁLOGO</p><h2>Produtos</h2></div><button id="newProductButton">+ NOVO PRODUTO</button></div>
       <div class="toolbar"><input id="productSearch" placeholder="Buscar por nome ou SKU..."></div>
+      <div class="photo-optimizer"><div><strong>Fotos mais leves</strong><p id="optimizePhotosStatus" class="field-help">Conferindo as fotos…</p></div><button id="optimizePhotosButton" type="button" class="secondary" hidden>OTIMIZAR FOTOS DO SITE</button></div>
       <div id="olistCleanupBar" class="olist-cleanup-bar hidden"><div><strong id="olistCleanupTitle"></strong><span id="olistCleanupInfo" class="field-help"></span></div><div class="olist-cleanup-actions"><label class="olist-filter"><input id="olistOnlyFilter" type="checkbox"> Mostrar só Olist</label><button id="deleteOlistProductsButton" type="button" class="danger-button">EXCLUIR PRODUTOS DA OLIST</button></div></div>
       <div id="productsGrid" class="product-admin-grid"></div>
     </section>
@@ -170,17 +168,8 @@
   <div id="orderDetails"></div>
 </div></div>
 
-<script>
-  (function () {
-    var hour = new Date().getHours();
-    var greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
-    var title = document.getElementById("welcomeTitle");
-    var date = document.getElementById("welcomeDate");
-    if (title) title.textContent = greeting + ".";
-    if (date) date.textContent = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }).toUpperCase();
-  })();
-</script>
-<script src="admin.js?v=20261003-lembretes"></script>
-<script src="admin-carousel.js?v=20260925-2"></script>
+<script src="safe-html.js?v=20261007-seguranca"></script>
+<script src="admin.js?v=20261007-seguranca"></script>
+<script src="admin-carousel.js?v=20261007-seguranca"></script>
 </body>
 </html>

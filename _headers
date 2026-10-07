@@ -1,22 +1,28 @@
 # Cabeçalhos das páginas e arquivos servidos direto dos assets do Worker.
-# Iguais aos que o servidor Express aplica (backend/server.js, "MIDDLEWARES").
+# Iguais aos que o servidor Express aplica (backend/server.js, CONTENT_SECURITY_POLICY):
+# se mudar a CSP lá, mude aqui também.
 /*
   X-Content-Type-Options: nosniff
   X-Frame-Options: SAMEORIGIN
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=()
-  Content-Security-Policy: default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self' https://cdn.jsdelivr.net https://www.googletagmanager.com 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https://raw.githubusercontent.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://uvrhougaurupvkxmezwy.supabase.co https://viacep.com.br https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com; form-action 'self' https:; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; frame-src 'none'; form-action 'self'; script-src 'self' https://*.googletagmanager.com; script-src-attr 'none'; style-src 'self'; font-src 'self'; img-src 'self' data: blob: https://uvrhougaurupvkxmezwy.supabase.co https://*.googletagmanager.com https://*.google-analytics.com; connect-src 'self' https://uvrhougaurupvkxmezwy.supabase.co https://viacep.com.br https://*.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com; media-src 'self'; worker-src 'self'; manifest-src 'self'; upgrade-insecure-requests
   X-Permitted-Cross-Domain-Policies: none
   Strict-Transport-Security: max-age=31536000; includeSubDomains
 
-# CSS, JS e imagens ficam 1 dia no navegador (as páginas sempre revalidam).
+# CSS e JS são chamados sempre com ?v=... no HTML: ficam 1 ano no navegador.
+# Ao mudar um desses arquivos, troque o ?v= nas páginas que o usam.
 /*.css
-  Cache-Control: public, max-age=86400
+  Cache-Control: public, max-age=31536000, immutable
 /*.js
-  Cache-Control: public, max-age=86400
+  Cache-Control: public, max-age=31536000, immutable
+# Fontes nunca mudam de conteúdo no mesmo nome.
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+# Fotos e banners padrão: 30 dias.
 /assets/*
-  Cache-Control: public, max-age=86400
+  Cache-Control: public, max-age=2592000
 /fotos-site/*
-  Cache-Control: public, max-age=86400
+  Cache-Control: public, max-age=2592000
 /backend/assets/*
-  Cache-Control: public, max-age=86400
+  Cache-Control: public, max-age=2592000

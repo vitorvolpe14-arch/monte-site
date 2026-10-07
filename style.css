@@ -1,12 +1,18 @@
-/* Lovelo — mesma família tipográfica usada no Canva para a identidade MONTÊ. */
-@font-face {
-    font-family: "Lovelo";
-    src: url("https://raw.githubusercontent.com/lorenz/lovelo-fontface/master/fonts/lovelo_black-webfont.woff2") format("woff2"),
-         url("https://raw.githubusercontent.com/lorenz/lovelo-fontface/master/fonts/lovelo_black-webfont.woff") format("woff");
-    font-weight: 900;
-    font-style: normal;
-    font-display: swap;
-}
+/* =====================================================
+   FONTES — servidas pelo próprio site (pasta /fonts), sem Google Fonts
+   nem GitHub: a página não espera outros domínios para aparecer.
+   DM Sans e Playfair Display (OFL 1.1, via Fontsource) e Lovelo,
+   a mesma família usada no Canva para a identidade MONTÊ.
+===================================================== */
+@font-face { font-family: "Lovelo"; src: url("/fonts/lovelo-black.woff2") format("woff2"); font-weight: 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "DM Sans"; src: url("/fonts/dm-sans-latin-300-normal.woff2") format("woff2"); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: "DM Sans"; src: url("/fonts/dm-sans-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "DM Sans"; src: url("/fonts/dm-sans-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "DM Sans"; src: url("/fonts/dm-sans-latin-600-normal.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "Playfair Display"; src: url("/fonts/playfair-display-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Playfair Display"; src: url("/fonts/playfair-display-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "Playfair Display"; src: url("/fonts/playfair-display-latin-400-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "Playfair Display"; src: url("/fonts/playfair-display-latin-500-italic.woff2") format("woff2"); font-weight: 500; font-style: italic; font-display: swap; }
 
 /* =====================================================
    RESET
@@ -7822,4 +7828,105 @@ body.cart-open .toast { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); 
 #cartOverlay .cart-item-media {
     background: #ffffff;
     box-shadow: inset 0 0 0 1px var(--co-line);
+}
+
+
+/* =====================================================
+   SEGURANÇA (CSP) — o que antes era style="" no HTML
+===================================================== */
+.is-hidden-start { display: none; }
+.intro-letter-0 { --i: 0; }
+.intro-letter-1 { --i: 1; }
+.intro-letter-2 { --i: 2; }
+.intro-letter-3 { --i: 3; }
+.intro-letter-4 { --i: 4; }
+
+
+/* =====================================================
+   LEGIBILIDADE E TOQUE — contraste, tamanho mínimo de
+   texto no celular e área de toque dos pontos e links
+===================================================== */
+
+/* Preço antigo (riscado) legível: antes ficava com 45% de opacidade. */
+.old-price { opacity: .72; }
+.sale-section .old-price { opacity: .85; }
+.store-benefit span:not(.store-benefit-icon) { color: #666; }
+
+/* Pontos do carrossel: o traço continua fino, mas a área de toque tem 24px de altura. */
+.carousel-dot {
+    height: 24px;
+    padding: 0;
+    background: linear-gradient(rgba(255, 255, 255, .45), rgba(255, 255, 255, .45)) center / 100% 2px no-repeat;
+}
+.carousel-dot.active {
+    background: linear-gradient(#fff, #fff) center / 100% 2px no-repeat;
+}
+
+/* Links do rodapé com altura mínima de toque. */
+.footer-column a {
+    display: inline-block;
+    min-height: 24px;
+    padding: 3px 0;
+}
+
+@media (max-width: 768px) {
+    .carousel-dot { height: 24px; }
+
+    /* Texto com no mínimo 12px no celular (antes havia trechos com 8 a 10px). */
+    .footer-column a,
+    .store-benefit span:not(.store-benefit-icon),
+    .store-benefit strong,
+    .collection-products-grid .product-name,
+    .new-products-grid .product-name,
+    .sale-products-grid .product-name,
+    .collection-products-grid .product-price,
+    .new-products-grid .product-price,
+    .sale-products-grid .product-price,
+    #cintos-acessorios .product-name,
+    #cintos-acessorios .product-price,
+    .footer-brand p {
+        font-size: 12px !important;
+    }
+
+    .collection-products-grid .product-name,
+    .new-products-grid .product-name,
+    .sale-products-grid .product-name,
+    #cintos-acessorios .product-name {
+        letter-spacing: .4px !important;
+        line-height: 1.35;
+    }
+
+    .store-benefit strong { letter-spacing: .6px; }
+
+    .eyebrow,
+    .newsletter p.eyebrow,
+    .footer-column h3,
+    .sale-heading span,
+    .editorial-button,
+    .footer-rights,
+    .footer-credit,
+    .footer-credit a,
+    .shipping-bar,
+    .intro-tagline {
+        font-size: 11px !important;
+    }
+}
+
+
+/* =====================================================
+   SEM PULOS NA ABERTURA
+   Até os produtos aparecerem, o que vem depois do banner fica invisível
+   (e fora da conta de "layout shift"): quando as vitrines crescem, nada
+   visível é empurrado. Tudo isso acontece por trás da animação de abertura.
+   Se o JavaScript falhar, aparece sozinho depois de 8 s.
+===================================================== */
+html.catalog-pending main#inicio > section:not(.hero),
+html.catalog-pending .store-benefits,
+html.catalog-pending .footer {
+    visibility: hidden;
+    animation: catalogFallback 0s linear 8s forwards;
+}
+
+@keyframes catalogFallback {
+    to { visibility: visible; }
 }

@@ -50,6 +50,14 @@ function createCallBudget(limit) {
 }
 function spend(budget, n = 1) { if (budget) budget.use(n); }
 
+// Texto de uma página do site (para montar a página inicial com o catálogo dentro).
+async function readSitePage(file) {
+    if (!IS_WORKERS) return require("fs").promises.readFile(path.join(SITE_DIR, file), "utf8");
+    const response = await siteAssets.fetch(new Request("https://assets.local/" + file));
+    if (!response.ok) throw new Error("Página não encontrada: " + file);
+    return response.text();
+}
+
 // Páginas com endereço sem ".html" (/, /admin, /pagamento-sucesso).
 async function sendSitePage(res, file) {
     if (!IS_WORKERS) return res.sendFile(path.join(SITE_DIR, file));
@@ -636,7 +644,7 @@ app.get("/api/olist/config-check", requireAdmin, (req, res) => {
 app.get("/api/olist/auth", (req, res) => {
     // Só quem está logado no painel pode trocar a conta Olist que recebe os pedidos.
     if (!getAdminSession(req)) {
-        return res.status(401).send("<p style=\"font-family:sans-serif\">Entre no painel da MONTÊ (<a href=\"/admin\">/admin</a>) e use o botão <strong>Reconectar Olist</strong> na aba Estoque.</p>");
+        return res.status(401).send("<p>Entre no painel da MONTÊ (<a href=\"/admin\">/admin</a>) e use o botão <strong>Reconectar Olist</strong> na aba Estoque.</p>");
     }
     if (!OLIST_CLIENT_ID || !OLIST_CLIENT_SECRET) {
         return res.status(503).send("Olist OAuth não está configurado no servidor.");
@@ -1417,24 +1425,34 @@ const allowedOrigins = new Set([
     ...safeString(process.env.ALLOWED_ORIGINS).split(",").map(origin => origin.trim().replace(/\/$/, "")).filter(Boolean)
 ]);
 
+// CSP sem 'unsafe-inline': nenhum script ou estilo dentro do HTML (eventos usam data-click,
+// veja safe-html.js) e cada diretiva definida explicitamente. A mesma política está no
+// arquivo _headers (páginas servidas direto dos assets); as duas precisam ficar iguais.
+const CONTENT_SECURITY_POLICY = [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'self'",
+    "frame-src 'none'",
+    "form-action 'self'",
+    "script-src 'self' https://*.googletagmanager.com",
+    "script-src-attr 'none'",
+    "style-src 'self'",
+    "font-src 'self'",
+    "img-src 'self' data: blob: https://uvrhougaurupvkxmezwy.supabase.co https://*.googletagmanager.com https://*.google-analytics.com",
+    "connect-src 'self' https://uvrhougaurupvkxmezwy.supabase.co https://viacep.com.br https://*.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com",
+    "media-src 'self'",
+    "worker-src 'self'",
+    "manifest-src 'self'",
+    "upgrade-insecure-requests"
+].join("; ");
+
 app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "SAMEORIGIN");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-    res.setHeader("Content-Security-Policy", [
-        "default-src 'self'",
-        "base-uri 'self'",
-        "frame-ancestors 'self'",
-        "object-src 'none'",
-        "script-src 'self' https://cdn.jsdelivr.net https://www.googletagmanager.com 'unsafe-inline'",
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-        "font-src 'self' https://fonts.gstatic.com https://raw.githubusercontent.com data:",
-        "img-src 'self' data: blob: https:",
-        "connect-src 'self' https://uvrhougaurupvkxmezwy.supabase.co https://viacep.com.br https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com",
-        "form-action 'self' https:",
-        "upgrade-insecure-requests"
-    ].join("; "));
+    res.setHeader("Content-Security-Policy", CONTENT_SECURITY_POLICY);
     res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
     if (IS_WORKERS || req.secure || req.headers["x-forwarded-proto"] === "https") {
         res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
@@ -1459,7 +1477,10 @@ app.use(
     })
 );
 
-app.use(express.json({ limit: "30mb" }));
+// Fotos chegam em base64 só nas rotas de upload do painel (até 20 MB por foto). O resto da
+// API aceita no máximo 1 MB por requisição: menos espaço para abuso e menos CPU no Cloudflare.
+app.use("/api/admin/uploads", express.json({ limit: "30mb" }));
+app.use(express.json({ limit: "1mb" }));
 
 /* =====================================================
    RATE LIMITING — proteção contra abuso de endpoints
@@ -1650,34 +1671,75 @@ app.post("/api/admin/logout",(req,res)=>{clearAdminCookie(res);return res.json({
 app.get("/api/admin/session",(req,res)=>{const s=getAdminSession(req);if(!s)return res.status(401).json({success:false});return res.json({success:true,email:s.email})});
 const CAROUSEL_KV_KEY = "site_carousel_images";
 
-async function readCarouselImages(){
+// Configuração do carrossel: { images: [url...], sizes: { url: [largura, altura] } }.
+// As medidas vêm do painel (fotos otimizadas) ou são lidas no cabeçalho do arquivo
+// (primeiros 64 KB) e guardadas; com elas a página reserva o espaço do banner.
+const DEFAULT_CAROUSEL_IMAGES = ["/backend/assets/carousel-photo-1.webp", "/backend/assets/carousel-photo-2.webp"];
+async function readCarouselConfig(){
   const rows=await supabaseRequest("kv_store_48db9b7e?key=eq."+encodeURIComponent(CAROUSEL_KV_KEY)+"&select=key,value",{method:"GET"});
-  if(Array.isArray(rows)&&rows[0]?.value?.images&&Array.isArray(rows[0].value.images)){
-    return rows[0].value.images.filter(v=>typeof v==="string"&&v).slice(0,20);
-  }
-  return [
-    SITE_URL.replace(/\/$/,"") + "/backend/assets/carousel-photo-1.webp",
-    SITE_URL.replace(/\/$/,"") + "/backend/assets/carousel-photo-2.webp"
-  ];
+  const value=Array.isArray(rows)?rows[0]?.value:null;
+  const images=Array.isArray(value?.images)?value.images.filter(v=>typeof v==="string"&&v).slice(0,20):[];
+  const sizes=value?.sizes&&typeof value.sizes==="object"?value.sizes:{};
+  return {images:images.length?images:DEFAULT_CAROUSEL_IMAGES,sizes,stored:value||null};
 }
+async function readCarouselImages(){return (await readCarouselConfig()).images}
 function normalizeCarouselImages(images){
   return Array.isArray(images)?images.map(v=>safeString(v)).filter(Boolean).slice(0,20):[];
 }
+function normalizeCarouselSizes(sizes,images){
+  const out={};
+  if(!sizes||typeof sizes!=="object")return out;
+  images.forEach(url=>{const s=sizes[url];if(Array.isArray(s)&&s.length===2&&s.every(n=>Number.isInteger(n)&&n>0&&n<20000))out[url]=[s[0],s[1]]});
+  return out;
+}
+// Foto otimizada pelo painel: ".../opt/.../<id>-full.webp" tem a versão menor em "-small".
+function smallImageUrl(url){return /\/opt\/[^?#]+-full\.(webp|jpg)$/.test(url)?url.replace(/-full\.(webp|jpg)$/,"-small.$1"):""}
+async function imageSizeFromUrl(url){
+  try{
+    const absolute=url.startsWith("/")?null:url;
+    if(!absolute)return null;
+    if(!isAllowedProductImageUrl(absolute))return null;
+    const response=await fetchWithTimeout(absolute,{headers:{Range:"bytes=0-65535"}},5000);
+    if(!response.ok)return null;
+    const info=readImageInfo(Buffer.from(await response.arrayBuffer()));
+    return info.width&&info.height?[info.width,info.height]:null;
+  }catch{return null}
+}
+const DEFAULT_CAROUSEL_SIZES={"/backend/assets/carousel-photo-1.webp":[640,360],"/backend/assets/carousel-photo-2.webp":[640,360]};
+async function carouselSlides(){
+  const config=await readCarouselConfig();
+  const sizes={...DEFAULT_CAROUSEL_SIZES,...config.sizes};
+  const missing=config.images.filter(url=>!sizes[url]).slice(0,4);
+  if(missing.length){
+    const found=await Promise.all(missing.map(imageSizeFromUrl));
+    let changed=false;
+    missing.forEach((url,i)=>{if(found[i]){sizes[url]=found[i];changed=true}});
+    // Guarda as medidas lidas para não precisar ler de novo.
+    if(changed&&config.stored){
+      const value={...config.stored,sizes:normalizeCarouselSizes(sizes,config.images)};
+      supabaseRequest("kv_store_48db9b7e",{method:"POST",body:JSON.stringify({key:CAROUSEL_KV_KEY,value}),headers:{"Prefer":"resolution=merge-duplicates,return=minimal"}}).catch(()=>{});
+    }
+  }
+  return config.images.map(src=>({src,small:smallImageUrl(src),width:sizes[src]?.[0]||null,height:sizes[src]?.[1]||null}));
+}
 app.get("/api/carousel",async(req,res)=>{
-  try{return res.json({success:true,images:await readCarouselImages()})}
+  try{const slides=await cachedPublic("carousel",60*1000,carouselSlides);return res.json({success:true,images:slides.map(s=>s.src),slides})}
   catch(e){console.error("Public carousel GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar o carrossel."})}
 });
 app.get("/api/admin/carousel",requireAdmin,async(req,res)=>{
-  try{return res.json({success:true,images:await readCarouselImages()})}
+  try{const config=await readCarouselConfig();return res.json({success:true,images:config.images,sizes:config.sizes})}
   catch(e){console.error("Admin carousel GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar o carrossel."})}
 });
 app.put("/api/admin/carousel",requireAdmin,async(req,res)=>{
   try{
     const images=normalizeCarouselImages(req.body?.images);
     if(!images.length)return res.status(400).json({success:false,message:"Adicione pelo menos uma foto ao carrossel."});
-    const body=JSON.stringify({key:CAROUSEL_KV_KEY,value:{images,updated_at:new Date().toISOString()}});
+    const previous=await readCarouselConfig().catch(()=>({sizes:{}}));
+    const sizes=normalizeCarouselSizes({...previous.sizes,...(req.body?.sizes||{})},images);
+    const body=JSON.stringify({key:CAROUSEL_KV_KEY,value:{images,sizes,updated_at:new Date().toISOString()}});
     await supabaseRequest("kv_store_48db9b7e",{method:"POST",body,headers:{"Prefer":"resolution=merge-duplicates,return=representation"}});
-    return res.json({success:true,images});
+    publicCache.delete("carousel");
+    return res.json({success:true,images,sizes});
   }catch(e){console.error("Admin carousel PUT:",e);return res.status(500).json({success:false,message:e.message||"Não foi possível salvar o carrossel."})}
 });
 
@@ -1838,7 +1900,7 @@ async function uploadProductImage({ productId, fileName, contentType, dataBase64
     const objectPath = productId + "/" + Date.now() + "-" + crypto.randomBytes(5).toString("hex") + "-" + safeName;
     const response = await fetch(SUPABASE_URL + "/storage/v1/object/" + PRODUCT_IMAGE_BUCKET + "/" + encodeURIComponent(objectPath).replace(/%2F/g, "/"), {
         method: "POST",
-        headers: { "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY, "apikey": SUPABASE_SERVICE_ROLE_KEY, "Content-Type": contentType, "x-upsert": "false", "cache-control": "31536000" },
+        headers: { "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY, "apikey": SUPABASE_SERVICE_ROLE_KEY, "Content-Type": contentType, "x-upsert": "false", "cache-control": "max-age=31536000" },
         body: buffer
     });
     if (!response.ok) throw new Error("Upload da imagem falhou (" + response.status + ").");
@@ -1857,12 +1919,73 @@ async function uploadCarouselImage({fileName,contentType,dataBase64}) {
     const objectPath = "carousel/" + Date.now() + "-" + crypto.randomBytes(5).toString("hex") + "-" + safeName;
     const response = await fetch(SUPABASE_URL + "/storage/v1/object/" + PRODUCT_IMAGE_BUCKET + "/" + encodeURIComponent(objectPath).replace(/%2F/g, "/"), {
         method: "POST",
-        headers: { "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY, "apikey": SUPABASE_SERVICE_ROLE_KEY, "Content-Type": contentType, "x-upsert": "false", "cache-control": "31536000" },
+        headers: { "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY, "apikey": SUPABASE_SERVICE_ROLE_KEY, "Content-Type": contentType, "x-upsert": "false", "cache-control": "max-age=31536000" },
         body: buffer
     });
     if (!response.ok) throw new Error("Upload da imagem do carrossel falhou (" + response.status + ").");
     return SUPABASE_URL + "/storage/v1/object/public/" + PRODUCT_IMAGE_BUCKET + "/" + objectPath;
 }
+// Foto otimizada no navegador do painel: chega a versão grande e a pequena (WebP, ou JPEG
+// em navegadores sem WebP) e as duas vão para "opt/..." com o mesmo nome. A loja usa a
+// pequena nos cards e a grande na galeria.
+async function uploadStorageObject(objectPath, contentType, buffer) {
+    const response = await fetch(SUPABASE_URL + "/storage/v1/object/" + PRODUCT_IMAGE_BUCKET + "/" + encodeURIComponent(objectPath).replace(/%2F/g, "/"), {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY, "apikey": SUPABASE_SERVICE_ROLE_KEY, "Content-Type": contentType, "x-upsert": "false", "cache-control": "max-age=31536000" },
+        body: buffer
+    });
+    if (!response.ok) throw new Error("Upload da imagem falhou (" + response.status + ").");
+    return SUPABASE_URL + "/storage/v1/object/public/" + PRODUCT_IMAGE_BUCKET + "/" + objectPath;
+}
+app.post("/api/admin/uploads/optimized-image", requireAdmin, async (req, res) => {
+    try {
+        if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY não configurada no backend.");
+        const kind = safeString(req.body?.kind) === "carousel" ? "carousel" : "product";
+        const productId = safeString(req.body?.product_id);
+        if (kind === "product" && !/^[0-9a-f-]{36}$/i.test(productId)) throw new Error("Produto inválido.");
+        const contentType = safeString(req.body?.content_type).toLowerCase();
+        if (!["image/webp", "image/jpeg"].includes(contentType)) throw new Error("Formato inválido para a foto otimizada.");
+        const decode = value => Buffer.from(String(value || "").replace(/^data:[^;]+;base64,/, ""), "base64");
+        const full = decode(req.body?.full_base64), small = decode(req.body?.small_base64);
+        const fullInfo = await validateImageBuffer(full, contentType);
+        await validateImageBuffer(small, contentType);
+        if (full.length > 6 * 1024 * 1024 || small.length > 2 * 1024 * 1024) throw new Error("A foto otimizada ficou grande demais.");
+        const ext = contentType === "image/webp" ? "webp" : "jpg";
+        const name = Date.now() + "-" + crypto.randomBytes(5).toString("hex");
+        const folder = "opt/" + (kind === "carousel" ? "carousel" : productId) + "/";
+        const [url, smallUrl] = await Promise.all([
+            uploadStorageObject(folder + name + "-full." + ext, contentType, full),
+            uploadStorageObject(folder + name + "-small." + ext, contentType, small)
+        ]);
+        return res.status(201).json({ success: true, url, small: smallUrl, width: fullInfo.width, height: fullInfo.height });
+    } catch (e) {
+        console.error("Admin optimized image upload:", e);
+        return res.status(400).json({ success: false, message: e.message || "Não foi possível enviar a foto." });
+    }
+});
+
+// Troca as fotos de um produto pelas versões otimizadas. A lista anterior fica guardada
+// em images_original (só na primeira vez) para poder voltar atrás.
+app.put("/api/admin/products/:id/images", requireAdmin, async (req, res) => {
+    try {
+        const id = safeString(req.params.id);
+        if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ success: false, message: "Produto inválido." });
+        const images = Array.isArray(req.body?.images) ? req.body.images.map(safeString).filter(Boolean).slice(0, 30) : [];
+        if (!images.every(url => isAllowedProductImageUrl(url) || /^\/?assets\//.test(url))) return res.status(400).json({ success: false, message: "Foto inválida na lista." });
+        const rows = await supabaseRequest("products?id=eq." + encodeURIComponent(id) + "&select=images,images_original", { method: "GET" });
+        const current = Array.isArray(rows) ? rows[0] : null;
+        if (!current) return res.status(404).json({ success: false, message: "Produto não encontrado." });
+        const patch = { images };
+        if (!current.images_original) patch.images_original = current.images || [];
+        await supabaseRequest("products?id=eq." + encodeURIComponent(id), { method: "PATCH", headers: { "Prefer": "return=minimal" }, body: JSON.stringify(patch) });
+        publicCache.delete("catalog");
+        return res.json({ success: true, images });
+    } catch (e) {
+        console.error("Admin product images PUT:", e);
+        return res.status(500).json({ success: false, message: "Não foi possível salvar as fotos." });
+    }
+});
+
 app.post("/api/admin/uploads/carousel-image", requireAdmin, async (req,res)=>{
   try{
     const url=await uploadCarouselImage({
@@ -1893,8 +2016,8 @@ app.post("/api/admin/uploads/product-image", requireAdmin, async (req, res) => {
 });
 
 function sanitizeProductPayload(b={}){return{name:safeString(b.name),sku:safeString(b.sku)||null,category:safeString(b.category)||"bolsas",price:Number(b.price||0),sale_price:b.sale_price===null||b.sale_price===""||b.sale_price===undefined?null:Number(b.sale_price),description:safeString(b.description),images:Array.isArray(b.images)?b.images:[],shipping_weight_kg:b.shipping_weight_kg===null||b.shipping_weight_kg===""||b.shipping_weight_kg===undefined?null:Number(b.shipping_weight_kg),shipping_height_cm:b.shipping_height_cm===null||b.shipping_height_cm===""||b.shipping_height_cm===undefined?null:Number(b.shipping_height_cm),shipping_width_cm:b.shipping_width_cm===null||b.shipping_width_cm===""||b.shipping_width_cm===undefined?null:Number(b.shipping_width_cm),shipping_length_cm:b.shipping_length_cm===null||b.shipping_length_cm===""||b.shipping_length_cm===undefined?null:Number(b.shipping_length_cm),is_new:Boolean(b.is_new),is_sale:Boolean(b.is_sale),active:b.active!==false}}
-app.post("/api/admin/products",requireAdmin,async(req,res)=>{try{const p=sanitizeProductPayload(req.body);if(!p.name)return res.status(400).json({success:false,message:"Informe o nome do produto."});const d=await supabaseRequest("products",{method:"POST",body:JSON.stringify(p)});return res.status(201).json({success:true,product:d?.[0]||d})}catch(e){console.error("Admin products POST:",e);return res.status(500).json({success:false,message:e.message})}});
-app.put("/api/admin/products/:id",requireAdmin,async(req,res)=>{try{const p=sanitizeProductPayload(req.body);if(!p.name)return res.status(400).json({success:false,message:"Informe o nome do produto."});const d=await supabaseRequest(`products?id=eq.${encodeURIComponent(req.params.id)}`,{method:"PATCH",body:JSON.stringify(p)});return res.json({success:true,product:d?.[0]||d})}catch(e){console.error("Admin products PUT:",e);return res.status(500).json({success:false,message:e.message})}});
+app.post("/api/admin/products",requireAdmin,async(req,res)=>{try{publicCache.delete("catalog");const p=sanitizeProductPayload(req.body);if(!p.name)return res.status(400).json({success:false,message:"Informe o nome do produto."});const d=await supabaseRequest("products",{method:"POST",body:JSON.stringify(p)});return res.status(201).json({success:true,product:d?.[0]||d})}catch(e){console.error("Admin products POST:",e);return res.status(500).json({success:false,message:e.message})}});
+app.put("/api/admin/products/:id",requireAdmin,async(req,res)=>{try{publicCache.delete("catalog");const p=sanitizeProductPayload(req.body);if(!p.name)return res.status(400).json({success:false,message:"Informe o nome do produto."});const d=await supabaseRequest(`products?id=eq.${encodeURIComponent(req.params.id)}`,{method:"PATCH",body:JSON.stringify(p)});return res.json({success:true,product:d?.[0]||d})}catch(e){console.error("Admin products PUT:",e);return res.status(500).json({success:false,message:e.message})}});
 app.delete("/api/admin/products/:id",requireAdmin,async(req,res)=>{
     try{
         const productId=safeString(req.params.id);
@@ -3177,7 +3300,80 @@ app.get("/admin/", (req, res) => sendSitePage(res, "admin.html"));
    TESTE DO SERVIDOR
 ===================================================== */
 
-app.get("/", (req, res) => sendSitePage(res, "index.html"));
+// Catálogo e carrossel da página inicial ficam 60 s na memória da instância: a maioria
+// das visitas não espera o Supabase. Mudanças no painel limpam a memória desta instância.
+const publicCache = new Map();
+async function cachedPublic(key, ttlMs, load) {
+    const hit = publicCache.get(key);
+    if (hit && hit.expires > Date.now()) return hit.value;
+    const value = await load();
+    publicCache.set(key, { value, expires: Date.now() + ttlMs });
+    return value;
+}
+async function getPublicCatalog() {
+    return cachedPublic("catalog", 60 * 1000, async () => {
+        const rows = await supabaseRequest("products?select=*,product_variants(*)&active=eq.true&order=created_at.desc", { method: "GET" });
+        return (Array.isArray(rows) ? rows : []).map(product => {
+            const { images_original, ...publicProduct } = product;
+            return publicProduct;
+        });
+    });
+}
+app.get("/api/catalogo", async (req, res) => {
+    try {
+        res.setHeader("Cache-Control", "public, max-age=30");
+        return res.json({ success: true, products: await getPublicCatalog() });
+    } catch (error) {
+        console.error("Catálogo público:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível carregar os produtos." });
+    }
+});
+
+// JSON dentro de <script type="application/json">: "<" vira \u003c para nunca fechar a tag.
+function jsonForHtml(value) {
+    return JSON.stringify(value).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+}
+function escapeAttribute(value) {
+    return String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function heroSlidesHtml(slides) {
+    return slides.map((slide, i) => {
+        const size = slide.width && slide.height ? ' width="' + slide.width + '" height="' + slide.height + '"' : "";
+        const srcset = slide.small ? ' srcset="' + escapeAttribute(slide.small) + ' 960w, ' + escapeAttribute(slide.src) + ' 2000w" sizes="100vw"' : "";
+        const priority = i === 0 ? ' fetchpriority="high"' : ' loading="lazy"';
+        return '<div class="slide' + (i === 0 ? " active" : "") + '"><img src="' + escapeAttribute(slide.src) + '"' + srcset + size + priority + ' decoding="async" alt="MONTÊ — Novidades"></div>';
+    }).join("");
+}
+
+// Página inicial: o servidor já entrega o banner (com tamanho e prioridade) e os produtos
+// dentro do HTML. A loja aparece sem esperar outras requisições e o banner não empurra a página.
+app.get("/", async (req, res) => {
+    try {
+        const [html, catalog, slides] = await Promise.all([
+            readSitePage("index.html"),
+            getPublicCatalog().catch(error => { console.error("Página inicial — catálogo:", error.message); return null; }),
+            cachedPublic("carousel", 60 * 1000, carouselSlides).catch(error => { console.error("Página inicial — carrossel:", error.message); return null; })
+        ]);
+        let page = html;
+        if (Array.isArray(slides) && slides.length) {
+            page = page
+                .replace(/<!-- SLIDES -->[\s\S]*?<!-- FIM DOS SLIDES -->/, heroSlidesHtml(slides))
+                .replace('<div id="carouselSlides"', '<div id="carouselSlides" data-ssr="1"');
+            const first = slides[0];
+            const preload = '<link rel="preload" as="image" href="' + escapeAttribute(first.src) + '"' +
+                (first.small ? ' imagesrcset="' + escapeAttribute(first.small) + ' 960w, ' + escapeAttribute(first.src) + ' 2000w" imagesizes="100vw"' : "") + ' fetchpriority="high">';
+            page = page.replace("<!-- PRELOAD DO BANNER -->", preload);
+        }
+        if (Array.isArray(catalog)) {
+            page = page.replace("<!-- CATÁLOGO -->", '<script id="catalogData" type="application/json">' + jsonForHtml(catalog) + "</script>");
+        }
+        res.setHeader("Cache-Control", "no-cache");
+        return res.status(200).type("html").send(page);
+    } catch (error) {
+        console.error("Página inicial:", error);
+        return sendSitePage(res, "index.html");
+    }
+});
 
 
 /* =====================================================
@@ -5110,11 +5306,12 @@ ${image ? `<meta property="og:image" content="${xmlEscape(image)}">` : ""}
 <meta name="twitter:description" content="${xmlEscape(description.slice(0, 200))}">
 ${image ? `<meta name="twitter:image" content="${xmlEscape(image)}">` : ""}
 <script type="application/ld+json">${JSON.stringify(schema).replace(/</g, "\\u003c")}</script>
+<link rel="stylesheet" href="/produto-seo.css?v=20261007-seguranca">
 </head>
 <body>
-<main style="max-width:900px;margin:40px auto;padding:20px;font-family:Arial,sans-serif">
+<main class="seo-product">
 <h1>${xmlEscape(product.name)}</h1>
-${image ? `<img src="${xmlEscape(image)}" alt="${xmlEscape(product.name)}" style="max-width:100%;height:auto">` : ""}
+${image ? `<img src="${xmlEscape(image)}" alt="${xmlEscape(product.name)}">` : ""}
 <p>${xmlEscape(description).replace(/\n/g, "<br>")}</p>
 <p><strong>Preço: R$ ${price.toFixed(2).replace(".", ",")}</strong></p>
 <p>${stockTotal > 0 ? "Disponível para compra." : "Produto esgotado."}</p>
