@@ -2708,6 +2708,104 @@ function renderCheckoutExtras({ subtotal, shipping, pixDiscount, paymentMethod }
    funções desta lista podem ser chamadas.
 ===================================================== */
 
+/* =====================================================
+   CARROSSEL BORDEAUX COLLECTION (seção "Mais que bolsas.")
+   Setas, pontos, arrastar no celular e troca a cada 6 s enquanto
+   a seção está na tela. Para no mouse/foco e para quem pede menos
+   movimento no sistema.
+===================================================== */
+(function setupEditorialCarousel() {
+    const start = () => {
+        const root = document.getElementById("editorialCarousel");
+        if (!root) return;
+        const slides = [...root.querySelectorAll(".editorial-slide")];
+        const dotsBox = document.getElementById("editorialCarouselDots");
+        if (slides.length < 2) {
+            const controls = root.querySelector(".editorial-carousel-controls");
+            if (controls) controls.hidden = true;
+            return;
+        }
+
+        let current = 0;
+        let timer = null;
+        let visible = false;
+        let paused = false;
+        const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+        const dots = slides.map((_, index) => {
+            const dot = document.createElement("button");
+            dot.type = "button";
+            dot.className = "editorial-carousel-dot" + (index === 0 ? " active" : "");
+            dot.setAttribute("aria-label", "Mostrar foto " + (index + 1) + " de " + slides.length);
+            dot.addEventListener("click", () => { show(index); restart(); });
+            dotsBox?.appendChild(dot);
+            return dot;
+        });
+
+        function show(index) {
+            current = (index + slides.length) % slides.length;
+            slides.forEach((slide, i) => {
+                slide.classList.toggle("active", i === current);
+                if (i === current) slide.removeAttribute("aria-hidden");
+                else slide.setAttribute("aria-hidden", "true");
+            });
+            dots.forEach((dot, i) => {
+                dot.classList.toggle("active", i === current);
+                if (i === current) dot.setAttribute("aria-current", "true");
+                else dot.removeAttribute("aria-current");
+            });
+        }
+
+        function restart() {
+            clearInterval(timer);
+            timer = null;
+            if (visible && !paused && !reduceMotion.matches && !document.hidden) {
+                timer = setInterval(() => show(current + 1), 6000);
+            }
+        }
+
+        root.querySelector(".editorial-carousel-prev")?.addEventListener("click", () => { show(current - 1); restart(); });
+        root.querySelector(".editorial-carousel-next")?.addEventListener("click", () => { show(current + 1); restart(); });
+
+        root.addEventListener("pointerenter", event => { if (event.pointerType === "mouse") { paused = true; restart(); } });
+        root.addEventListener("pointerleave", event => { if (event.pointerType === "mouse") { paused = false; restart(); } });
+        root.addEventListener("focusin", () => { paused = true; restart(); });
+        root.addEventListener("focusout", () => { paused = false; restart(); });
+
+        // Arrastar para o lado troca a foto (celular).
+        let touchX = null;
+        root.addEventListener("touchstart", event => { touchX = event.touches[0].clientX; }, { passive: true });
+        root.addEventListener("touchend", event => {
+            if (touchX === null) return;
+            const delta = event.changedTouches[0].clientX - touchX;
+            touchX = null;
+            if (Math.abs(delta) < 40) return;
+            show(current + (delta < 0 ? 1 : -1));
+            restart();
+        });
+
+        if ("IntersectionObserver" in window) {
+            new IntersectionObserver(entries => {
+                visible = entries.some(entry => entry.isIntersecting);
+                restart();
+            }, { threshold: 0.3 }).observe(root);
+        } else {
+            visible = true;
+        }
+        document.addEventListener("visibilitychange", restart);
+        reduceMotion.addEventListener?.("change", restart);
+        show(0);
+        restart();
+    };
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", start, { once: true });
+    } else {
+        start();
+    }
+})();
+
+
 function browseNovidades() {
     closeCart();
     document.getElementById("novidades")?.scrollIntoView({ behavior: "smooth" });

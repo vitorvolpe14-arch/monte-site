@@ -6112,77 +6112,128 @@ canvas {
 
 
 /* =====================================================
-   EDITORIAL — BANNER DE FOTOS (referência: KEY / 01)
+   EDITORIAL — CARROSSEL BORDEAUX COLLECTION + "Mais que bolsas."
+   Os banners são 2:1 e o carrossel tem a mesma proporção, então a
+   foto aparece inteira (sem cortar o texto) em qualquer tela.
    Paleta MONTÊ: preto, bordô e off-white.
 ===================================================== */
 
 .editorial-banner {
     display: grid;
-    grid-template-columns: 1.25fr 1fr;
-    min-height: 640px;
+    grid-template-columns: 1.6fr 1fr;
+    align-items: center;
     background: var(--black);
     color: var(--white);
     overflow: hidden;
 }
 
-.editorial-media {
+.editorial-carousel {
     position: relative;
-    min-height: 520px;
+    width: 100%;
+}
+
+.editorial-slides {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 2 / 1;
     overflow: hidden;
-    isolation: isolate;
-    background: var(--white);
+    background: #6D2234;
 }
 
-.editorial-photo {
+.editorial-slide {
     position: absolute;
-    will-change: translate;
-    /* As fotos de produto têm fundo branco: o multiply deixa só a bolsa.
-       Fica no wrapper porque ele cria o próprio contexto de empilhamento. */
-    mix-blend-mode: multiply;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    transition: opacity .9s ease;
 }
 
-.editorial-photo img {
+.editorial-slide.active {
+    opacity: 1;
+}
+
+.editorial-slide img {
     display: block;
     width: 100%;
-    height: auto;
-    /* O fundo das fotos é #fefefe; o ajuste leva a branco puro. */
-    filter: brightness(1.012);
+    height: 100%;
+    object-fit: cover;
 }
 
-.editorial-photo-back {
-    width: 30%;
-    left: 7%;
-    top: 9%;
-}
-
-.editorial-photo-back img {
-    transform: rotate(-6deg);
-    opacity: .92;
-}
-
-.editorial-photo-main {
-    width: 46%;
-    left: 29%;
-    top: 20%;
-    z-index: 1;
-}
-
-.editorial-photo-front {
-    width: 27%;
-    right: 5%;
-    bottom: 7%;
+/* Setas e pontos juntos no canto de baixo, longe do texto dos banners. */
+.editorial-carousel-controls {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
     z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    background: rgba(0, 0, 0, .45);
 }
 
-.editorial-photo-front img {
-    transform: rotate(5deg);
+.editorial-carousel-controls[hidden] {
+    display: none;
+}
+
+.editorial-carousel-arrow {
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    padding: 0 0 3px;
+    border: 0;
+    background: none;
+    color: var(--white);
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background .2s ease;
+}
+
+.editorial-carousel-arrow:hover,
+.editorial-carousel-arrow:focus-visible {
+    background: rgba(255, 255, 255, .16);
+}
+
+.editorial-carousel-dots {
+    display: flex;
+    gap: 6px;
+    padding: 0 4px;
+}
+
+.editorial-carousel-dot {
+    position: relative;
+    width: 26px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+}
+
+.editorial-carousel-dot::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 2px;
+    margin-top: -1px;
+    background: rgba(255, 255, 255, .45);
+    transition: background .2s ease;
+}
+
+.editorial-carousel-dot.active::after,
+.editorial-carousel-dot:hover::after {
+    background: var(--white);
 }
 
 .editorial-copy {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    padding: 8vw;
+    padding: clamp(32px, 4vw, 64px) clamp(32px, 6vw, 96px);
 }
 
 .editorial-copy .eyebrow {
@@ -6231,42 +6282,37 @@ canvas {
     transform: translateY(-2px);
 }
 
-@media (max-width: 1100px) {
+/* Tablet e celular: o carrossel ocupa a largura toda (ainda 2:1), as setas e os
+   pontos ficam logo abaixo da foto (sem cobrir nada) e o texto vem depois. */
+@media (max-width: 1023px) {
+    .editorial-banner {
+        grid-template-columns: 1fr;
+    }
+
+    .editorial-carousel-controls {
+        position: static;
+        justify-content: flex-start;
+        padding: 12px calc(6vw - 8px) 0;
+        background: none;
+    }
+
+    .editorial-carousel-arrow {
+        width: 40px;
+        height: 40px;
+    }
+
     .editorial-copy {
-        padding: 6vw;
+        padding: 40px 6vw 64px;
     }
 }
 
 @media (max-width: 760px) {
-    .editorial-banner {
-        grid-template-columns: 1fr;
-        min-height: 0;
-    }
-
-    .editorial-media {
-        min-height: 400px;
-    }
-
-    .editorial-photo-back {
-        width: 38%;
-        left: 4%;
-        top: 8%;
-    }
-
-    .editorial-photo-main {
-        width: 58%;
-        left: 21%;
-        top: 17%;
-    }
-
-    .editorial-photo-front {
-        width: 34%;
-        right: 3%;
-        bottom: 6%;
+    .editorial-carousel-controls {
+        padding: 10px 14px 0;
     }
 
     .editorial-copy {
-        padding: 56px 22px 64px;
+        padding: 36px 22px 64px;
     }
 
     .editorial-copy h2 {
