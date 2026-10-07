@@ -79,23 +79,22 @@ let selectedQuantity = 1;
 let currentSlide = 0;
 let currentGalleryIndex = 0;
 
-const COLLECTION_VISIBLE_COUNT = 5;
-const COLLECTION_STEP = 4;
+// Coleção, Novidades e Sale: 3 produtos por vez (fotos maiores) e as setas avançam 3.
+const PRODUCTS_PER_PAGE = 3;
+const COLLECTION_STEP = PRODUCTS_PER_PAGE;
 let collectionProducts = [];
 let currentCollectionIndex = 0;
 
-const SALE_VISIBLE_COUNT = 5;
-const SALE_STEP = 4;
+const SALE_STEP = PRODUCTS_PER_PAGE;
 let saleProducts = [];
 let currentSaleIndex = 0;
 
-const NEW_VISIBLE_COUNT = 4;
-const NEW_STEP = 4;
+const NEW_STEP = PRODUCTS_PER_PAGE;
 let newProducts = [];
 let currentNewIndex = 0;
 
 function getCarouselVisibleCount() {
-    return 4;
+    return PRODUCTS_PER_PAGE;
 }
 
 

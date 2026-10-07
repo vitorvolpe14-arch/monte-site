@@ -680,6 +680,14 @@ a {
 }
 
 
+/* Preço promocional no fundo bordô: em branco (o bordô padrão sumia no fundo). */
+#novidades .sale-price {
+
+    color: white;
+
+}
+
+
 
 .section-heading > a {
 
@@ -5114,7 +5122,7 @@ img {
     .collection-products-grid,
     .new-products-grid,
     .sale-products-grid {
-        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
         gap: 20px !important;
     }
 }
@@ -5147,20 +5155,21 @@ img {
 
 
 /* =====================================================
-   SEÇÕES — 4 PRODUTOS POR VEZ
-   Coleção, Novidades e Sale exibem 4 cards em cada avanço.
+   SEÇÕES — 3 PRODUTOS POR VEZ
+   Coleção, Novidades e Sale exibem 3 cards em cada avanço
+   (computador, tablet e celular): as fotos ficam maiores.
 ===================================================== */
 .collection-products-grid,
 .new-products-grid,
 .sale-products-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
 }
 
 @media (max-width: 650px) {
     .collection-products-grid,
     .new-products-grid,
     .sale-products-grid {
-        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
         gap: 7px !important;
     }
 }
@@ -5169,7 +5178,7 @@ img {
     .collection-products-grid,
     .new-products-grid,
     .sale-products-grid {
-        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
         gap: 5px !important;
     }
 }
@@ -5953,7 +5962,7 @@ canvas {
     .sale-products-grid {
         width: 100%;
         max-width: 100%;
-        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
         gap: 6px !important;
     }
 
