@@ -409,8 +409,20 @@ async function optimizePhoto(source,kind){
   if(!full||!small||full.type!==small.type)throw new Error("Não foi possível converter a foto.");
   return {contentType:full.type,full,small,width:fullCanvas.width,height:fullCanvas.height};
 }
+// Envia direto para o Supabase (endereço de envio criado pelo servidor). Se não der,
+// manda pelo servidor como antes.
+async function putSignedPhoto(uploadUrl,blob){
+  const form=new FormData();form.append("cacheControl","31536000");form.append("",blob);
+  const r=await fetch(uploadUrl,{method:"PUT",headers:{"x-upsert":"false"},body:form});
+  if(!r.ok)throw new Error("Envio da foto falhou ("+r.status+").");
+}
 async function uploadOptimizedPhoto(source,kind,productId){
   const photo=await optimizePhoto(source,kind);
+  try{
+    const s=await api("/api/admin/uploads/optimized-image/sign",{method:"POST",body:JSON.stringify({product_id:productId||"",content_type:photo.contentType})});
+    await Promise.all([putSignedPhoto(s.full.upload_url,photo.full),putSignedPhoto(s.small.upload_url,photo.small)]);
+    return {url:s.full.url,width:photo.width,height:photo.height};
+  }catch(e){console.warn("Envio direto falhou; enviando pelo servidor:",e.message)}
   const d=await api("/api/admin/uploads/optimized-image",{method:"POST",body:JSON.stringify({kind,product_id:productId||"",content_type:photo.contentType,full_base64:await readFileAsDataUrl(photo.full),small_base64:await readFileAsDataUrl(photo.small)})});
   return {url:d.url,width:d.width||photo.width,height:d.height||photo.height};
 }
@@ -431,7 +443,7 @@ async function optimizeExistingPhotos(){
   if(!total){renderPhotoOptimizerInfo();return}
   if(!window.confirm(`Otimizar ${total} foto${total===1?"":"s"} de produtos?\n\nO painel baixa cada foto, cria uma versão leve (WebP) e troca no site. As originais continuam guardadas. As fotos do banner não são alteradas. Deixe esta aba aberta até terminar (alguns minutos).`))return;
   btn.dataset.running="1";btn.disabled=true;
-  let done=0,failed=0;
+  let done=0,failed=0,message="";
   const progress=()=>{box.textContent=`Otimizando… ${done+failed} de ${total}${failed?` (${failed} sem sucesso)`:""}. Deixe esta aba aberta.`};
   progress();
   try{
@@ -448,8 +460,13 @@ async function optimizeExistingPhotos(){
       }
       if(images.some((u,i)=>u!==product.images[i]))await api("/api/admin/products/"+encodeURIComponent(product.id)+"/images",{method:"PUT",body:JSON.stringify({images})});
     }
-    box.textContent=`Pronto: ${done} foto${done===1?"":"s"} otimizada${done===1?"":"s"}${failed?`, ${failed} não puderam ser otimizadas (ficaram como estavam)`:""}.`;
-  }catch(e){box.textContent="A otimização parou: "+e.message+". Clique de novo para continuar de onde parou."}
-  finally{delete btn.dataset.running;btn.disabled=false;await loadProducts().catch(()=>{});if(!failed)renderPhotoOptimizerInfo()}
+    message=`Pronto: ${done} foto${done===1?"":"s"} otimizada${done===1?"":"s"}${failed?`, ${failed} não puderam ser otimizadas (ficaram como estavam; clique de novo para tentar só essas)`:""}.`;
+  }catch(e){message="A otimização parou: "+e.message+" Clique de novo para continuar de onde parou."}
+  finally{
+    // Recarrega a lista antes de liberar o botão, para o aviso final não ser trocado.
+    await loadProducts().catch(()=>{});
+    delete btn.dataset.running;btn.disabled=false;
+    box.textContent=message;btn.hidden=!photosToOptimize().length;
+  }
 }
 (function(){const btn=$("optimizePhotosButton");if(btn)btn.onclick=optimizeExistingPhotos})();
