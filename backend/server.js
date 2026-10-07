@@ -844,7 +844,8 @@ app.post("/api/admin/olist/sync-paid-order", requireAdmin, async (req, res) => {
 
 
 
-const SUPABASE_URL = process.env.SUPABASE_URL || "https://uvrhougaurupvkxmezwy.supabase.co";
+// Sem espaços nem "/" no fim: o endereço é emendado com "/rest/v1/...", "/storage/v1/...".
+const SUPABASE_URL = String(process.env.SUPABASE_URL || "https://uvrhougaurupvkxmezwy.supabase.co").trim().replace(/\/+$/, "");
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SUPERFRETE_API_URL = process.env.SUPERFRETE_API_URL || "https://api.superfrete.com";
 const SUPERFRETE_TOKEN = process.env.SUPERFRETE_TOKEN;
@@ -1813,16 +1814,24 @@ app.get("/api/admin/analytics",requireAdmin,async(req,res)=>{
 
 const PRODUCT_IMAGE_BUCKET = "product-images";
 
-function isAllowedProductImageUrl(value) {
+// Endereço público de uma foto do bucket, sempre no mesmo formato (https, sem "//").
+function storagePublicUrl(objectPath) {
+    return "https://" + new URL(SUPABASE_URL).host + "/storage/v1/object/public/" + PRODUCT_IMAGE_BUCKET + "/" + objectPath;
+}
+// Foto do bucket da loja no formato padrão, ou "" se o endereço não for de lá.
+function canonicalProductImageUrl(value) {
     try {
         const parsed = new URL(String(value || ""));
-        const supabaseHost = new URL(SUPABASE_URL).host;
-        return parsed.protocol === "https:" &&
-            parsed.host === supabaseHost &&
-            parsed.pathname.startsWith("/storage/v1/object/public/" + PRODUCT_IMAGE_BUCKET + "/");
+        const path = parsed.pathname.replace(/\/{2,}/g, "/");
+        const prefix = "/storage/v1/object/public/" + PRODUCT_IMAGE_BUCKET + "/";
+        if (parsed.protocol !== "https:" || parsed.host !== new URL(SUPABASE_URL).host || !path.startsWith(prefix)) return "";
+        return "https://" + parsed.host + path;
     } catch {
-        return false;
+        return "";
     }
+}
+function isAllowedProductImageUrl(value) {
+    return !!canonicalProductImageUrl(value);
 }
 
 // Antes recortava as bordas da foto com o sharp, biblioteca nativa que não roda no
@@ -1904,7 +1913,7 @@ async function uploadProductImage({ productId, fileName, contentType, dataBase64
         body: buffer
     });
     if (!response.ok) throw new Error("Upload da imagem falhou (" + response.status + ").");
-    return SUPABASE_URL + "/storage/v1/object/public/" + PRODUCT_IMAGE_BUCKET + "/" + objectPath;
+    return storagePublicUrl(objectPath);
 }
 
 async function uploadCarouselImage({fileName,contentType,dataBase64}) {
@@ -1923,8 +1932,38 @@ async function uploadCarouselImage({fileName,contentType,dataBase64}) {
         body: buffer
     });
     if (!response.ok) throw new Error("Upload da imagem do carrossel falhou (" + response.status + ").");
-    return SUPABASE_URL + "/storage/v1/object/public/" + PRODUCT_IMAGE_BUCKET + "/" + objectPath;
+    return storagePublicUrl(objectPath);
 }
+// Envio direto do painel para o Supabase: o servidor só cria os endereços de envio
+// (válidos por 2 horas, um arquivo cada) e o navegador manda as fotos para lá. Assim as
+// fotos não passam pelo Cloudflare, que no plano grátis tem só 10 ms de CPU por pedido.
+async function signedStorageUpload(objectPath) {
+    const response = await fetch(SUPABASE_URL + "/storage/v1/object/upload/sign/" + PRODUCT_IMAGE_BUCKET + "/" + encodeURIComponent(objectPath).replace(/%2F/g, "/"), {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY, "apikey": SUPABASE_SERVICE_ROLE_KEY, "Content-Type": "application/json" },
+        body: "{}"
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.url || !String(data.url).includes("token=")) throw new Error("Não foi possível preparar o envio da foto (" + response.status + ").");
+    return { upload_url: "https://" + new URL(SUPABASE_URL).host + "/storage/v1" + data.url, url: storagePublicUrl(objectPath) };
+}
+app.post("/api/admin/uploads/optimized-image/sign", requireAdmin, async (req, res) => {
+    try {
+        if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY não configurada no backend.");
+        const productId = safeString(req.body?.product_id);
+        if (!/^[0-9a-f-]{36}$/i.test(productId)) throw new Error("Produto inválido.");
+        const contentType = safeString(req.body?.content_type).toLowerCase();
+        if (!["image/webp", "image/jpeg"].includes(contentType)) throw new Error("Formato inválido para a foto otimizada.");
+        const ext = contentType === "image/webp" ? "webp" : "jpg";
+        const base = "opt/" + productId + "/" + Date.now() + "-" + crypto.randomBytes(5).toString("hex");
+        const [full, small] = await Promise.all([signedStorageUpload(base + "-full." + ext), signedStorageUpload(base + "-small." + ext)]);
+        return res.json({ success: true, full, small });
+    } catch (e) {
+        console.error("Admin optimized image sign:", e);
+        return res.status(400).json({ success: false, message: e.message || "Não foi possível preparar o envio da foto." });
+    }
+});
+
 // Foto de PRODUTO otimizada no navegador do painel: chega a versão grande e a pequena
 // (WebP, ou JPEG em navegadores sem WebP) e as duas vão para "opt/..." com o mesmo nome.
 // A loja usa a pequena nos cards e a grande na galeria. As fotos do banner não passam
@@ -1936,7 +1975,7 @@ async function uploadStorageObject(objectPath, contentType, buffer) {
         body: buffer
     });
     if (!response.ok) throw new Error("Upload da imagem falhou (" + response.status + ").");
-    return SUPABASE_URL + "/storage/v1/object/public/" + PRODUCT_IMAGE_BUCKET + "/" + objectPath;
+    return storagePublicUrl(objectPath);
 }
 app.post("/api/admin/uploads/optimized-image", requireAdmin, async (req, res) => {
     try {
@@ -1970,8 +2009,12 @@ app.put("/api/admin/products/:id/images", requireAdmin, async (req, res) => {
     try {
         const id = safeString(req.params.id);
         if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ success: false, message: "Produto inválido." });
-        const images = Array.isArray(req.body?.images) ? req.body.images.map(safeString).filter(Boolean).slice(0, 30) : [];
-        if (!images.every(url => isAllowedProductImageUrl(url) || /^\/?assets\//.test(url))) return res.status(400).json({ success: false, message: "Foto inválida na lista." });
+        const images = Array.isArray(req.body?.images) ? req.body.images.map(safeString).filter(Boolean).slice(0, 30).map(url => /^\/?assets\//.test(url) ? url : canonicalProductImageUrl(url) || url) : [];
+        const invalid = images.find(url => !isAllowedProductImageUrl(url) && !/^\/?assets\//.test(url));
+        if (invalid) {
+            console.error("Admin product images PUT: foto fora do bucket:", invalid);
+            return res.status(400).json({ success: false, message: "Foto inválida na lista (" + invalid.slice(0, 160) + ")." });
+        }
         const rows = await supabaseRequest("products?id=eq." + encodeURIComponent(id) + "&select=images,images_original", { method: "GET" });
         const current = Array.isArray(rows) ? rows[0] : null;
         if (!current) return res.status(404).json({ success: false, message: "Produto não encontrado." });
