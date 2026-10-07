@@ -1874,6 +1874,17 @@ function readImageInfo(b) {
     return { format: null };
 }
 
+// Motivo da recusa do Supabase Storage em português (antes o painel só mostrava o código).
+async function storageUploadError(response, prefix) {
+    let detail = "";
+    try { const data = await response.json(); detail = safeString(data?.message || data?.error); } catch {}
+    if (response.status === 413 || /maximum allowed size|too large|payload/i.test(detail)) {
+        return "A foto passa do tamanho máximo aceito pelo armazenamento. Envie um arquivo menor.";
+    }
+    if (/mime type|not supported/i.test(detail)) return "Formato de foto não aceito pelo armazenamento. Use JPG, PNG ou WebP.";
+    return prefix + " (" + response.status + (detail ? ": " + detail.slice(0, 120) : "") + ").";
+}
+
 async function validateImageBuffer(buffer, declaredContentType) {
     if (!Buffer.isBuffer(buffer) || !buffer.length) {
         throw new Error("Arquivo de imagem vazio.");
@@ -1912,7 +1923,7 @@ async function uploadProductImage({ productId, fileName, contentType, dataBase64
         headers: { "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY, "apikey": SUPABASE_SERVICE_ROLE_KEY, "Content-Type": contentType, "x-upsert": "false", "cache-control": "max-age=31536000" },
         body: buffer
     });
-    if (!response.ok) throw new Error("Upload da imagem falhou (" + response.status + ").");
+    if (!response.ok) throw new Error(await storageUploadError(response, "Upload da imagem falhou"));
     return storagePublicUrl(objectPath);
 }
 
@@ -1931,7 +1942,7 @@ async function uploadCarouselImage({fileName,contentType,dataBase64}) {
         headers: { "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY, "apikey": SUPABASE_SERVICE_ROLE_KEY, "Content-Type": contentType, "x-upsert": "false", "cache-control": "max-age=31536000" },
         body: buffer
     });
-    if (!response.ok) throw new Error("Upload da imagem do carrossel falhou (" + response.status + ").");
+    if (!response.ok) throw new Error(await storageUploadError(response, "Upload da imagem do carrossel falhou"));
     return storagePublicUrl(objectPath);
 }
 // Envio direto do painel para o Supabase: o servidor só cria os endereços de envio
@@ -1974,7 +1985,7 @@ async function uploadStorageObject(objectPath, contentType, buffer) {
         headers: { "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY, "apikey": SUPABASE_SERVICE_ROLE_KEY, "Content-Type": contentType, "x-upsert": "false", "cache-control": "max-age=31536000" },
         body: buffer
     });
-    if (!response.ok) throw new Error("Upload da imagem falhou (" + response.status + ").");
+    if (!response.ok) throw new Error(await storageUploadError(response, "Upload da imagem falhou"));
     return storagePublicUrl(objectPath);
 }
 app.post("/api/admin/uploads/optimized-image", requireAdmin, async (req, res) => {
