@@ -1,25 +1,44 @@
-const SUPABASE_URL = "https://uvrhougaurupvkxmezwy.supabase.co";
-const SUPABASE_KEY = "sb_publishable_oML0grXREF2gHg7WNIxNlA_BYMV9D1V";
-const supabaseClient = window.supabase
-    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
-    : null;
-
 let products = [];
 
-async function loadProductsFromDatabase() {
-    if (!supabaseClient) {
-        console.error("Supabase não carregado.");
-        return;
+// Fotos otimizadas pelo painel (".../opt/...-full.webp") têm uma versão menor (-small)
+// para cards, miniaturas e sacola; as demais fotos são usadas como estão.
+function smallImage(url) {
+    const text = String(url || "");
+    return /\/opt\/[^?#]+-full\.(webp|jpg)$/.test(text) ? text.replace(/-full\.(webp|jpg)$/, "-small.$1") : text;
+}
+
+// Catálogo: na primeira carga vem dentro da própria página (o servidor já manda os
+// produtos no HTML); depois, ou se não vier, é lido em /api/catalogo.
+let embeddedCatalogUsed = false;
+async function fetchCatalog() {
+    if (!embeddedCatalogUsed) {
+        embeddedCatalogUsed = true;
+        const embedded = document.getElementById("catalogData");
+        if (embedded) {
+            try {
+                const data = JSON.parse(embedded.textContent);
+                if (Array.isArray(data)) return data;
+            } catch {}
+        }
     }
+    const response = await fetch("/api/catalogo", { cache: "no-store", headers: { "Accept": "application/json" } });
+    const body = await response.json().catch(() => null);
+    if (!response.ok || !Array.isArray(body?.products)) throw new Error(body?.message || "Não foi possível carregar os produtos.");
+    return body.products;
+}
 
-    const { data, error } = await supabaseClient
-        .from("products")
-        .select("*, product_variants(*)")
-        .eq("active", true)
-        .order("created_at", { ascending: false });
+// Mostra o que vem depois do banner (fica invisível até as vitrines serem montadas).
+function revealCatalogSections() {
+    document.documentElement.classList.remove("catalog-pending");
+}
 
-    if (error) {
+async function loadProductsFromDatabase() {
+    let data;
+    try {
+        data = await fetchCatalog();
+    } catch (error) {
         console.error("Erro ao carregar produtos:", error);
+        revealCatalogSections();
         return;
     }
 
@@ -40,6 +59,7 @@ async function loadProductsFromDatabase() {
     }));
 
     renderProducts();
+    revealCatalogSections();
 }
 
 /* =====================================================
@@ -162,7 +182,7 @@ function createProductCard(product) {
 
     }
 
-    card.innerHTML = `
+    setHTML(card, `
 
         <div class="product-image">
 
@@ -197,9 +217,10 @@ function createProductCard(product) {
             }
 
             <img
-                src="${escapeHTML(image)}"
+                src="${escapeHTML(smallImage(image))}"
                 alt="${escapeHTML(product.name)}"
                 loading="lazy"
+                decoding="async"
             >
 
         </div>
@@ -216,7 +237,7 @@ function createProductCard(product) {
 
         </div>
 
-    `;
+    `);
 
     const productImageFrame = card.querySelector(".product-image");
     const productImageElement = card.querySelector(".product-image img");
@@ -253,7 +274,7 @@ function createProductCard(product) {
 
 function renderProducts() {
     const newContainer = document.getElementById("newProducts");
-    if (newContainer) newContainer.innerHTML = "";
+    if (newContainer) newContainer.replaceChildren();
 
     renderCollectionProducts(
         products.filter(product => product.category === "bolsas")
@@ -308,7 +329,7 @@ function renderNewPage() {
 
     if (!container) return;
 
-    container.innerHTML = "";
+    container.replaceChildren();
 
     if (!newProducts.length) {
         if (previousButton) {
@@ -407,7 +428,7 @@ function renderSalePage() {
 
     if (!container) return;
 
-    container.innerHTML = "";
+    container.replaceChildren();
 
     if (!saleProducts.length) {
         if (previousButton) {
@@ -498,7 +519,7 @@ function renderCollectionPage() {
     if (!container) return;
 
 
-    container.innerHTML = "";
+    container.replaceChildren();
 
 
     if (!collectionProducts.length) {
@@ -606,7 +627,7 @@ function renderCategorySection(category) {
     const prev = document.querySelector('#' + category + ' .category-prev');
     const next = document.querySelector('#' + category + ' .category-next');
 
-    container.innerHTML = "";
+    container.replaceChildren();
 
     if (!list.length) {
         if (prev) prev.style.visibility = "hidden";
@@ -790,14 +811,14 @@ function openProductModal(productId) {
         priceHTML = '<span class="old-price">' + formatPrice(selectedProduct.oldPrice) + '</span>' +
             '<span class="sale-price">' + formatPrice(selectedProduct.price) + '</span>';
     }
-    document.getElementById("modalPrice").innerHTML = priceHTML;
+    setHTML(document.getElementById("modalPrice"), priceHTML);
 
     const variantSelector = document.getElementById("variantSelector");
     const variantOptions = document.getElementById("variantOptions");
     if (variantSelector && variantOptions) {
         if (activeVariants.length) {
             variantSelector.style.display = "block";
-            variantOptions.innerHTML = "";
+            variantOptions.replaceChildren();
             activeVariants.forEach(variant => {
                 const button = document.createElement("button");
                 button.type = "button";
@@ -819,7 +840,7 @@ function openProductModal(productId) {
             });
         } else {
             variantSelector.style.display = "none";
-            variantOptions.innerHTML = "";
+            variantOptions.replaceChildren();
         }
     }
 
@@ -860,12 +881,13 @@ function renderGallery() {
     if (!mainImage || !thumbnails || !selectedProduct) return;
 
     currentGalleryIndex = 0;
-    thumbnails.innerHTML = "";
+    thumbnails.replaceChildren();
 
     (selectedProduct.images || []).forEach((image, index) => {
         const thumbnail = document.createElement("img");
 
-        thumbnail.src = image;
+        thumbnail.src = smallImage(image);
+        thumbnail.decoding = "async";
         thumbnail.alt = (selectedProduct.name || "Produto MONTÊ") + " — foto " + (index + 1);
         thumbnail.className = "gallery-thumbnail";
         thumbnail.loading = "lazy";
@@ -1138,21 +1160,21 @@ function updateCart() {
         );
 
 
-    container.innerHTML = "";
+    container.replaceChildren();
 
     const cartPanel = document.querySelector("#cartOverlay .cart");
     if (cartPanel) cartPanel.classList.toggle("is-empty", cart.length === 0);
 
     if (cart.length === 0) {
 
-        container.innerHTML = `
+        setHTML(container, `
             <div class="empty-cart">
                 <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M10 16h28l-2.4 24H12.4z"/><path d="M17 16v-3a7 7 0 0 1 14 0v3"/></svg>
                 <p class="empty-cart-title">Sua sacola está vazia</p>
                 <p class="empty-cart-text">Que tal começar pelas novidades da coleção?</p>
-                <button type="button" class="empty-cart-button" onclick="closeCart(); document.getElementById('novidades')?.scrollIntoView({ behavior: 'smooth' });">VER NOVIDADES</button>
+                <button type="button" class="empty-cart-button" data-click="browseNovidades">VER NOVIDADES</button>
             </div>
-        `;
+        `);
 
     }
 
@@ -1183,11 +1205,11 @@ function updateCart() {
 
         element.style.setProperty("--i", index);
 
-        element.innerHTML = `
+        setHTML(element, `
 
             <div class="cart-item-media">
                 <img
-                    src="${escapeHTML(Array.isArray(item.images) ? item.images[0] || "" : "")}"
+                    src="${escapeHTML(smallImage(Array.isArray(item.images) ? item.images[0] || "" : ""))}"
                     alt="${escapeHTML(item.name)}"
                 >
             </div>
@@ -1203,9 +1225,9 @@ function updateCart() {
                 <div class="cart-item-row">
 
                     <div class="cart-quantity" aria-label="Quantidade">
-                        <button type="button" aria-label="Diminuir quantidade" onclick="updateItemQuantity(${index}, -1)">−</button>
+                        <button type="button" aria-label="Diminuir quantidade" data-click="updateItemQuantity" data-args="[${index}, -1]">−</button>
                         <span>${item.quantity}</span>
-                        <button type="button" aria-label="Aumentar quantidade" onclick="updateItemQuantity(${index}, 1)">+</button>
+                        <button type="button" aria-label="Aumentar quantidade" data-click="updateItemQuantity" data-args="[${index}, 1]">+</button>
                     </div>
 
                     <div class="cart-item-price">
@@ -1221,11 +1243,11 @@ function updateCart() {
                 type="button"
                 class="cart-item-remove"
                 aria-label="Remover ${escapeHTML(item.name)}"
-                onclick="removeFromCart(${index})">
+                data-click="removeFromCart" data-args="[${index}]">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
             </button>
 
-        `;
+        `);
 
 
         container.appendChild(element);
@@ -1432,14 +1454,14 @@ function getShippingValue() {
 function renderShippingOptions() {
     const container = document.getElementById("shippingOptions");
     if (!container) return;
-    container.innerHTML = "";
+    container.replaceChildren();
     shippingOptions.forEach(option => {
         const label = document.createElement("label");
         label.className = "shipping-option" + (selectedShippingOption?.id === option.id ? " selected" : "");
         const min = Number(option.delivery_min_days || 0);
         const max = Number(option.delivery_max_days || 0);
         const days = min && max && min !== max ? `${min} a ${max} dias úteis` : (max || option.delivery_days) ? `${max || option.delivery_days} dias úteis` : "Prazo informado";
-        label.innerHTML = `<input type="radio" name="shippingMethod" value="${String(option.id).replace(/"/g, "&quot;")}" ${selectedShippingOption?.id === option.id ? "checked" : ""}><span class="shipping-option-info"><strong>${option.name}</strong><small>${days}</small></span><strong class="shipping-option-price">${formatPrice(option.price)}</strong>`;
+        setHTML(label, `<input type="radio" name="shippingMethod" value="${String(option.id).replace(/"/g, "&quot;")}" ${selectedShippingOption?.id === option.id ? "checked" : ""}><span class="shipping-option-info"><strong>${option.name}</strong><small>${days}</small></span><strong class="shipping-option-price">${formatPrice(option.price)}</strong>`);
         label.addEventListener("click", () => {
             selectedShippingOption = option;
             document.querySelectorAll(".shipping-option").forEach(el => el.classList.remove("selected"));
@@ -1471,7 +1493,7 @@ async function updateShipping() {
         renderShippingOptions(); updatePaymentSummary(); return;
     }
     shippingValueElement.textContent = "Calculando...";
-    if (optionsContainer) optionsContainer.innerHTML = '<div class="shipping-loading">Consultando opções de entrega...</div>';
+    if (optionsContainer) setHTML(optionsContainer, '<div class="shipping-loading">Consultando opções de entrega...</div>');
     try {
         const response = await fetch("/api/frete/cotacao",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({to_cep:cep,city,state,items:cart.map(item=>({id:item.id,quantity:item.quantity}))})});
         const data = await response.json().catch(() => ({}));
@@ -1483,7 +1505,7 @@ async function updateShipping() {
     } catch(error) {
         if (requestId !== shippingRequestId) return;
         shippingValueElement.textContent = "Não disponível";
-        if (optionsContainer) optionsContainer.innerHTML = `<div class="shipping-error">${error.message || "Não foi possível calcular o frete."}</div>`;
+        if (optionsContainer) setHTML(optionsContainer, `<div class="shipping-error">${error.message || "Não foi possível calcular o frete."}</div>`);
         updatePaymentSummary();
     }
 }
@@ -1692,63 +1714,6 @@ window.addEventListener("pageshow",event=>{
     if(checkoutButton){checkoutButton.disabled=false;checkoutButton.textContent="FINALIZAR COMPRA";}
 });
 
-function renderDirectPixPayment(data){
-    const panel=document.getElementById("directPixPayment");
-    const canvas=document.getElementById("directPixQr");
-    const qrImage=document.getElementById("directPixQrImage");
-    const copy=document.getElementById("directPixCopyPaste");
-    const amount=document.getElementById("directPixAmount");
-    const order=document.getElementById("directPixOrder");
-    if(!panel||!canvas||!copy||!amount||!order)throw new Error("Área do Pix não encontrada.");
-
-    panel.hidden=false;
-    order.textContent="Pedido #"+String(data.order_code||"").padStart(4,"0");
-    amount.textContent=formatPrice(Number(data.amount||0));
-    copy.value=data.pix_payload;
-
-    if(qrImage){
-        qrImage.hidden=true;
-        qrImage.removeAttribute("src");
-    }
-
-    const showFallbackQr=()=>{
-        canvas.hidden=true;
-        if(!qrImage)return;
-        qrImage.hidden=false;
-        qrImage.src="https://quickchart.io/qr?size=280&margin=2&ecLevel=M&text="+encodeURIComponent(data.pix_payload);
-    };
-
-    canvas.hidden=false;
-
-    if(window.QRCode?.toCanvas){
-        window.QRCode.toCanvas(
-            canvas,
-            data.pix_payload,
-            {width:240,margin:2,errorCorrectionLevel:"M"},
-            error=>{
-                if(error){
-                    console.error("Erro ao gerar QR Code Pix:",error);
-                    showFallbackQr();
-                }
-            }
-        );
-    }else{
-        console.warn("Gerador local de QR Code não carregou. Usando fallback.");
-        showFallbackQr();
-    }
-
-    panel.scrollIntoView({behavior:"smooth",block:"nearest"});
-}
-
-async function copyDirectPix(){
-    const copy=document.getElementById("directPixCopyPaste");
-    if(!copy?.value)return;
-    try{await navigator.clipboard.writeText(copy.value);}
-    catch{copy.focus();copy.select();document.execCommand("copy");}
-    showToast("Pix Copia e Cola copiado.");
-}
-
-
 /* =====================================================
    CARROSSEL
 ===================================================== */
@@ -1756,40 +1721,50 @@ async function copyDirectPix(){
 let carouselSlides=[];
 let carouselAutoTimer=null;
 
-async function loadHomepageCarousel(){
-  try{
-    const response=await fetch("/api/carousel",{cache:"no-store"});
-    const data=await response.json();
-    const images=Array.isArray(data?.images)?data.images.filter(Boolean):[];
-    renderHomepageCarousel(images.length?images:[
-      "/backend/assets/carousel-photo-1.webp",
-      "/backend/assets/carousel-photo-2.webp"
-    ]);
-  }catch{
-    renderHomepageCarousel([
-      "/backend/assets/carousel-photo-1.webp",
-      "/backend/assets/carousel-photo-2.webp"
-    ]);
-  }
+// Banner com largura, altura e srcset: o navegador reserva o espaço antes da foto chegar
+// (a página não pula) e o celular baixa a versão menor quando ela existe.
+function carouselSlideHtml(slide,i){
+  const src=String(slide?.src||slide||"");
+  const size=slide?.width&&slide?.height?' width="'+Number(slide.width)+'" height="'+Number(slide.height)+'"':"";
+  const srcset=slide?.small?' srcset="'+escapeHTML(slide.small)+' 960w, '+escapeHTML(src)+' 2000w" sizes="100vw"':"";
+  return '<div class="slide'+(i===0?' active':'')+'"><img src="'+escapeHTML(src)+'"'+srcset+size+(i===0?' fetchpriority="high"':' loading="lazy"')+' decoding="async" alt="MONTÊ — Novidades"></div>';
 }
 
-function renderHomepageCarousel(images){
+async function loadHomepageCarousel(){
   const container=document.getElementById("carouselSlides");
   if(!container)return;
-  container.innerHTML=images.map((src,i)=>'<div class="slide'+(i===0?' active':'')+'"><img src="'+String(src).replace(/"/g,'%22')+'" alt="MONTÊ"></div>').join("");
+  // O servidor já mandou os banners dentro da página: só liga os pontos e a troca automática.
+  if(container.dataset.ssr!=="1"){
+    try{
+      const response=await fetch("/api/carousel",{cache:"no-store"});
+      const data=await response.json();
+      const slides=Array.isArray(data?.slides)&&data.slides.length
+        ?data.slides
+        :(Array.isArray(data?.images)?data.images.filter(Boolean).map(src=>({src})):[]);
+      if(slides.length)setHTML(container,slides.map(carouselSlideHtml).join(""));
+    }catch{
+      // Sem resposta: ficam os banners padrão que já estão na página.
+    }
+  }
+  setupCarousel(container);
+}
+
+function setupCarousel(container){
   carouselSlides=[...container.querySelectorAll(".slide")];
   const dots=document.getElementById("carouselDots");
-  dots.innerHTML="";
-  carouselSlides.forEach((_,index)=>{
-    const dot=document.createElement("button");
-    dot.className="carousel-dot"+(index===0?" active":"");
-    dot.type="button";dot.setAttribute("aria-label","Mostrar banner "+(index+1));
-    dot.addEventListener("click",()=>{currentSlide=index;showSlide(currentSlide)});
-    dots.appendChild(dot);
-  });
+  if(dots){
+    dots.replaceChildren();
+    carouselSlides.forEach((_,index)=>{
+      const dot=document.createElement("button");
+      dot.className="carousel-dot"+(index===0?" active":"");
+      dot.type="button";dot.setAttribute("aria-label","Mostrar banner "+(index+1));
+      dot.addEventListener("click",()=>{currentSlide=index;showSlide(currentSlide)});
+      dots.appendChild(dot);
+    });
+  }
   currentSlide=0;
   if(carouselAutoTimer)clearInterval(carouselAutoTimer);
-  carouselAutoTimer=setInterval(nextSlide,20000);
+  if(carouselSlides.length>1)carouselAutoTimer=setInterval(nextSlide,20000);
 }
 function showSlide(index){
   if(!carouselSlides.length)return;
@@ -1874,7 +1849,7 @@ function searchProducts() {
         );
 
 
-    container.innerHTML = "";
+    container.replaceChildren();
 
 
     products
@@ -2372,6 +2347,7 @@ document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
 
     // A animação começa quando a página aparece, o que no celular pode levar
     // alguns segundos depois da navegação. Conta o tempo pela própria animação.
+    if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) root.classList.add("intro-reduced");
     const duration = root.classList.contains("intro-reduced") ? 1400 : 4500;
     const own = intro.getAnimations ? intro.getAnimations().find(a => a.effect && a.effect.target === intro && !a.effect.pseudoElement) : null;
     let remaining = duration;
@@ -2481,9 +2457,9 @@ function renderCheckoutNote(summary) {
 
     const itemsBox = document.getElementById("noteItems");
     if (itemsBox) {
-        itemsBox.innerHTML = cart.length
+        setHTML(itemsBox, cart.length
             ? cart.map(item => `<div class="order-note-item"><span>${escapeHTML(item.name)}</span><span>${formatPrice(Number(item.price || 0) * Number(item.quantity || 0))}</span><small>${escapeHTML(colorLabel(item.variant_color, item.name) || "Cor única")} · ${Number(item.quantity || 0)} un.</small></div>`).join("")
-            : '<div class="order-note-item"><span class="is-empty">Nenhuma peça na sacola</span></div>';
+            : '<div class="order-note-item"><span class="is-empty">Nenhuma peça na sacola</span></div>');
     }
 
     setNoteText("noteShipping", selectedShippingOption ? `${selectedShippingOption.name} · ${formatPrice(totals.shipping)}` : "");
@@ -2644,9 +2620,9 @@ function renderCheckoutExtras({ subtotal, shipping, pixDiscount, paymentMethod }
     if (perk && perkText) {
         perk.hidden = !(cart.length && potential > 0);
         perk.classList.toggle("is-active", paymentMethod === "pix");
-        perkText.innerHTML = paymentMethod === "pix"
+        setHTML(perkText, paymentMethod === "pix"
             ? `Pix selecionado: você economiza <strong>${formatPrice(potential)}</strong>`
-            : `Pagando no Pix você economiza <strong>${formatPrice(potential)}</strong>`;
+            : `Pagando no Pix você economiza <strong>${formatPrice(potential)}</strong>`);
         if (perkButton) perkButton.hidden = paymentMethod === "pix";
     }
 
@@ -2722,4 +2698,59 @@ function renderCheckoutExtras({ subtotal, shipping, pixDiscount, paymentMethod }
     };
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start, { once: true });
     else start();
+})();
+
+
+/* =====================================================
+   AÇÕES DOS BOTÕES E CAMPOS
+   A CSP do site não aceita JavaScript dentro do HTML (onclick="..."):
+   os botões dizem a ação em data-click (veja safe-html.js) e só as
+   funções desta lista podem ser chamadas.
+===================================================== */
+
+function browseNovidades() {
+    closeCart();
+    document.getElementById("novidades")?.scrollIntoView({ behavior: "smooth" });
+}
+
+registerClickActions({
+    browseNovidades, changeQuantity, checkout, closeCart, closeCartOutside, closeMobileMenu,
+    closeProductImageLightbox, closeProductModal, closeSearch, goToNovidades, navigateProductLightbox,
+    nextCategoryPage, nextCollectionPage, nextNewPage, nextSalePage, nextSlide, openCart, openSearch,
+    openWhatsAppReservation, previousCategoryPage, previousCollectionPage, previousNewPage,
+    previousSalePage, previousSlide, removeFromCart, toggleMobileMenu, updateItemQuantity
+});
+
+document.getElementById("searchInput")?.addEventListener("input", () => searchProducts());
+document.getElementById("newsletterForm")?.addEventListener("submit", event => subscribeNewsletter(event));
+document.getElementById("carouselSlides")?.addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        goToNovidades(event);
+    }
+});
+
+
+/* =====================================================
+   GOOGLE ANALYTICS
+   Carrega depois que a página termina de abrir, quando o navegador
+   está livre: os visitantes continuam sendo contados e a loja abre
+   sem esperar o script do Google.
+===================================================== */
+
+(function loadAnalytics() {
+    const id = "G-RCG5BX64FG";
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
+    window.gtag("js", new Date());
+    window.gtag("config", id, { anonymize_ip: true });
+    const inject = () => {
+        const script = document.createElement("script");
+        script.async = true;
+        script.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(id);
+        document.head.appendChild(script);
+    };
+    const schedule = () => (window.requestIdleCallback ? requestIdleCallback(inject, { timeout: 4000 }) : setTimeout(inject, 2000));
+    if (document.readyState === "complete") schedule();
+    else window.addEventListener("load", schedule, { once: true });
 })();

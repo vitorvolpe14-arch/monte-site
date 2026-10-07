@@ -19,14 +19,14 @@ function setCarouselStatus(message="",error=false){
 function renderCarouselImageManager(){
   const box=$("carouselImageManager");
   if(!box)return;
-  box.innerHTML=carouselImagesDraft.map((url,i)=>
+  setHTML(box, carouselImagesDraft.map((url,i)=>
     '<div class="product-image-item carousel-image-item" draggable="true" data-index="'+i+'">'+
-      '<img src="'+esc(url)+'" alt="Carrossel '+(i+1)+'" onerror="this.style.opacity=\'0.2\'">'+
+      '<img src="'+esc(url)+'" alt="Carrossel '+(i+1)+'" data-img-error="dim">'+
       '<button type="button" class="image-remove" data-remove-carousel="'+i+'">×</button>'+
       '<span>'+(i===0?"CAPA":"FOTO "+(i+1))+'</span>'+
       '<span class="carousel-drag-handle">↕</span>'+
     '</div>'
-  ).join("") || '<p class="field-help">Nenhuma foto adicionada.</p>';
+  ).join("") || '<p class="field-help">Nenhuma foto adicionada.</p>');
 
   box.querySelectorAll("[data-remove-carousel]").forEach(btn=>{
     btn.addEventListener("click",e=>{
@@ -68,10 +68,18 @@ function renderCarouselImageManager(){
 
 function validateCarouselImage(file){validateProductImage(file)}
 
+// Medidas das fotos novas (largura e altura): a loja reserva o espaço do banner.
+let carouselSizesDraft={};
 async function uploadCarouselImages(files){
   const urls=[];
   for(const file of files){
     validateCarouselImage(file);
+    try{
+      const optimized=await uploadOptimizedPhoto(file,"carousel");
+      carouselSizesDraft[optimized.url]=[optimized.width,optimized.height];
+      urls.push(optimized.url);
+      continue;
+    }catch(e){console.warn("Banner enviado sem otimizar:",e.message)}
     const dataUrl=await readFileAsDataUrl(file);
     const d=await api("/api/admin/uploads/carousel-image",{
       method:"POST",
@@ -164,7 +172,7 @@ async function saveCarousel(){
   try{
     const d=await api("/api/admin/carousel",{
       method:"PUT",
-      body:JSON.stringify({images:carouselImagesDraft})
+      body:JSON.stringify({images:carouselImagesDraft,sizes:carouselSizesDraft})
     });
     carouselImagesDraft=Array.isArray(d.images)?d.images:carouselImagesDraft;
     renderCarouselImageManager();

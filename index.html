@@ -1,18 +1,11 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" class="intro-playing catalog-pending">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
-    <script>
-      (function () {
-        // A abertura toca em todo carregamento da página.
-        var root = document.documentElement;
-        root.classList.add("intro-playing");
-        if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) root.classList.add("intro-reduced");
-      })();
-    </script>
+
 
     <title>MONTÊ | Bolsas Femininas e Acessórios</title>
     <meta name="description" content="MONTÊ — bolsas femininas e acessórios. Conheça a coleção, novidades e seleção especial da marca. Compre online com pagamento seguro e entrega para todo o Brasil.">
@@ -40,26 +33,14 @@
     <meta name="twitter:description" content="Conheça a coleção MONTÊ e compre online.">
     <meta name="twitter:image" content="https://oficialmontee.com.br/backend/assets/carousel-photo-1.webp">
 
-    <link rel="stylesheet" href="style.css?v=20261003-fotos-brancas">
+    <link rel="stylesheet" href="style.css?v=20261007-seguranca">
+    <!-- PRELOAD DO BANNER -->
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet">
+    <link rel="preload" href="/fonts/dm-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/playfair-display-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/lovelo-black.woff2" as="font" type="font/woff2" crossorigin>
 
-    <script>
-      window.MONTÊ_GA_ID = "G-RCG5BX64FG";
-      if (window.MONTÊ_GA_ID && window.MONTÊ_GA_ID !== "") {
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){ dataLayer.push(arguments); }
-        gtag("js", new Date());
-        gtag("config", window.MONTÊ_GA_ID, { anonymize_ip: true });
 
-        var gaScript = document.createElement("script");
-        gaScript.async = true;
-        gaScript.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(window.MONTÊ_GA_ID);
-        document.head.appendChild(gaScript);
-      }
-    </script>
 
     <script type="application/ld+json">
     {
@@ -93,7 +74,7 @@
     <div class="intro-layer intro-layer-wine"></div>
     <div class="intro-layer intro-layer-paper">
         <div class="intro-stage">
-            <svg class="intro-wordmark" viewBox="8 -90.3 402.4 91.8" role="img" aria-label="MONTÊ"><path pathLength="1" style="--i:0" d="M22.5 0L8.0 0L8.0-72.6L12.6-72.6L40.8-41.2L69.0-72.6L73.5-72.6L73.5 0L59.0 0L59.1-39.9L40.8-20.7L22.5-39.9L22.5 0Z"/><path pathLength="1" style="--i:1" d="M107.9-22.3Q105.5-29.0 105.5-35.9Q105.5-42.8 107.9-49.4Q110.3-56.0 114.8-61.2Q119.2-66.4 126.4-69.5Q133.6-72.7 142.5-72.7Q151.4-72.7 158.6-69.5Q165.8-66.4 170.2-61.2Q174.7-56.0 177.1-49.4Q179.5-42.8 179.5-35.9Q179.5-29.0 177.1-22.3Q174.7-15.7 170.2-10.5Q165.8-5.4 158.6-2.2Q151.4 1.0 142.5 1.0Q133.6 1.0 126.4-2.2Q119.2-5.4 114.8-10.5Q110.3-15.7 107.9-22.3ZM122.4-44.0Q121.0-40.0 121.0-35.9Q121.0-31.8 122.4-27.8Q123.8-23.8 126.4-20.7Q129.0-17.6 133.1-15.7Q137.3-13.8 142.5-13.8Q147.7-13.8 151.8-15.7Q156.0-17.6 158.6-20.7Q161.2-23.8 162.6-27.8Q164.0-31.8 164.0-35.9Q164.0-40.0 162.6-44.0Q161.2-48.0 158.6-51.1Q156.0-54.2 151.8-56.1Q147.7-58.0 142.5-58.0Q137.3-58.0 133.1-56.1Q129.0-54.2 126.4-51.1Q123.8-48.0 122.4-44.0Z"/><path pathLength="1" style="--i:2" d="M225.6 0L211.3 0L211.3-73.0L215.1-73.0L251.2-31.0L251.2-71.4L265.6-71.4L265.6 1.5L261.8 1.5L225.6-38.9L225.6 0Z"/><path pathLength="1" style="--i:3" d="M312.0-57.2L294.2-57.2L294.2-71.4L344.1-71.4L344.1-57.2L326.3-57.2L326.3 0L312.0 0L312.0-57.2Z"/><path pathLength="1" style="--i:4" d="M388.1-76.9L373.2-76.9L387.1-90.3L396.2-90.3L410.3-76.9L395.3-76.9L391.6-81.4L388.1-76.9ZM410.4 0L373.4 0L373.4-71.5L409.2-71.5L409.2-57.2L387.7-57.2L387.7-42.9L406.5-42.9L406.5-28.6L387.7-28.6L387.7-14.3L410.4-14.3L410.4 0Z"/></svg>
+            <svg class="intro-wordmark" viewBox="8 -90.3 402.4 91.8" role="img" aria-label="MONTÊ"><path pathLength="1" class="intro-letter-0" d="M22.5 0L8.0 0L8.0-72.6L12.6-72.6L40.8-41.2L69.0-72.6L73.5-72.6L73.5 0L59.0 0L59.1-39.9L40.8-20.7L22.5-39.9L22.5 0Z"/><path pathLength="1" class="intro-letter-1" d="M107.9-22.3Q105.5-29.0 105.5-35.9Q105.5-42.8 107.9-49.4Q110.3-56.0 114.8-61.2Q119.2-66.4 126.4-69.5Q133.6-72.7 142.5-72.7Q151.4-72.7 158.6-69.5Q165.8-66.4 170.2-61.2Q174.7-56.0 177.1-49.4Q179.5-42.8 179.5-35.9Q179.5-29.0 177.1-22.3Q174.7-15.7 170.2-10.5Q165.8-5.4 158.6-2.2Q151.4 1.0 142.5 1.0Q133.6 1.0 126.4-2.2Q119.2-5.4 114.8-10.5Q110.3-15.7 107.9-22.3ZM122.4-44.0Q121.0-40.0 121.0-35.9Q121.0-31.8 122.4-27.8Q123.8-23.8 126.4-20.7Q129.0-17.6 133.1-15.7Q137.3-13.8 142.5-13.8Q147.7-13.8 151.8-15.7Q156.0-17.6 158.6-20.7Q161.2-23.8 162.6-27.8Q164.0-31.8 164.0-35.9Q164.0-40.0 162.6-44.0Q161.2-48.0 158.6-51.1Q156.0-54.2 151.8-56.1Q147.7-58.0 142.5-58.0Q137.3-58.0 133.1-56.1Q129.0-54.2 126.4-51.1Q123.8-48.0 122.4-44.0Z"/><path pathLength="1" class="intro-letter-2" d="M225.6 0L211.3 0L211.3-73.0L215.1-73.0L251.2-31.0L251.2-71.4L265.6-71.4L265.6 1.5L261.8 1.5L225.6-38.9L225.6 0Z"/><path pathLength="1" class="intro-letter-3" d="M312.0-57.2L294.2-57.2L294.2-71.4L344.1-71.4L344.1-57.2L326.3-57.2L326.3 0L312.0 0L312.0-57.2Z"/><path pathLength="1" class="intro-letter-4" d="M388.1-76.9L373.2-76.9L387.1-90.3L396.2-90.3L410.3-76.9L395.3-76.9L391.6-81.4L388.1-76.9ZM410.4 0L373.4 0L373.4-71.5L409.2-71.5L409.2-57.2L387.7-57.2L387.7-42.9L406.5-42.9L406.5-28.6L387.7-28.6L387.7-14.3L410.4-14.3L410.4 0Z"/></svg>
             <span class="intro-rule"></span>
             <p class="intro-tagline">BOLSAS &amp; ACESSÓRIOS</p>
         </div>
@@ -121,7 +102,7 @@
 <header class="header">
 
     <button class="mobile-menu"
-            onclick="toggleMobileMenu()">
+            data-click="toggleMobileMenu">
 
         ☰
 
@@ -140,35 +121,35 @@
          id="mainNavigation">
 
         <a href="#novidades"
-           onclick="closeMobileMenu()">
+           data-click="closeMobileMenu">
 
             NOVIDADES
 
         </a>
 
         <a href="#colecao"
-           onclick="closeMobileMenu()">
+           data-click="closeMobileMenu">
 
             COLEÇÃO
 
         </a>
 
         <a href="#cintos-acessorios"
-           onclick="closeMobileMenu()">
+           data-click="closeMobileMenu">
 
             CINTOS & ACESSÓRIOS
 
         </a>
 
         <a href="#sale"
-           onclick="closeMobileMenu()">
+           data-click="closeMobileMenu">
 
             SALE
 
         </a>
 
         <a href="/minhas-compras.html"
-           onclick="closeMobileMenu()">
+           data-click="closeMobileMenu">
 
             MINHAS COMPRAS
 
@@ -183,7 +164,7 @@
             MINHAS COMPRAS
         </a>
 
-        <button onclick="openSearch()"
+        <button data-click="openSearch"
                 aria-label="Pesquisar">
 
             <span class="icon">⌕</span>
@@ -191,7 +172,7 @@
         </button>
 
 
-        <button onclick="openCart()"
+        <button data-click="openCart"
                 class="cart-button"
                 aria-label="Carrinho">
 
@@ -226,7 +207,7 @@
 
     <div class="search-box">
 
-        <button onclick="closeSearch()"
+        <button data-click="closeSearch"
                 class="close-search">
 
             ×
@@ -237,7 +218,6 @@
             type="text"
             id="searchInput"
             placeholder="Buscar produto..."
-            oninput="searchProducts()"
         >
 
     </div>
@@ -264,18 +244,20 @@
 
         <!-- FOTO 1 -->
 
-        <div id="carouselSlides" role="link" tabindex="0" aria-label="Ver novidades" onclick="goToNovidades(event)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goToNovidades(event)}">
+        <div id="carouselSlides" role="link" tabindex="0" aria-label="Ver novidades" data-click="goToNovidades" data-event>
+            <!-- SLIDES -->
             <div class="slide active">
-                <img src="/backend/assets/carousel-photo-1.webp" alt="MONTÊ — Novidades">
+                <img src="/backend/assets/carousel-photo-1.webp" width="640" height="360" fetchpriority="high" alt="MONTÊ — Novidades">
             </div>
             <div class="slide">
-                <img src="/backend/assets/carousel-photo-2.webp" alt="MONTÊ — Novidades">
+                <img src="/backend/assets/carousel-photo-2.webp" width="640" height="360" loading="lazy" alt="MONTÊ — Novidades">
             </div>
+            <!-- FIM DOS SLIDES -->
         </div>
 
 
         <button class="carousel-prev"
-                onclick="previousSlide()">
+                data-click="previousSlide">
 
             ‹
 
@@ -283,7 +265,7 @@
 
 
         <button class="carousel-next"
-                onclick="nextSlide()">
+                data-click="nextSlide">
 
             ›
 
@@ -314,11 +296,11 @@
     </div>
 
     <div class="collection-products-carousel">
-        <button class="collection-carousel-arrow collection-prev" onclick="previousCollectionPage()" aria-label="Ver bolsas anteriores">‹</button>
+        <button class="collection-carousel-arrow collection-prev" data-click="previousCollectionPage" aria-label="Ver bolsas anteriores">‹</button>
         <div class="collection-products-viewport">
             <div id="allProducts" class="products-grid collection-products-grid"></div>
         </div>
-        <button class="collection-carousel-arrow collection-next" onclick="nextCollectionPage()" aria-label="Ver mais bolsas">›</button>
+        <button class="collection-carousel-arrow collection-next" data-click="nextCollectionPage" aria-label="Ver mais bolsas">›</button>
     </div>
 
 </section>
@@ -374,7 +356,7 @@
 
         <button
             class="new-carousel-arrow new-prev"
-            onclick="previousNewPage()"
+            data-click="previousNewPage"
             aria-label="Ver novidades anteriores">
 
             ‹
@@ -392,7 +374,7 @@
 
         <button
             class="new-carousel-arrow new-next"
-            onclick="nextNewPage()"
+            data-click="nextNewPage"
             aria-label="Ver mais novidades">
 
             ›
@@ -415,8 +397,8 @@
         <h2>Cintos &amp;<br><em>acessórios</em>.</h2>
         <p class="category-intro-text">Os detalhes que finalizam cada produção.</p>
         <div class="category-intro-controls">
-            <button class="collection-carousel-arrow category-prev" onclick="previousCategoryPage('cintos-acessorios')" aria-label="Ver cintos e acessórios anteriores">‹</button>
-            <button class="collection-carousel-arrow category-next" onclick="nextCategoryPage('cintos-acessorios')" aria-label="Ver mais cintos e acessórios">›</button>
+            <button class="collection-carousel-arrow category-prev" data-click="previousCategoryPage" data-args='["cintos-acessorios"]' aria-label="Ver cintos e acessórios anteriores">‹</button>
+            <button class="collection-carousel-arrow category-next" data-click="nextCategoryPage" data-args='["cintos-acessorios"]' aria-label="Ver mais cintos e acessórios">›</button>
         </div>
     </div>
 
@@ -448,7 +430,7 @@
 
         <button
             class="sale-carousel-arrow sale-prev"
-            onclick="previousSalePage()"
+            data-click="previousSalePage"
             aria-label="Ver bolsas anteriores">
 
             ‹
@@ -466,7 +448,7 @@
 
         <button
             class="sale-carousel-arrow sale-next"
-            onclick="nextSalePage()"
+            data-click="nextSalePage"
             aria-label="Ver mais bolsas em promoção">
 
             ›
@@ -500,7 +482,7 @@
     </div>
 
 
-    <form onsubmit="subscribeNewsletter(event)">
+    <form id="newsletterForm">
 
         <input
             type="email"
@@ -685,7 +667,7 @@
     <div class="modal-content">
 
         <button class="modal-close"
-                onclick="closeProductModal()">
+                data-click="closeProductModal">
 
             ×
 
@@ -742,7 +724,7 @@
                 <div class="product-divider">
                 </div>
 
-                <div id="variantSelector" class="variant-selector" style="display:none;">
+                <div id="variantSelector" class="variant-selector is-hidden-start">
                     <p class="quantity-title">COR</p>
                     <div id="variantOptions" class="variant-options"></div>
                 </div>
@@ -754,7 +736,7 @@
 
                 <div class="quantity-selector">
 
-                    <button onclick="changeQuantity(-1)">
+                    <button data-click="changeQuantity" data-args='[-1]'>
                         −
                     </button>
 
@@ -762,19 +744,19 @@
                         1
                     </span>
 
-                    <button onclick="changeQuantity(1)">
+                    <button data-click="changeQuantity" data-args='[1]'>
                         +
                     </button>
 
                 </div>
 
 
-                <div id="reservationBox" class="reservation-box" style="display:none;">
+                <div id="reservationBox" class="reservation-box is-hidden-start">
                     <p class="reservation-message"></p>
                     <button
                         type="button"
                         class="whatsapp-reservation-button"
-                        onclick="openWhatsAppReservation()">
+                        data-click="openWhatsAppReservation">
                         FALAR COM A MONTÊ NO WHATSAPP
                     </button>
                 </div>
@@ -821,14 +803,14 @@
 
     <button type="button"
             class="product-lightbox-close"
-            onclick="closeProductImageLightbox()"
+            data-click="closeProductImageLightbox"
             aria-label="Fechar">
         ×
     </button>
 
     <button type="button"
             class="product-lightbox-arrow product-lightbox-prev"
-            onclick="navigateProductLightbox(-1)"
+            data-click="navigateProductLightbox" data-args='[-1]'
             aria-label="Foto anterior">
         ‹
     </button>
@@ -843,7 +825,7 @@
 
     <button type="button"
             class="product-lightbox-arrow product-lightbox-next"
-            onclick="navigateProductLightbox(1)"
+            data-click="navigateProductLightbox" data-args='[1]'
             aria-label="Próxima foto">
         ›
     </button>
@@ -855,7 +837,7 @@
 
 <div id="cartOverlay"
      class="cart-overlay"
-     onclick="closeCartOutside(event)">
+     data-click="closeCartOutside" data-event>
 
     <aside class="cart" aria-label="Sacola de compras">
 
@@ -864,7 +846,7 @@
                 <p class="cart-kicker">MONTÊ</p>
                 <h2>Sua sacola <span id="cartHeaderCount" class="cart-header-count">0</span></h2>
             </div>
-            <button class="cart-close" onclick="closeCart()" aria-label="Fechar sacola">
+            <button class="cart-close" data-click="closeCart" aria-label="Fechar sacola">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
             </button>
             <ol class="checkout-steps" id="checkoutSteps" aria-label="Etapas da compra">
@@ -960,16 +942,6 @@
                     </div>
                     <p class="field-hint">O desconto do Pix vale para as peças; o frete é cobrado integralmente.</p>
 
-            <div id="directPixPayment" class="direct-pix-payment" hidden>
-                <div class="direct-pix-header"><span>PIX</span><strong>PAGUE COM PIX</strong></div>
-                <p class="direct-pix-order" id="directPixOrder"></p>
-                <div class="direct-pix-qr-wrap"><canvas id="directPixQr" aria-label="QR Code Pix"></canvas><img id="directPixQrImage" class="direct-pix-qr-image" alt="QR Code Pix" hidden></div>
-                <strong class="direct-pix-amount" id="directPixAmount">R$ 0,00</strong>
-                <p class="direct-pix-instruction">Aponte a câmera do banco para o QR Code ou copie o código abaixo.</p>
-                <textarea id="directPixCopyPaste" class="direct-pix-copy" readonly></textarea>
-                <button type="button" class="direct-pix-copy-button" onclick="copyDirectPix()">COPIAR PIX COPIA E COLA</button>
-                <p class="direct-pix-note">O pedido ficará aguardando a confirmação do pagamento.</p>
-            </div>
 
                 </section>
 
@@ -1015,7 +987,7 @@
                     <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12l-8 8-8-8 8-8z"/><path d="M9.5 12h5"/></svg>Pix com 5% OFF</li>
                 </ul>
 
-                <button type="button" onclick="closeCart()" class="continue-shopping">Continuar comprando</button>
+                <button type="button" data-click="closeCart" class="continue-shopping">Continuar comprando</button>
 
             </div>
 
@@ -1027,7 +999,7 @@
                 <strong id="checkoutTotal">R$ 0,00</strong>
                 <small id="checkoutBarHint"></small>
             </div>
-            <button onclick="checkout()" class="checkout-button">FINALIZAR COMPRA</button>
+            <button data-click="checkout" class="checkout-button">FINALIZAR COMPRA</button>
         </div>
 
     </aside>
@@ -1045,9 +1017,9 @@
 </div>
 
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
-<script src="script.js?v=20261003-lembretes"></script>
+<!-- CATÁLOGO -->
+<script src="safe-html.js?v=20261007-seguranca"></script>
+<script src="script.js?v=20261007-seguranca"></script>
 
 </body>
 </html>

@@ -1,0 +1,3 @@
+/* Página de produto para o Google (/produto/...): estilos fora do HTML por causa da CSP. */
+.seo-product { max-width: 900px; margin: 40px auto; padding: 20px; font-family: Arial, sans-serif; }
+.seo-product img { max-width: 100%; height: auto; }
