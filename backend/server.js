@@ -1925,9 +1925,10 @@ async function uploadCarouselImage({fileName,contentType,dataBase64}) {
     if (!response.ok) throw new Error("Upload da imagem do carrossel falhou (" + response.status + ").");
     return SUPABASE_URL + "/storage/v1/object/public/" + PRODUCT_IMAGE_BUCKET + "/" + objectPath;
 }
-// Foto otimizada no navegador do painel: chega a versão grande e a pequena (WebP, ou JPEG
-// em navegadores sem WebP) e as duas vão para "opt/..." com o mesmo nome. A loja usa a
-// pequena nos cards e a grande na galeria.
+// Foto de PRODUTO otimizada no navegador do painel: chega a versão grande e a pequena
+// (WebP, ou JPEG em navegadores sem WebP) e as duas vão para "opt/..." com o mesmo nome.
+// A loja usa a pequena nos cards e a grande na galeria. As fotos do banner não passam
+// por aqui: ficam como foram enviadas.
 async function uploadStorageObject(objectPath, contentType, buffer) {
     const response = await fetch(SUPABASE_URL + "/storage/v1/object/" + PRODUCT_IMAGE_BUCKET + "/" + encodeURIComponent(objectPath).replace(/%2F/g, "/"), {
         method: "POST",
@@ -1940,9 +1941,8 @@ async function uploadStorageObject(objectPath, contentType, buffer) {
 app.post("/api/admin/uploads/optimized-image", requireAdmin, async (req, res) => {
     try {
         if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY não configurada no backend.");
-        const kind = safeString(req.body?.kind) === "carousel" ? "carousel" : "product";
         const productId = safeString(req.body?.product_id);
-        if (kind === "product" && !/^[0-9a-f-]{36}$/i.test(productId)) throw new Error("Produto inválido.");
+        if (!/^[0-9a-f-]{36}$/i.test(productId)) throw new Error("Produto inválido.");
         const contentType = safeString(req.body?.content_type).toLowerCase();
         if (!["image/webp", "image/jpeg"].includes(contentType)) throw new Error("Formato inválido para a foto otimizada.");
         const decode = value => Buffer.from(String(value || "").replace(/^data:[^;]+;base64,/, ""), "base64");
@@ -1952,7 +1952,7 @@ app.post("/api/admin/uploads/optimized-image", requireAdmin, async (req, res) =>
         if (full.length > 6 * 1024 * 1024 || small.length > 2 * 1024 * 1024) throw new Error("A foto otimizada ficou grande demais.");
         const ext = contentType === "image/webp" ? "webp" : "jpg";
         const name = Date.now() + "-" + crypto.randomBytes(5).toString("hex");
-        const folder = "opt/" + (kind === "carousel" ? "carousel" : productId) + "/";
+        const folder = "opt/" + productId + "/";
         const [url, smallUrl] = await Promise.all([
             uploadStorageObject(folder + name + "-full." + ext, contentType, full),
             uploadStorageObject(folder + name + "-small." + ext, contentType, small)
