@@ -5360,7 +5360,7 @@ ${image ? `<meta property="og:image" content="${xmlEscape(image)}">` : ""}
 <meta name="twitter:description" content="${xmlEscape(description.slice(0, 200))}">
 ${image ? `<meta name="twitter:image" content="${xmlEscape(image)}">` : ""}
 <script type="application/ld+json">${JSON.stringify(schema).replace(/</g, "\\u003c")}</script>
-<link rel="stylesheet" href="/produto-seo.css?v=20261007-seguranca">
+<link rel="stylesheet" href="/produto-seo.css?v=20261008-dustbag">
 </head>
 <body>
 <main class="seo-product">
@@ -5368,6 +5368,7 @@ ${image ? `<meta name="twitter:image" content="${xmlEscape(image)}">` : ""}
 ${image ? `<img src="${xmlEscape(image)}" alt="${xmlEscape(product.name)}">` : ""}
 <p>${xmlEscape(description).replace(/\n/g, "<br>")}</p>
 <p><strong>Preço: R$ ${price.toFixed(2).replace(".", ",")}</strong></p>
+${product.is_sale ? '<p class="seo-sale-notice"><strong>Sale:</strong> produtos da Sale não acompanham dustbag.</p>' : ""}
 <p>${stockTotal > 0 ? "Disponível para compra." : "Produto esgotado."}</p>
 <p><a href="/">Voltar para a MONTÊ</a></p>
 </main>
