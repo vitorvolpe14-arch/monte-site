@@ -812,6 +812,10 @@ function openProductModal(productId) {
     }
     setHTML(document.getElementById("modalPrice"), priceHTML);
 
+    // Produtos da Sale não acompanham dustbag: o aviso aparece ao abrir qualquer um deles.
+    const saleNotice = document.getElementById("modalSaleNotice");
+    if (saleNotice) saleNotice.hidden = !selectedProduct.sale;
+
     const variantSelector = document.getElementById("variantSelector");
     const variantOptions = document.getElementById("variantOptions");
     if (variantSelector && variantOptions) {
