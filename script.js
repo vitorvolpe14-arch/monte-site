@@ -1374,6 +1374,29 @@ function removeFromCart(index) {
 
 ===================================================== */
 
+// No celular o Safari ignora o overflow:hidden do body e a página de fundo rolava junto
+// com o checkout. Enquanto a sacola está aberta, a página fica presa no lugar (fixed)
+// e, ao fechar, volta exatamente para onde a cliente estava.
+let lockedPageScrollY = null;
+
+function lockPageScroll() {
+    if (lockedPageScrollY !== null) return;
+    if (!window.matchMedia("(pointer: coarse), (max-width: 900px)").matches) return;
+    lockedPageScrollY = window.scrollY;
+    document.body.style.top = -lockedPageScrollY + "px";
+    document.body.classList.add("page-locked");
+}
+
+function unlockPageScroll() {
+    if (lockedPageScrollY === null) return;
+    const y = lockedPageScrollY;
+    lockedPageScrollY = null;
+    document.body.classList.remove("page-locked");
+    document.body.style.top = "";
+    window.scrollTo({ top: y, behavior: "instant" });
+}
+
+
 function openCart() {
 
     document
@@ -1381,6 +1404,8 @@ function openCart() {
         .classList.add("active");
 
     document.body.classList.add("cart-open");
+
+    lockPageScroll();
 
 }
 
@@ -1392,6 +1417,8 @@ function closeCart() {
         .classList.remove("active");
 
     document.body.classList.remove("cart-open");
+
+    unlockPageScroll();
 
 }
 
