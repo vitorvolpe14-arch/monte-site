@@ -2414,6 +2414,23 @@ function setNoteText(id, text, placeholder = "— — —") {
     element.classList.toggle("is-empty", !text);
 }
 
+function drawNoteBarcode(seed) {
+    const box = document.getElementById("noteBarcode");
+    if (!box) return;
+    let hash = 2166136261;
+    for (const char of seed) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+    const stops = [];
+    let x = 0;
+    while (x < 100) {
+        hash = Math.imul(hash ^ (hash >>> 13), 1274126177);
+        const bar = 0.8 + (Math.abs(hash) % 3) * 0.8;
+        const gap = 0.8 + (Math.abs(hash >> 5) % 3) * 0.7;
+        stops.push(`#1b1716 ${x.toFixed(1)}% ${(x + bar).toFixed(1)}%`, `transparent ${(x + bar).toFixed(1)}% ${(x + bar + gap).toFixed(1)}%`);
+        x += bar + gap;
+    }
+    box.style.background = `linear-gradient(90deg, ${stops.join(", ")})`;
+}
+
 function renderCheckoutNote(summary) {
     if (!document.getElementById("orderNote")) return;
     const totals = summary || (() => {
@@ -2456,6 +2473,7 @@ function renderCheckoutNote(summary) {
     setNoteText("noteTotal", formatPrice(totals.total));
 
     const signature = [noteValue("customerName"), noteValue("customerCpf"), address, cart.length, totals.total].join("|");
+    drawNoteBarcode(signature || "MONTE");
     if (signature !== lastNoteSignature) {
         lastNoteSignature = signature;
         const tag = document.querySelector(".order-note-tag");
