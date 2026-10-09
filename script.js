@@ -1142,9 +1142,7 @@ document.getElementById(
 
         if (!addSelectedProductToCart()) return;
 
-        closeProductModal();
-
-
+        // A cliente continua no produto que está vendo: só aparece o aviso.
         showToast(
             "Produto adicionado ao carrinho."
         );
