@@ -7004,36 +7004,6 @@ html.intro-skipped .header { animation-delay: .5s; }
     letter-spacing: -.02em;
 }
 
-.order-note-foot {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    margin-top: 14px;
-}
-
-.order-note-barcode {
-    width: 130px;
-    height: 30px;
-}
-
-.order-note-care {
-    width: 118px;
-    height: auto;
-    fill: none;
-    stroke: #6D2234;
-    stroke-width: 1.3;
-    opacity: .8;
-}
-
-.order-note-legal {
-    margin: 12px 0 0;
-    font-size: 9.5px;
-    line-height: 1.5;
-    color: #8a8178;
-    text-align: center;
-}
-
 @media (prefers-reduced-motion: reduce) {
     .order-note-tag.is-swaying { animation: none; }
 }
