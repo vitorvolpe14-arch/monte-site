@@ -1822,6 +1822,23 @@ a {
 }
 
 
+/* COMPRAR AGORA: logo abaixo de "Adicionar ao carrinho", em preto. */
+.buy-now-large {
+
+    margin-top: 10px;
+
+    background: var(--black);
+
+}
+
+
+.buy-now-large:hover {
+
+    background: #2b2523;
+
+}
+
+
 .product-shipping {
 
     margin-top: 30px;

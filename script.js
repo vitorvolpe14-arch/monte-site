@@ -770,11 +770,13 @@ function updateProductAvailabilityUI() {
     const quantityTitle = document.querySelector("#productModal .quantity-title");
     const quantitySelector = document.querySelector("#productModal .quantity-selector");
     const addButton = document.getElementById("addProductButton");
+    const buyNowButton = document.getElementById("buyNowButton");
     const reservationBox = document.getElementById("reservationBox");
 
     if (quantityTitle) quantityTitle.style.display = isSelectionSoldOut ? "none" : "";
     if (quantitySelector) quantitySelector.style.display = isSelectionSoldOut ? "none" : "";
     if (addButton) addButton.style.display = isSelectionSoldOut ? "none" : "";
+    if (buyNowButton) buyNowButton.style.display = isSelectionSoldOut ? "none" : "";
 
     if (reservationBox) {
         if (isSelectionSoldOut) {
@@ -1065,68 +1067,80 @@ function changeQuantity(amount) {
    ADICIONAR AO CARRINHO
 ===================================================== */
 
+// Coloca o produto escolhido na sacola. Em "Comprar agora" (buyNow) o item que já
+// estava na sacola não é somado de novo: fica com a quantidade escolhida, se for maior.
+function addSelectedProductToCart(buyNow = false) {
+
+    if (!selectedProduct) return false;
+
+    const available = selectedVariant ? Number(selectedVariant.stock || 0) : Number(selectedProduct.stock || 0);
+    if (available <= 0 || selectedQuantity > available) {
+        showToast("Quantidade indisponível para este produto.");
+        return false;
+    }
+
+    // Produtos com uma única variação ativa já ficam automaticamente
+    // associados a essa variação. A cliente não precisa selecionar nada.
+    if (!selectedVariant) {
+        const onlyVariant = (selectedProduct.variants || [])
+            .filter(v => v.active !== false && Number(v.stock || 0) > 0);
+        if (onlyVariant.length === 1) {
+            selectedVariant = onlyVariant[0];
+        }
+    }
+
+    const variantKey = selectedVariant?.id || "default";
+    const existing =
+        cart.find(
+            item =>
+                item.id === selectedProduct.id && (item.variant_id || "default") === variantKey
+        );
+
+
+    if (existing) {
+
+        const maxStock = selectedVariant ? Number(selectedVariant.stock || 0) : Number(selectedProduct.stock || 0);
+        existing.quantity = buyNow
+            ? Math.min(Math.max(existing.quantity, selectedQuantity), maxStock)
+            : Math.min(existing.quantity + selectedQuantity, maxStock);
+
+    } else {
+
+        cart.push({
+
+            ...selectedProduct,
+            variant_id: selectedVariant?.id || null,
+            variant_color: selectedVariant?.color || null,
+            variant_sku: selectedVariant?.sku || selectedProduct.sku || null,
+            quantity: selectedQuantity
+
+        });
+
+    }
+
+
+    updateCart();
+
+    window.monteAnalytics?.track("add_to_cart", {
+        product_id: selectedProduct.id,
+        product_name: selectedProduct.name,
+        variant_id: selectedVariant?.id || null,
+        quantity: selectedQuantity,
+        value: Number(selectedProduct.price || 0) * selectedQuantity
+    });
+
+    return true;
+
+}
+
+
 document.getElementById(
     "addProductButton"
 ).addEventListener(
     "click",
     () => {
 
-        if (!selectedProduct) return;
-
-        const available = selectedVariant ? Number(selectedVariant.stock || 0) : Number(selectedProduct.stock || 0);
-        if (available <= 0 || selectedQuantity > available) {
-            showToast("Quantidade indisponível para este produto.");
-            return;
-        }
-
-        // Produtos com uma única variação ativa já ficam automaticamente
-        // associados a essa variação. A cliente não precisa selecionar nada.
-        if (!selectedVariant) {
-            const onlyVariant = (selectedProduct.variants || [])
-                .filter(v => v.active !== false && Number(v.stock || 0) > 0);
-            if (onlyVariant.length === 1) {
-                selectedVariant = onlyVariant[0];
-            }
-        }
-
-        const variantKey = selectedVariant?.id || "default";
-        const existing =
-            cart.find(
-                item =>
-                    item.id === selectedProduct.id && (item.variant_id || "default") === variantKey
-            );
-
-
-        if (existing) {
-
-            const maxStock = selectedVariant ? Number(selectedVariant.stock || 0) : Number(selectedProduct.stock || 0);
-            existing.quantity = Math.min(existing.quantity + selectedQuantity, maxStock);
-
-        } else {
-
-            cart.push({
-
-                ...selectedProduct,
-                variant_id: selectedVariant?.id || null,
-                variant_color: selectedVariant?.color || null,
-                variant_sku: selectedVariant?.sku || selectedProduct.sku || null,
-                quantity: selectedQuantity
-
-            });
-
-        }
-
-
-        updateCart();
-
-        window.monteAnalytics?.track("add_to_cart", {
-            product_id: selectedProduct.id,
-            product_name: selectedProduct.name,
-            variant_id: selectedVariant?.id || null,
-            quantity: selectedQuantity,
-            value: Number(selectedProduct.price || 0) * selectedQuantity
-        });
-
+        if (!addSelectedProductToCart()) return;
 
         closeProductModal();
 
@@ -1137,6 +1151,33 @@ document.getElementById(
 
     }
 );
+
+
+/* =====================================================
+   COMPRAR AGORA
+   Põe o produto na sacola, abre a sacola já na etapa
+   "Seus dados" e deixa o cursor no primeiro campo vazio.
+===================================================== */
+
+document.getElementById("buyNowButton")?.addEventListener("click", () => {
+
+    if (!addSelectedProductToCart(true)) return;
+
+    closeProductModal();
+    openCart();
+
+    setTimeout(() => {
+        const panel = document.querySelector("#cartOverlay .cart");
+        const target = document.getElementById("stepData");
+        if (!panel || !target) return;
+        const header = panel.querySelector(".cart-header");
+        const top = target.getBoundingClientRect().top - panel.getBoundingClientRect().top + panel.scrollTop - (header?.offsetHeight || 0) - 12;
+        panel.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+        const firstEmpty = [...target.querySelectorAll("input")].find(input => !input.value.trim());
+        firstEmpty?.focus({ preventScroll: true });
+    }, 350);
+
+});
 
 
 /* =====================================================
