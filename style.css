@@ -2879,6 +2879,21 @@ body.cart-open,
 body.modal-open {
     overflow: hidden;
 }
+
+/* Celular: página presa no lugar enquanto a sacola está aberta (ver lockPageScroll). */
+body.page-locked {
+    position: fixed;
+    left: 0;
+    right: 0;
+    width: 100%;
+    overflow: hidden;
+}
+
+/* A rolagem do checkout não passa para a página quando chega no começo ou no fim. */
+#cartOverlay,
+#cartOverlay .cart {
+    overscroll-behavior: contain;
+}
 /* ==========================================
    CORREÇÃO DEFINITIVA DO CARRINHO MONTÊ
    ========================================== */
