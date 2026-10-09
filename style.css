@@ -7004,6 +7004,18 @@ html.intro-skipped .header { animation-delay: .5s; }
     letter-spacing: -.02em;
 }
 
+/* Rodapé da nota: só o código de barras (os símbolos e o texto saíram). */
+.order-note-foot {
+    display: flex;
+    align-items: center;
+    margin-top: 14px;
+}
+
+.order-note-barcode {
+    width: 130px;
+    height: 30px;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .order-note-tag.is-swaying { animation: none; }
 }
