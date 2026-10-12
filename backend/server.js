@@ -1080,12 +1080,12 @@ async function sendOrderConfirmationEmail(order) {
       "<h1 style=\"margin:0 0 18px;font-size:28px;font-weight:500;\">Obrigada pela sua compra, " + escapeEmailHtml(customerName) + ".</h1>" +
       "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Seu pagamento foi confirmado e seu pedido já está registrado na MONTÊ.</p>" +
       "<div style=\"margin:28px 0;padding:20px;background:#f7f5f2;\"><p style=\"margin:0 0 8px;font-size:11px;letter-spacing:1.5px;color:#777;\">NÚMERO DO PEDIDO</p><strong style=\"font-size:20px;\">" + escapeEmailHtml(orderCode) + "</strong><p style=\"margin:14px 0 0;font-size:14px;color:#555;\">Total: <strong>R$ " + total.toFixed(2).replace(".", ",") + "</strong></p></div>" +
-      (orderHasPresale(order) ? "<p style=\"font-size:15px;line-height:1.7;color:#555;\"><strong>Pré-venda:</strong> seu pedido tem peça que ainda vai chegar. O prazo de entrega é de pelo menos " + PRESALE_MIN_BUSINESS_DAYS + " dias úteis.</p>" : "") +
+      (orderHasPresale(order) ? "<p style=\"font-size:15px;line-height:1.7;color:#555;\"><strong>Pré-venda:</strong> seu pedido tem peça que ainda vai chegar. A entrega é em " + PRESALE_MIN_BUSINESS_DAYS + " dias úteis.</p>" : "") +
       "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Acompanhe o status do seu pedido e novas atualizações pela área <strong>Minhas Compras</strong>.</p>" +
       "<div style=\"text-align:center;margin:30px 0;\"><a href=\"" + purchasesUrl + "\" style=\"display:inline-block;background:#111;color:#fff;text-decoration:none;padding:15px 26px;font-size:13px;letter-spacing:1.5px;\">ACESSAR MINHAS COMPRAS</a></div></div>" +
       "<p style=\"text-align:center;font-size:11px;color:#999;margin:20px 0;\">MONTÊ — Bolsas e acessórios</p></div></body></html>";
     const text = "Compra confirmada na MONTÊ\n\nPedido: " + orderCode + "\nTotal: R$ " + total.toFixed(2).replace(".", ",") +
-        (orderHasPresale(order) ? "\n\nPré-venda: o prazo de entrega é de pelo menos " + PRESALE_MIN_BUSINESS_DAYS + " dias úteis." : "") +
+        (orderHasPresale(order) ? "\n\nPré-venda: a entrega é em " + PRESALE_MIN_BUSINESS_DAYS + " dias úteis." : "") +
         "\n\nAcesse: " + purchasesUrl;
     const idempotencyKey = "monte-order-confirmation-" + String(order.order_nsu);
     const response = await fetch("https://api.resend.com/emails", {
@@ -1331,7 +1331,8 @@ async function supabaseRequest(path, options = {}) {
     return data;
 }
 
-// Pré-venda: bolsas que ainda vão chegar. O prazo de entrega é de pelo menos 10 dias úteis.
+// Pré-venda: bolsas que ainda vão chegar. A entrega é em 10 dias úteis (ou no prazo da
+// transportadora, se for maior).
 const PRESALE_MIN_BUSINESS_DAYS = 10;
 const orderHasPresale = order => Array.isArray(order?.items) && order.items.some(item => item?.presale === true);
 
@@ -4510,7 +4511,7 @@ app.post(
                 }
             }
 
-            // Pedido com peça em pré-venda: prazo de pelo menos PRESALE_MIN_BUSINESS_DAYS dias úteis.
+            // Pedido com peça em pré-venda: entrega em PRESALE_MIN_BUSINESS_DAYS dias úteis (ou no prazo da transportadora, se maior).
             const hasPresale = productItems.some(item => item.presale);
             const baseDeliveryDays = Number(shippingOption.delivery_days || shippingOption.delivery_max_days) || null;
             const deliveryDays = hasPresale ? Math.max(PRESALE_MIN_BUSINESS_DAYS, baseDeliveryDays || 0) : baseDeliveryDays;
@@ -5847,7 +5848,7 @@ ${image ? `<img src="${xmlEscape(image)}" alt="${xmlEscape(product.name)}">` : "
 <p>${xmlEscape(description).replace(/\n/g, "<br>")}</p>
 <p><strong>Preço: R$ ${price.toFixed(2).replace(".", ",")}</strong></p>
 ${product.is_sale ? '<p class="seo-sale-notice"><strong>Sale:</strong> produtos da Sale não acompanham dustbag.</p>' : ""}
-${product.is_presale ? '<p class="seo-sale-notice"><strong>Pré-venda — garanta a sua!</strong> Esta bolsa ainda vai chegar: o prazo de entrega é de pelo menos ' + PRESALE_MIN_BUSINESS_DAYS + ' dias úteis.</p>' : ""}
+${product.is_presale ? '<p class="seo-sale-notice"><strong>Pré-venda — garanta a sua!</strong> Esta bolsa ainda vai chegar: entrega em ' + PRESALE_MIN_BUSINESS_DAYS + ' dias úteis.</p>' : ""}
 <p>${stockTotal > 0 ? (product.is_presale ? "Disponível na pré-venda." : "Disponível para compra.") : "Produto esgotado."}</p>
 <p><a href="/">Voltar para a MONTÊ</a></p>
 </main>

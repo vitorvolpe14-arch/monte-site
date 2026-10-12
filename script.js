@@ -299,6 +299,7 @@ function renderProducts() {
 
     // A aba e o link do menu só aparecem quando há produtos em pré-venda.
     document.getElementById("prevenda")?.toggleAttribute("hidden", !presale.length);
+    document.querySelector(".presale-ticker")?.toggleAttribute("hidden", !presale.length);
     document.querySelectorAll(".presale-nav-link").forEach(link => link.toggleAttribute("hidden", !presale.length));
     renderCategorySectionProducts("prevenda", presale);
 
@@ -837,7 +838,7 @@ function openProductModal(productId) {
     const saleNotice = document.getElementById("modalSaleNotice");
     if (saleNotice) saleNotice.hidden = !selectedProduct.sale;
 
-    // Pré-venda: destaque "Garanta a sua!" e o prazo de pelo menos 10 dias úteis.
+    // Pré-venda: destaque "Garanta a sua!" e a entrega em 10 dias úteis.
     const presaleNotice = document.getElementById("modalPresaleNotice");
     if (presaleNotice) presaleNotice.hidden = !selectedProduct.presale;
     const buyNowLabel = document.getElementById("buyNowButton");
@@ -1288,7 +1289,7 @@ function updateCart() {
                 </div>
 
                 ${item.variant_color ? `<div class="cart-item-variant">${escapeHTML(colorLabel(item.variant_color, item.name))}</div>` : ""}
-                ${item.presale ? '<div class="cart-item-presale">Pré-venda · entrega em pelo menos 10 dias úteis</div>' : ""}
+                ${item.presale ? '<div class="cart-item-presale">Pré-venda · entrega em 10 dias úteis</div>' : ""}
 
                 <div class="cart-item-row">
 
@@ -1487,7 +1488,7 @@ function normalizeCity(city) {
 }
 
 
-// Pré-venda: bolsas que ainda vão chegar; o prazo de entrega é de pelo menos 10 dias úteis.
+// Pré-venda: bolsas que ainda vão chegar; a entrega é em 10 dias úteis.
 const PRESALE_MIN_BUSINESS_DAYS = 10;
 function cartHasPresale() {
     return cart.some(item => item.presale);
@@ -1596,8 +1597,9 @@ function renderShippingOptions() {
         const min = Number(option.delivery_min_days || 0);
         const max = Number(option.delivery_max_days || 0);
         const carrierDays = min && max && min !== max ? `${min} a ${max} dias úteis` : (max || option.delivery_days) ? `${max || option.delivery_days} dias úteis` : "Prazo informado";
-        // Bolsa em pré-venda: ela ainda vai chegar, então o prazo é de pelo menos 10 dias úteis.
-        const days = cartHasPresale() ? `Pré-venda: a partir de ${Math.max(PRESALE_MIN_BUSINESS_DAYS, max || Number(option.delivery_days) || 0)} dias úteis` : carrierDays;
+        // Bolsa em pré-venda: ela ainda vai chegar, então a entrega é em 10 dias úteis
+        // (ou no prazo da transportadora, se for maior).
+        const days = cartHasPresale() ? `Pré-venda: entrega em ${Math.max(PRESALE_MIN_BUSINESS_DAYS, max || Number(option.delivery_days) || 0)} dias úteis` : carrierDays;
         setHTML(label, `<input type="radio" name="shippingMethod" value="${escapeHTML(String(option.id))}" ${selectedShippingOption?.id === option.id ? "checked" : ""}><span class="shipping-option-info"><strong>${escapeHTML(option.name)}</strong><small>${escapeHTML(days)}</small></span><strong class="shipping-option-price">${formatPrice(option.price)}</strong>`);
         label.addEventListener("click", () => {
             selectedShippingOption = option;
