@@ -26,7 +26,8 @@ function statusLabel(s) {
         paid: "Pagamento confirmado",
         processing: "Pedido em preparação",
         shipped: "Pedido enviado",
-        delivered: "Pedido entregue"
+        delivered: "Pedido entregue",
+        cancelled: "Pedido cancelado"
     })[s] || s || "Em atualização";
 }
 
@@ -103,7 +104,15 @@ form.addEventListener("submit", async (event) => {
                 </div>
             </div>
 
-            ${tracking}
+            ${o.status === "cancelled" ? `<div class="purchase-panel purchase-tracking">
+                    <p class="section-label">PEDIDO CANCELADO</p>
+                    <h2>${o.refund_status === "done" ? "Estorno realizado" : o.refund_status === "pending" ? "Estorno em andamento" : "Pedido cancelado"}</h2>
+                    <p>${o.refund_status === "done" ? "O valor pago já foi devolvido." : o.refund_status === "pending" ? "O valor pago será devolvido integralmente. Avisamos por e-mail quando o estorno for feito." : "Nada foi cobrado por este pedido."}</p>
+                </div>` : o.approval_status === "pending" && o.status === "paid" ? `<div class="purchase-panel purchase-tracking">
+                    <p class="section-label">PRÉ-VENDA</p>
+                    <h2>Aguardando confirmação da MONTÊ</h2>
+                    <p>Seu pedido de pré-venda está pago e será confirmado em breve. Entrega em 10 dias úteis.</p>
+                </div>` : tracking}
         `);
         result.hidden = false;
         result.scrollIntoView({ behavior: "smooth", block: "start" });

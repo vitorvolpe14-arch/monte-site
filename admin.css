@@ -2364,3 +2364,11 @@ input:focus,select:focus,textarea:focus{
 /* Pré-venda */
 .chip.chip-presale{background:#571b29;color:#fff}
 .presale-help{margin:-6px 0 14px;line-height:1.5}
+/* Pré-venda: aceitar ou recusar e estorno */
+.decision-card{border-color:#571b29;background:#fbf7f3}
+.decision-card.is-cancelled{border-color:#b9b9b9;background:#fafafa}
+.decision-card code{font:500 12px ui-monospace,SFMono-Regular,Menlo,monospace;background:#f2f2f2;padding:2px 5px;border-radius:5px}
+.decision-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.danger-button{color:#8a1f2c!important;border-color:#8a1f2c!important}
+.order-alert{margin:0 0 12px;padding:12px 14px;background:#fbf7f3;border-left:3px solid #571b29;font-size:13px;color:#3d3a36}
+.badge.cancelled{background:#fff;color:#8a1f2c;box-shadow:inset 0 0 0 1px #8a1f2c}
