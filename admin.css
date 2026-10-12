@@ -2361,3 +2361,6 @@ input:focus,select:focus,textarea:focus{
   .olist-table td,.olist-table .olist-product-row td{max-width:100%;border:0}
   .olist-table td small,.olist-table .olist-product-row td small{max-width:none}
 }
+/* Pré-venda */
+.chip.chip-presale{background:#571b29;color:#fff}
+.presale-help{margin:-6px 0 14px;line-height:1.5}
