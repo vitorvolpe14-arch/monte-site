@@ -1115,7 +1115,7 @@ async function sendOrderConfirmationEmail(order) {
       "<h1 style=\"margin:0 0 18px;font-size:28px;font-weight:500;\">Obrigada pela sua compra, " + escapeEmailHtml(customerName) + ".</h1>" +
       "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Seu pagamento foi confirmado e seu pedido já está registrado na MONTÊ.</p>" +
       "<div style=\"margin:28px 0;padding:20px;background:#f7f5f2;\"><p style=\"margin:0 0 8px;font-size:11px;letter-spacing:1.5px;color:#777;\">NÚMERO DO PEDIDO</p><strong style=\"font-size:20px;\">" + escapeEmailHtml(orderCode) + "</strong><p style=\"margin:14px 0 0;font-size:14px;color:#555;\">Total: <strong>R$ " + total.toFixed(2).replace(".", ",") + "</strong></p></div>" +
-      (orderHasPresale(order) ? "<p style=\"font-size:15px;line-height:1.7;color:#555;\"><strong>Pré-venda:</strong> seu pedido tem peça que ainda vai chegar. A entrega é em " + PRESALE_MIN_BUSINESS_DAYS + " dias úteis. A MONTÊ confirma o seu pedido em breve; se não for possível atender, o valor pago é devolvido integralmente.</p>" : "") +
+      (orderHasPresale(order) ? "<p style=\"font-size:15px;line-height:1.7;color:#555;\"><strong>Pré-venda:</strong> seu pedido tem peça em produção, com estoque limitado. A entrega é em " + PRESALE_MIN_BUSINESS_DAYS + " dias úteis. A MONTÊ confirma o seu pedido em breve; se não for possível atender, o valor pago é devolvido integralmente.</p>" : "") +
       "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Acompanhe o status do seu pedido e novas atualizações pela área <strong>Minhas Compras</strong>.</p>" +
       "<div style=\"text-align:center;margin:30px 0;\"><a href=\"" + purchasesUrl + "\" style=\"display:inline-block;background:#111;color:#fff;text-decoration:none;padding:15px 26px;font-size:13px;letter-spacing:1.5px;\">ACESSAR MINHAS COMPRAS</a></div></div>" +
       "<p style=\"text-align:center;font-size:11px;color:#999;margin:20px 0;\">MONTÊ — Bolsas e acessórios</p></div></body></html>";
@@ -6148,7 +6148,7 @@ ${image ? `<img src="${xmlEscape(image)}" alt="${xmlEscape(product.name)}">` : "
 <p>${xmlEscape(description).replace(/\n/g, "<br>")}</p>
 <p><strong>Preço: R$ ${price.toFixed(2).replace(".", ",")}</strong></p>
 ${product.is_sale ? '<p class="seo-sale-notice"><strong>Sale:</strong> produtos da Sale não acompanham dustbag.</p>' : ""}
-${product.is_presale ? '<p class="seo-sale-notice"><strong>Pré-venda — garanta a sua!</strong> Esta bolsa ainda vai chegar: entrega em ' + PRESALE_MIN_BUSINESS_DAYS + ' dias úteis.</p>' : ""}
+${product.is_presale ? '<p class="seo-sale-notice"><strong>Pré-venda — garanta a sua!</strong> Peças em produção com estoque limitado. Garanta a sua antecipadamente. Entrega em ' + PRESALE_MIN_BUSINESS_DAYS + ' dias úteis.</p>' : ""}
 <p>${product.is_presale ? "Disponível na pré-venda." : stockTotal > 0 ? "Disponível para compra." : "Produto esgotado."}</p>
 <p><a href="/">Voltar para a MONTÊ</a></p>
 </main>
