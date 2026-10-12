@@ -3012,32 +3012,30 @@ async function setSiteStock(variant, target, reason, budget) {
     return null;
 }
 
-// Preço e promoção da Olist no produto do site. Promoção da Olist vira SALE (e sai quando
-// acaba lá); a SALE feita no painel continua, com o preço que a Olist cobrar.
+// Preço e promoção da Olist no produto do site. A SALE feita no site continua com os preços
+// dela (nada muda nesses produtos). Promoção na Olist vira SALE no site e sai quando acaba lá.
 async function applyOlistPrices(product, olist, ctx) {
     const id = String(product.id);
     const sales = ctx.state.sales;
     const sitePrice = Number(product.price);
     const siteSale = product.is_sale && product.sale_price !== null && product.sale_price !== undefined ? Number(product.sale_price) : null;
+    // A SALE é do site quando não veio da Olist (ou foi mudada no painel depois de vir).
+    if (siteSale !== null && !(sales[id] !== undefined && sameMoney(siteSale, sales[id]))) {
+        delete sales[id];
+        return { kept: true };
+    }
     const patch = {};
     if (olist.promo) {
         if (!sameMoney(sitePrice, olist.price)) patch.price = olist.price;
         if (!sameMoney(siteSale, olist.promo)) { patch.sale_price = olist.promo; patch.is_sale = true; }
         sales[id] = olist.promo;
-    } else if (sales[id] !== undefined && sameMoney(siteSale, sales[id])) {
-        // A promoção tinha vindo da Olist e acabou lá.
-        patch.is_sale = false;
-        patch.sale_price = null;
-        if (!sameMoney(sitePrice, olist.price)) patch.price = olist.price;
-        delete sales[id];
-    } else if (siteSale !== null && olist.price < sitePrice - 0.004) {
-        // SALE do painel e, na Olist, o preço de venda já é o da SALE (ex.: "de" R$ 489 no site,
-        // R$ 299 na Olist): o preço da SALE segue a Olist e o "de" do site continua.
-        delete sales[id];
-        if (!sameMoney(siteSale, olist.price)) patch.sale_price = olist.price;
     } else {
-        // Sem SALE, ou SALE do painel com a Olist no preço cheio: o preço segue a Olist e a SALE continua.
-        delete sales[id];
+        if (sales[id] !== undefined) {
+            // A promoção tinha vindo da Olist e acabou lá.
+            patch.is_sale = false;
+            patch.sale_price = null;
+            delete sales[id];
+        }
         if (!sameMoney(sitePrice, olist.price)) patch.price = olist.price;
     }
     if (!Object.keys(patch).length) return {};
@@ -3139,7 +3137,7 @@ async function syncProductWithOlist(product, ctx) {
         report.st = "desligado";
     } else {
         const result = await applyOlistPrices(product, known[0], ctx);
-        if (result.note) Object.assign(report, { st: "aviso", note: result.note });
+        if (result.kept) report.st = "sale_site";
         if (result.changed) {
             report.st = "atualizado";
             ctx.changes.push({ product: name, color: "", sku: "", what: "preco", ...result.changed });
