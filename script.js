@@ -1465,6 +1465,24 @@ function getCartSubtotal() {
     return cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
 }
 
+// Frete grátis só na entrega MONTÊ (Fortaleza e região metropolitana), em compras a partir
+// de R$ 599 (soma das peças pelo preço de tabela, antes do desconto do Pix). As outras
+// cidades continuam pagando. O servidor aplica a mesma regra (shippingChargeFor) e é ele
+// que define o valor cobrado.
+const FREE_SHIPPING_MIN = 599;
+const FREE_SHIPPING_OPTION_IDS = ["monte-fortaleza", "monte-regiao-metropolitana"];
+
+function shippingPriceFor(option, subtotal = getCartSubtotal()) {
+    if (!option) return 0;
+    const price = Number(option.price || 0);
+    return FREE_SHIPPING_OPTION_IDS.includes(option.id) && subtotal >= FREE_SHIPPING_MIN ? 0 : price;
+}
+
+function shippingPriceLabel(option) {
+    const charge = shippingPriceFor(option);
+    return charge === 0 && Number(option?.price || 0) > 0 ? "Grátis" : formatPrice(charge);
+}
+
 function updatePaymentSummary(subtotal = getCartSubtotal()) {
     const shipping = getShippingValue();
     const paymentMethod =
@@ -1497,6 +1515,21 @@ function updatePaymentSummary(subtotal = getCartSubtotal()) {
         discountElement.style.display = pixDiscount > 0 ? "block" : "none";
     }
 
+    // O frete pode virar grátis (ou deixar de ser) quando a sacola muda.
+    const shippingValueElement = document.getElementById("shippingValue");
+    if (shippingValueElement && selectedShippingOption) {
+        const label = shippingPriceLabel(selectedShippingOption);
+        if (shippingValueElement.textContent !== label) shippingValueElement.textContent = label;
+    }
+    document.querySelectorAll("#shippingOptions .shipping-option").forEach(el => {
+        const option = shippingOptions.find(o => String(o.id) === el.dataset.optionId);
+        const priceEl = el.querySelector(".shipping-option-price");
+        if (!option || !priceEl) return;
+        const free = shippingPriceFor(option) === 0 && Number(option.price || 0) > 0;
+        el.classList.toggle("is-free", free);
+        setHTML(priceEl, free ? `<s>${formatPrice(option.price)}</s> Grátis` : formatPrice(option.price));
+    });
+
     document.querySelectorAll(".payment-option").forEach(option => {
         const input = option.querySelector('input[name="paymentMethod"]');
         option.classList.toggle("selected", !!input?.checked);
@@ -1517,7 +1550,7 @@ function setupPaymentMethodSelector() {
 }
 
 function getShippingValue() {
-    return Number(selectedShippingOption?.price || 0);
+    return shippingPriceFor(selectedShippingOption);
 }
 
 function renderShippingOptions() {
@@ -1527,6 +1560,7 @@ function renderShippingOptions() {
     shippingOptions.forEach(option => {
         const label = document.createElement("label");
         label.className = "shipping-option" + (selectedShippingOption?.id === option.id ? " selected" : "");
+        label.dataset.optionId = String(option.id);
         const min = Number(option.delivery_min_days || 0);
         const max = Number(option.delivery_max_days || 0);
         const days = min && max && min !== max ? `${min} a ${max} dias úteis` : (max || option.delivery_days) ? `${max || option.delivery_days} dias úteis` : "Prazo informado";
@@ -1558,7 +1592,7 @@ async function updateShipping() {
     if (localCity) {
         const local = city === "FORTALEZA" ? {id:"monte-fortaleza",name:"Entrega MONTÊ — Fortaleza",price:15,delivery_days:1} : {id:"monte-regiao-metropolitana",name:"Entrega MONTÊ — Região Metropolitana",price:20,delivery_days:3};
         shippingOptions = [local]; selectedShippingOption = local;
-        shippingValueElement.textContent = formatPrice(local.price);
+        shippingValueElement.textContent = shippingPriceLabel(local);
         renderShippingOptions(); updatePaymentSummary(); return;
     }
     shippingValueElement.textContent = "Calculando...";
@@ -1569,7 +1603,7 @@ async function updateShipping() {
         if (requestId !== shippingRequestId) return;
         if (!response.ok || !data.success || !Array.isArray(data.options) || !data.options.length) throw new Error(data.message || "Nenhuma opção de frete disponível.");
         shippingOptions = data.options; selectedShippingOption = shippingOptions[0];
-        shippingValueElement.textContent = formatPrice(selectedShippingOption.price);
+        shippingValueElement.textContent = shippingPriceLabel(selectedShippingOption);
         renderShippingOptions(); updatePaymentSummary();
     } catch(error) {
         if (requestId !== shippingRequestId) return;
@@ -2531,7 +2565,7 @@ function renderCheckoutNote(summary) {
             : '<div class="order-note-item"><span class="is-empty">Nenhuma peça na sacola</span></div>');
     }
 
-    setNoteText("noteShipping", selectedShippingOption ? `${selectedShippingOption.name} · ${formatPrice(totals.shipping)}` : "");
+    setNoteText("noteShipping", selectedShippingOption ? `${selectedShippingOption.name} · ${shippingPriceLabel(selectedShippingOption)}` : "");
     const discountRow = document.getElementById("noteDiscountRow");
     if (discountRow) discountRow.hidden = !(totals.pixDiscount > 0);
     setNoteText("noteDiscount", totals.pixDiscount > 0 ? "-" + formatPrice(totals.pixDiscount) : "");
@@ -2695,11 +2729,29 @@ function renderCheckoutExtras({ subtotal, shipping, pixDiscount, paymentMethod }
         if (perkButton) perkButton.hidden = paymentMethod === "pix";
     }
 
+    // Frete grátis em Fortaleza e região a partir de R$ 599: quanto falta, ou o aviso de que
+    // ganhou. Some quando o endereço é de outra cidade (lá o frete continua sendo cobrado).
+    const freePerk = document.getElementById("freeShippingPerk");
+    const freePerkText = document.getElementById("freeShippingPerkText");
+    const freePerkFill = document.getElementById("freeShippingPerkFill");
+    if (freePerk && freePerkText) {
+        const missing = Math.max(0, FREE_SHIPPING_MIN - subtotal);
+        const otherCity = !!selectedShippingOption && !FREE_SHIPPING_OPTION_IDS.includes(selectedShippingOption.id);
+        freePerk.hidden = !cart.length || otherCity;
+        freePerk.classList.toggle("is-active", missing === 0);
+        setHTML(freePerkText, missing === 0
+            ? (selectedShippingOption ? "Você ganhou <strong>frete grátis</strong>!" : "Frete grátis para <strong>Fortaleza e região</strong> nesta compra")
+            : `Faltam <strong>${formatPrice(missing)}</strong> para frete grátis em Fortaleza e região`);
+        if (freePerkFill) freePerkFill.style.width = Math.min(100, subtotal / FREE_SHIPPING_MIN * 100).toFixed(1) + "%";
+    }
+
     const hint = document.getElementById("checkoutBarHint");
     if (hint) {
         const parts = [];
         if (pixDiscount > 0) parts.push(`${formatPrice(pixDiscount)} de desconto no Pix`);
-        parts.push(selectedShippingOption ? `frete ${formatPrice(shipping)}` : "frete a calcular");
+        parts.push(selectedShippingOption
+            ? (shipping === 0 && Number(selectedShippingOption.price || 0) > 0 ? "frete grátis" : `frete ${formatPrice(shipping)}`)
+            : "frete a calcular");
         hint.textContent = parts.join(" · ");
     }
 

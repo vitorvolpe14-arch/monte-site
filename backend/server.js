@@ -1317,6 +1317,16 @@ async function supabaseRequest(path, options = {}) {
 
 const METROPOLITAN_CITIES = new Set(["AQUIRAZ","CAUCAIA","EUSEBIO","GUAIUBA","ITAITINGA","MARACANAU"]);
 
+// Frete grátis só na entrega MONTÊ (Fortaleza e região metropolitana), em compras a partir
+// de R$ 599 (soma das peças pelo preço de tabela, antes do desconto do Pix). As outras
+// cidades continuam pagando o frete. O script.js usa a mesma regra na sacola.
+const FREE_SHIPPING_MIN = Number(process.env.FREE_SHIPPING_MIN || 599);
+const FREE_SHIPPING_OPTION_IDS = new Set(["monte-fortaleza", "monte-regiao-metropolitana"]);
+function shippingChargeFor(option, productsSubtotal) {
+    const price = Number(option?.price || 0);
+    return FREE_SHIPPING_OPTION_IDS.has(option?.id) && productsSubtotal >= FREE_SHIPPING_MIN ? 0 : price;
+}
+
 function localShippingOption(city, state) {
     const normalized = normalizeCity(city);
     const normalizedState = safeString(state).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
@@ -3988,7 +3998,9 @@ app.post(
                 }
             }
 
-            const shippingValue = Number(shippingOption.price.toFixed(2));
+            // Frete grátis em Fortaleza e região a partir de R$ 599 nas peças (preço de tabela).
+            const productsSubtotal = productItems.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0);
+            const shippingValue = Number(shippingChargeFor(shippingOption, productsSubtotal).toFixed(2));
 
 
             /* =================================================
@@ -5642,7 +5654,7 @@ async function remindPendingOrders(budget) {
                     title: "Sua seleção ainda está aqui" + (firstName ? ", " + firstName : "") + ".",
                     paragraphs: [
                         "O pagamento do pedido " + code + " não foi concluído" + (pix ? " (o Pix gerado não foi pago)" : "") + ". Se ainda quiser as peças, é só voltar: a sacola já está pronta para você.",
-                        "As peças não ficam reservadas e o estoque é limitado. No Pix, você ganha 5% de desconto."
+                        "As peças não ficam reservadas e o estoque é limitado. No Pix, você ganha 5% de desconto, e em Fortaleza e região metropolitana o frete é grátis em compras a partir de R$ 599."
                     ],
                     items,
                     buttonUrl: url,
@@ -5704,7 +5716,7 @@ async function remindAbandonedCarts(budget) {
                     title: "Esqueceu alguma coisa" + (firstName ? ", " + firstName : "") + "?",
                     paragraphs: [
                         "Guardamos as peças que você escolheu. Elas ainda estão disponíveis, mas o estoque é limitado.",
-                        "No Pix, você ganha 5% de desconto."
+                        "No Pix, você ganha 5% de desconto, e em Fortaleza e região metropolitana o frete é grátis em compras a partir de R$ 599."
                     ],
                     items,
                     buttonUrl: url,

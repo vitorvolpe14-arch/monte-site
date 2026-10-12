@@ -7423,6 +7423,68 @@ html.intro-skipped .header { animation-delay: .5s; }
 
 .pix-perk-button:hover { background: var(--wine); color: #fff; }
 
+/* Frete grátis em Fortaleza e região a partir de R$ 599: quanto falta, com barra de progresso. */
+.free-shipping-perk {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 6px;
+    padding: 12px 14px;
+    border: 1px solid var(--co-line, #ece8e2);
+    border-radius: 14px;
+    background: #fcfaf8;
+}
+
+.free-shipping-perk[hidden] { display: none; }
+
+.free-shipping-perk-icon {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--co-ink, #0d0d0d);
+}
+
+.free-shipping-perk-icon svg {
+    width: 17px;
+    height: 17px;
+    fill: none;
+    stroke: #fff;
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+}
+
+.free-shipping-perk-body { flex: 1; min-width: 0; }
+.free-shipping-perk p { margin: 0 0 7px; font-size: 12.5px; line-height: 1.45; }
+.free-shipping-perk strong { color: var(--co-ink, #0d0d0d); font-weight: 600; }
+
+.free-shipping-perk-bar {
+    display: block;
+    height: 4px;
+    border-radius: 999px;
+    background: #ece8e2;
+    overflow: hidden;
+}
+
+.free-shipping-perk-bar i {
+    display: block;
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--wine);
+    transition: width .5s ease;
+}
+
+.free-shipping-perk.is-active { border-color: #d9e8dc; background: #f3f8f4; }
+.free-shipping-perk.is-active .free-shipping-perk-icon { background: #2f6b45; }
+.free-shipping-perk.is-active .free-shipping-perk-bar i { background: #2f6b45; }
+
+/* Opção de frete grátis: preço original riscado. */
+.shipping-option-price s { margin-right: 4px; color: var(--co-muted, #8a847e); font-weight: 400; }
+.shipping-option.is-free .shipping-option-price { color: #2f6b45; }
+
 /* Etapas do formulário */
 #cartOverlay .checkout-form { margin: 0; padding: 0 0 8px; border-top: 0; }
 
@@ -8060,4 +8122,47 @@ html.catalog-pending .footer {
 
 @keyframes catalogFallback {
     to { visibility: visible; }
+}
+
+/* Barra superior com duas mensagens: lado a lado no computador; no celular, onde não
+   cabem juntas, elas se alternam. */
+@media (max-width: 760px) {
+    .shipping-bar {
+        position: relative;
+    }
+    .shipping-bar-sep {
+        display: none;
+    }
+    .shipping-bar-msg {
+        position: absolute;
+        left: 10px;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        animation: shippingBarSwap 8s infinite;
+    }
+    .shipping-bar-msg:last-child {
+        animation-delay: -4s;
+    }
+}
+@media (max-width: 360px) {
+    .shipping-bar-msg {
+        left: 6px;
+        right: 6px;
+        font-size: 10px;
+        letter-spacing: .2px;
+    }
+}
+@keyframes shippingBarSwap {
+    0%, 44% { opacity: 1; }
+    50%, 94% { opacity: 0; }
+    100% { opacity: 1; }
+}
+@media (max-width: 760px) and (prefers-reduced-motion: reduce) {
+    .shipping-bar-msg { animation: none; }
+    .shipping-bar-msg:last-child { display: none; }
 }
