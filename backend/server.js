@@ -73,6 +73,14 @@ async function sendSitePage(res, file) {
 }
 
 const app = express();
+
+// Cabeçalhos de segurança, origem (CORS) e leitura do corpo valem para TODAS as rotas, inclusive
+// as registradas logo abaixo (Olist e pagamento): por isso entram aqui, antes de qualquer rota.
+// As funções ficam definidas mais abaixo, na seção MIDDLEWARES.
+app.use((req, res, next) => securityHeaders(req, res, next));
+app.use((req, res, next) => corsGate(req, res, next));
+app.use("/api/admin/uploads", (req, res, next) => requireAdmin(req, res, next), (req, res, next) => uploadJsonParser(req, res, next));
+app.use((req, res, next) => jsonParser(req, res, next));
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
 
@@ -641,16 +649,25 @@ app.get("/api/olist/config-check", requireAdmin, (req, res) => {
     });
 });
 
-app.get("/api/olist/auth", (req, res) => {
+// Conexão com a Olist (OAuth). O "state" leva o hash de um código aleatório guardado num
+// cookie só deste navegador; na volta, a sessão do painel, o cookie e o state precisam bater,
+// e o código vale uma vez só. Assim um link de volta vazado não serve para ligar outra conta.
+const OLIST_OAUTH_COOKIE = "monte_olist_oauth";
+const sha256Hex = value => crypto.createHash("sha256").update(String(value)).digest("hex");
+const htmlText = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char]);
+
+app.get("/api/olist/auth", async (req, res) => {
     // Só quem está logado no painel pode trocar a conta Olist que recebe os pedidos.
-    if (!getAdminSession(req)) {
+    if (safeString(req.headers["sec-fetch-site"]).toLowerCase() === "cross-site" || !(await currentAdminSession(req).catch(() => null))) {
         return res.status(401).send("<p>Entre no painel da MONTÊ (<a href=\"/admin\">/admin</a>) e use o botão <strong>Reconectar Olist</strong> na aba Estoque.</p>");
     }
     if (!OLIST_CLIENT_ID || !OLIST_CLIENT_SECRET) {
         return res.status(503).send("Olist OAuth não está configurado no servidor.");
     }
     // Estado assinado (vale 10 minutos): funciona mesmo se a volta da Olist cair em outra instância.
-    const state = createSignedToken({purpose:"olist-oauth"}, 10 * 60 * 1000);
+    const nonce = crypto.randomBytes(24).toString("base64url");
+    res.setHeader("Set-Cookie", OLIST_OAUTH_COOKIE + "=" + nonce + "; Path=/api/olist/callback; HttpOnly; Secure; SameSite=Lax; Max-Age=600");
+    const state = createSignedToken({purpose:"olist-oauth", nh: sha256Hex(nonce)}, 10 * 60 * 1000);
     const params = new URLSearchParams({
         client_id: OLIST_CLIENT_ID,
         redirect_uri: OLIST_REDIRECT_URI,
@@ -667,9 +684,19 @@ app.get("/api/olist/callback", async (req, res) => {
     const oauthError = safeString(req.query.error);
     const statePayload = verifySignedToken(state);
     const expiresAt = statePayload?.purpose === "olist-oauth" ? statePayload.exp : 0;
+    const nonce = parseCookies(req)[OLIST_OAUTH_COOKIE] || "";
+    // O código do cookie vale uma vez só: sai já na primeira volta.
+    res.setHeader("Set-Cookie", OLIST_OAUTH_COOKIE + "=; Path=/api/olist/callback; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
+    res.type("html");
 
     if (oauthError) return res.status(400).send("Autorização Olist não concluída.");
     if (!state || !expiresAt || expiresAt < Date.now()) return res.status(400).send("Solicitação de autorização expirada.");
+    if (!nonce || !statePayload.nh || statePayload.nh !== sha256Hex(nonce)) {
+        return res.status(400).send("Autorização não iniciada neste navegador. Volte ao painel e clique em RECONECTAR OLIST de novo.");
+    }
+    if (!(await currentAdminSession(req).catch(() => null))) {
+        return res.status(401).send("Entre no painel da MONTÊ e clique em RECONECTAR OLIST de novo.");
+    }
     if (!code) return res.status(400).send("Código de autorização ausente.");
 
     try {
@@ -704,14 +731,14 @@ app.get("/api/olist/callback", async (req, res) => {
                     "A Olist rejeitou as credenciais do aplicativo (HTTP 401). " +
                     "O Client Secret configurado no Render precisa ser o último Client Secret gerado no aplicativo MONTÊ E-commerce. " +
                     "Após gerar novas chaves na Olist, a chave antiga é invalidada. " +
-                    (oauthDescription ? "Detalhe: " + oauthDescription : "")
+                    (oauthDescription ? "Detalhe: " + htmlText(oauthDescription) : "")
                 );
             }
 
             return res.status(502).send(
                 "Falha OAuth da Olist (HTTP " + response.status + "). " +
-                (oauthCode ? oauthCode + ". " : "") +
-                (oauthDescription || "A Olist não retornou um token OAuth válido.")
+                (oauthCode ? htmlText(oauthCode) + ". " : "") +
+                htmlText(oauthDescription || "A Olist não retornou um token OAuth válido.")
             );
         }
         olistAccessToken = data.access_token;
@@ -738,7 +765,7 @@ app.get("/api/olist/health", requireAdmin, async (req,res) => {
         return res.json({success:true,configured:true,reachable:true,payment_forms:Array.isArray(data?.itens)?data.itens.length:null});
     } catch (error) {
         console.error("Olist health:", error);
-        return res.status(502).json({success:false,configured:true,reachable:false,message:String(error.message || "Olist indisponível")});
+        return res.status(502).json({success:false,configured:true,reachable:false,message:/OLIST_AUTH/.test(String(error.message))?"A conexão com a Olist expirou. Clique em RECONECTAR OLIST.":"Olist indisponível no momento."});
     }
 });
 
@@ -829,8 +856,7 @@ app.post("/api/admin/olist/sync-paid-order", requireAdmin, async (req, res) => {
                 charged_again:false,
                 order_nsu:order.order_nsu,
                 olist_status:error?.status || null,
-                message,
-                details
+                message: adminErrorMessage(error, "A Olist recusou o pedido. Veja o detalhe no pedido, em Olist.")
             });
         }
     } catch (error) {
@@ -1428,28 +1454,6 @@ async function calculateSuperfreteQuotes({toCep,items}) {
 }
 
 /* =====================================================
-   REDIRECIONAMENTO INFINITEPAY
-   Desktop: navegação direta pelo frontend.
-   Mobile: endpoint same-origin com HTTP 302, evitando bloqueios
-   de Safari/iOS e navegadores embutidos.
-===================================================== */
-app.get("/pagamento-infinitepay", (req, res) => {
-    try {
-        const target = String(req.query?.url || "").trim();
-        const parsed = new URL(target);
-
-        if (parsed.protocol !== "https:" || !("checkout.infinitepay.io" === parsed.hostname || "checkout.infinitepay.com.br" === parsed.hostname || "buy.infinitepay.com" === parsed.hostname)) {
-            return res.status(400).send("Link de pagamento inválido.");
-        }
-
-        res.setHeader("Cache-Control", "no-store");
-        return res.redirect(302, parsed.href);
-    } catch {
-        return res.status(400).send("Link de pagamento inválido.");
-    }
-});
-
-/* =====================================================
    MIDDLEWARES
 ===================================================== */
 
@@ -1458,8 +1462,6 @@ const allowedOrigins = new Set([
     PUBLIC_SITE_URL,
     "https://oficialmontee.com.br",
     "https://www.oficialmontee.com.br",
-    "https://monte-site-itjk.onrender.com",
-    "https://monte-site.vitorvolpe14.workers.dev",
     ...safeString(process.env.ALLOWED_ORIGINS).split(",").map(origin => origin.trim().replace(/\/$/, "")).filter(Boolean)
 ]);
 
@@ -1473,7 +1475,7 @@ const CONTENT_SECURITY_POLICY = [
     "frame-ancestors 'self'",
     "frame-src 'none'",
     "form-action 'self'",
-    "script-src 'self' https://*.googletagmanager.com",
+    "script-src 'self' https://www.googletagmanager.com",
     "script-src-attr 'none'",
     "style-src 'self'",
     "font-src 'self'",
@@ -1485,7 +1487,14 @@ const CONTENT_SECURITY_POLICY = [
     "upgrade-insecure-requests"
 ].join("; ");
 
-app.use((req, res, next) => {
+// Painel: mesma política, sem Google (o painel não usa) e sem poder ser aberto dentro de outra página.
+const ADMIN_CONTENT_SECURITY_POLICY = CONTENT_SECURITY_POLICY
+    .replace(/ https:\/\/(\*|www)\.googletagmanager\.com/g, "")
+    .replace(/ https:\/\/\*\.google-analytics\.com/g, "")
+    .replace(/ https:\/\/\*\.analytics\.google\.com/g, "")
+    .replace("frame-ancestors 'self'", "frame-ancestors 'none'");
+
+function securityHeaders(req, res, next) {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "SAMEORIGIN");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -1495,31 +1504,33 @@ app.use((req, res, next) => {
     if (IS_WORKERS || req.secure || req.headers["x-forwarded-proto"] === "https") {
         res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     }
-    if (req.path.startsWith("/api/admin/")) {
+    if (req.path.startsWith("/api/admin/") || req.path.startsWith("/api/olist/")) {
         res.setHeader("Cache-Control", "no-store");
     }
     next();
+}
+
+const corsMiddleware = cors({
+    origin: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: false
 });
 
-app.use(
-    cors({
-        origin: (origin, callback) => {
-            if (!origin || allowedOrigins.has(origin.replace(/\/$/, ""))) {
-                return callback(null, true);
-            }
-            return callback(new Error("Origem não autorizada."));
-        },
-        methods: ["GET", "POST", "PUT", "PATCH", "OPTIONS"],
-        allowedHeaders: ["Content-Type", "Authorization"],
-        credentials: false
-    })
-);
+// Requisição de outro site (com Origin de fora da lista): recusada com 403, sem executar a rota.
+function corsGate(req, res, next) {
+    const origin = safeString(req.headers.origin);
+    if (origin && !allowedOrigins.has(origin.replace(/\/$/, ""))) {
+        return res.status(403).json({ success: false, message: "Origem não autorizada." });
+    }
+    return corsMiddleware(req, res, next);
+}
 
 // Fotos chegam em base64 só nas rotas de upload do painel (até 20 MB por foto). O resto da
 // API aceita no máximo 1 MB por requisição: menos espaço para abuso e menos CPU no Cloudflare.
 // Corpo grande (fotos) só é lido depois de conferir a sessão do painel.
-app.use("/api/admin/uploads", requireAdmin, express.json({ limit: "30mb" }));
-app.use(express.json({ limit: "1mb" }));
+const uploadJsonParser = express.json({ limit: "30mb" });
+const jsonParser = express.json({ limit: "1mb" });
 
 /* =====================================================
    RATE LIMITING — proteção contra abuso de endpoints
@@ -1628,16 +1639,56 @@ function createOrderConfirmationToken(orderNsu){return createSignedToken({purpos
 function verifyOrderConfirmationToken(token,orderNsu){const data=verifySignedToken(token);return !!(data&&data.purpose==="order-confirmation"&&String(data.order_nsu)===String(orderNsu))}
 const adminLoginAttempts = new Map();
 function parseCookies(req){const h=req.headers.cookie||"";const o={};h.split(";").filter(Boolean).forEach(p=>{const i=p.indexOf("=");if(i<0)return;const v=p.slice(i+1).trim();try{o[p.slice(0,i).trim()]=decodeURIComponent(v)}catch{o[p.slice(0,i).trim()]=v}});return o}
-function getAdminSession(req){const t=parseCookies(req)["monte_admin_session"];if(!t||!ADMIN_EMAIL)return null;const s=verifySignedToken(t);if(!s||s.purpose!=="admin"||s.email!==ADMIN_EMAIL)return null;return {token:t,email:s.email,expiresAt:s.exp}}
-function requireAdmin(req,res,next){
+function getAdminSession(req){const t=parseCookies(req)["monte_admin_session"];if(!t||!ADMIN_EMAIL||!ADMIN_PASSWORD_HASH)return null;const s=verifySignedToken(t);if(!s||s.purpose!=="admin"||s.email!==ADMIN_EMAIL)return null;return {token:t,email:s.email,expiresAt:s.exp,epoch:Number(s.ep)||0}}
+
+// "Época" das sessões do painel: ao sair, ela muda e todas as sessões abertas (em qualquer
+// navegador) deixam de valer. Fica no Supabase, com 60 s de cache em cada instância.
+const ADMIN_EPOCH_KEY = "admin_session_epoch";
+let adminEpochCache = { value: null, at: 0 };
+async function adminSessionEpoch(force = false) {
+    if (!force && adminEpochCache.value !== null && Date.now() - adminEpochCache.at < 60 * 1000) return adminEpochCache.value;
+    const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + ADMIN_EPOCH_KEY + "&select=value&limit=1", { method: "GET" });
+    const value = Number(rows?.[0]?.value?.epoch) || 0;
+    adminEpochCache = { value, at: Date.now() };
+    return value;
+}
+async function bumpAdminSessionEpoch() {
+    const epoch = Date.now();
+    await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({ key: ADMIN_EPOCH_KEY, value: { epoch } })
+    });
+    adminEpochCache = { value: epoch, at: Date.now() };
+}
+// Sessão válida e da época atual (sessões antigas, de antes de sair, não valem).
+async function currentAdminSession(req) {
+    const session = getAdminSession(req);
+    if (!session) return null;
+    const epoch = await adminSessionEpoch();
+    return session.epoch === epoch ? session : null;
+}
+// Pedido vindo de outro site: o navegador avisa em Sec-Fetch-Site; e o painel sempre manda JSON.
+function crossSiteAdminRequest(req) {
     const origin = safeString(req.headers.origin);
-    if (origin && !allowedOrigins.has(origin.replace(/\/$/, ""))) {
-        return res.status(403).json({success:false,message:"Origem não autorizada."});
+    if (origin && !allowedOrigins.has(origin.replace(/\/$/, ""))) return true;
+    if (safeString(req.headers["sec-fetch-site"]).toLowerCase() === "cross-site") return true;
+    const changes = !["GET", "HEAD", "OPTIONS"].includes(req.method);
+    return changes && !/^application\/json\b/i.test(safeString(req.headers["content-type"]));
+}
+async function requireAdmin(req,res,next){
+    try{
+        if (crossSiteAdminRequest(req)) {
+            return res.status(403).json({success:false,message:"Origem não autorizada."});
+        }
+        const s=await currentAdminSession(req);
+        if(!s)return res.status(401).json({success:false,message:"Acesso administrativo não autorizado."});
+        req.adminSession=s;
+        next();
+    }catch(error){
+        console.error("Sessão do painel:", error.message);
+        return res.status(503).json({success:false,message:"Não foi possível conferir o acesso agora. Tente de novo."});
     }
-    const s=getAdminSession(req);
-    if(!s)return res.status(401).json({success:false,message:"Acesso administrativo não autorizado."});
-    req.adminSession=s;
-    next();
 }
 function normalizeCity(value) {
     return safeString(value)
@@ -1690,6 +1741,36 @@ async function failedLogin(req,email){
     adminLoginAttempts.set(k,r);
     await supabaseRequest("kv_store_48db9b7e?on_conflict=key",{method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({key:loginKvKey(req,email),value:r})}).catch(error=>console.warn("Login admin — tentativa não registrada:",error.message));
 }
+// Bloqueio da conta (de qualquer IP): ADMIN_ACCOUNT_MAX_FAILURES senhas erradas em 15 minutos
+// travam o login por 15 minutos e mandam um alerta para os e-mails de aviso de venda.
+const ADMIN_ACCOUNT_MAX_FAILURES=20;
+const ADMIN_ACCOUNT_KEY="admin_login_account";
+async function adminAccountLocked(){
+    try{
+        const rows=await supabaseRequest("kv_store_48db9b7e?key=eq."+ADMIN_ACCOUNT_KEY+"&select=value&limit=1",{method:"GET"});
+        return Number(rows?.[0]?.value?.lockedUntil||0)>Date.now();
+    }catch(error){console.warn("Login admin — bloqueio da conta indisponível:",error.message);return false}
+}
+async function recordAdminAccountFailure(){
+    try{
+        const rows=await supabaseRequest("kv_store_48db9b7e?key=eq."+ADMIN_ACCOUNT_KEY+"&select=value&limit=1",{method:"GET"});
+        const prev=rows?.[0]?.value||{};
+        const fresh=Date.now()-Number(prev.firstAt||0)<ADMIN_LOGIN_LOCK_MS;
+        const next={count:(fresh?Number(prev.count||0):0)+1,firstAt:fresh?Number(prev.firstAt):Date.now(),lockedUntil:Number(prev.lockedUntil||0)};
+        const lockNow=next.count>=ADMIN_ACCOUNT_MAX_FAILURES&&!(next.lockedUntil>Date.now());
+        if(lockNow){next.lockedUntil=Date.now()+ADMIN_LOGIN_LOCK_MS;next.count=0;next.firstAt=Date.now();}
+        await supabaseRequest("kv_store_48db9b7e?on_conflict=key",{method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({key:ADMIN_ACCOUNT_KEY,value:next})});
+        if(lockNow){
+            console.warn("Login admin: conta bloqueada por 15 minutos após "+ADMIN_ACCOUNT_MAX_FAILURES+" senhas erradas.");
+            sendAdminSecurityAlert("Muitas tentativas de login no painel","O painel da MONTÊ recebeu "+ADMIN_ACCOUNT_MAX_FAILURES+" senhas erradas em menos de 15 minutos e o login foi bloqueado por 15 minutos. Se não foi você, troque a senha do painel.").catch(()=>{});
+        }
+    }catch(error){console.warn("Login admin — falha da conta não registrada:",error.message)}
+}
+async function sendAdminSecurityAlert(subject,message){
+    const recipients=safeString(process.env.ORDER_NOTIFICATION_EMAILS).split(",").map(v=>v.trim().toLowerCase()).filter(Boolean);
+    if(!RESEND_API_KEY||!RESEND_FROM_EMAIL||!recipients.length)return;
+    await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from:RESEND_FROM_NAME+" <"+RESEND_FROM_EMAIL+">",to:recipients,subject:"MONTÊ — Alerta de segurança: "+subject,text:message})});
+}
 async function clearLoginFailures(req,email){
     adminLoginAttempts.delete(loginKey(req,email));
     await supabaseRequest("kv_store_48db9b7e?key=eq."+loginKvKey(req,email),{method:"DELETE",headers:{"Prefer":"return=minimal"}}).catch(()=>{});
@@ -1701,15 +1782,28 @@ app.post("/api/admin/login",adminLoginRateLimit,async(req,res)=>{
         const email=safeString(req.body?.email).toLowerCase(),password=req.body?.password;
         if(!ADMIN_EMAIL||!ADMIN_PASSWORD_HASH)return res.status(503).json({success:false,message:"Acesso administrativo não configurado no servidor."});
         if(!(await loginAllowed(req,email)))return res.status(429).json({success:false,message:"Muitas tentativas. Tente novamente em 15 minutos."});
-        if(email!==ADMIN_EMAIL.toLowerCase()||!passwordMatches(password)){await failedLogin(req,email);return res.status(401).json({success:false,message:"E-mail ou senha incorretos."})}
+        if(await adminAccountLocked())return res.status(429).json({success:false,message:"Muitas tentativas. Tente novamente em 15 minutos."});
+        // A senha é sempre conferida (mesmo com e-mail errado): o tempo de resposta não revela o e-mail.
+        const passwordOk=passwordMatches(password);
+        const emailOk=crypto.timingSafeEqual(crypto.createHash("sha256").update(email).digest(),crypto.createHash("sha256").update(ADMIN_EMAIL.toLowerCase()).digest());
+        if(!emailOk||!passwordOk){
+            if(emailOk){await failedLogin(req,email);await recordAdminAccountFailure();}
+            return res.status(401).json({success:false,message:"E-mail ou senha incorretos."});
+        }
         await clearLoginFailures(req,email);
-        const token=createSignedToken({purpose:"admin",email:ADMIN_EMAIL},ADMIN_SESSION_TTL);
+        const token=createSignedToken({purpose:"admin",email:ADMIN_EMAIL,ep:await adminSessionEpoch(true)},ADMIN_SESSION_TTL);
         setAdminCookie(res,token);
         return res.json({success:true,email:ADMIN_EMAIL});
     }catch(error){console.error("Login admin:",error);return res.status(500).json({success:false,message:"Não foi possível entrar agora."})}
 });
-app.post("/api/admin/logout",(req,res)=>{clearAdminCookie(res);return res.json({success:true})});
-app.get("/api/admin/session",(req,res)=>{const s=getAdminSession(req);if(!s)return res.status(401).json({success:false});return res.json({success:true,email:s.email})});
+app.post("/api/admin/logout",async(req,res)=>{
+    if(crossSiteAdminRequest(req))return res.status(403).json({success:false,message:"Origem não autorizada."});
+    // Sair encerra a sessão em todos os navegadores (quem estiver com o cookie também sai).
+    if(getAdminSession(req))await bumpAdminSessionEpoch().catch(error=>console.error("Sair do painel:",error.message));
+    clearAdminCookie(res);
+    return res.json({success:true});
+});
+app.get("/api/admin/session",async(req,res)=>{try{const s=await currentAdminSession(req);if(!s)return res.status(401).json({success:false});return res.json({success:true,email:s.email})}catch{return res.status(503).json({success:false})}});
 const CAROUSEL_KV_KEY = "site_carousel_images";
 
 // Configuração do carrossel: { images: [url...], sizes: { url: [largura, altura] } }.
@@ -1781,7 +1875,7 @@ app.put("/api/admin/carousel",requireAdmin,async(req,res)=>{
     await supabaseRequest("kv_store_48db9b7e",{method:"POST",body,headers:{"Prefer":"resolution=merge-duplicates,return=representation"}});
     publicCache.delete("carousel");
     return res.json({success:true,images,sizes});
-  }catch(e){console.error("Admin carousel PUT:",e);return res.status(500).json({success:false,message:e.message||"Não foi possível salvar o carrossel."})}
+  }catch(e){console.error("Admin carousel PUT:",e);return res.status(500).json({success:false,message:adminErrorMessage(e,"Não foi possível salvar o carrossel.")})}
 });
 
 app.get("/api/admin/products",requireAdmin,async(req,res)=>{try{const data=await supabaseRequest("products?select=*,product_variants(*)&order=created_at.desc");return res.json({success:true,products:data||[]})}catch(e){console.error("Admin products GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar os produtos."})}});
@@ -2032,7 +2126,7 @@ app.post("/api/admin/uploads/optimized-image/sign", requireAdmin, async (req, re
         return res.json({ success: true, full, small });
     } catch (e) {
         console.error("Admin optimized image sign:", e);
-        return res.status(400).json({ success: false, message: e.message || "Não foi possível preparar o envio da foto." });
+        return res.status(400).json({ success: false, message: adminErrorMessage(e, "Não foi possível preparar o envio da foto.") });
     }
 });
 
@@ -2071,7 +2165,7 @@ app.post("/api/admin/uploads/optimized-image", requireAdmin, async (req, res) =>
         return res.status(201).json({ success: true, url, small: smallUrl, width: fullInfo.width, height: fullInfo.height });
     } catch (e) {
         console.error("Admin optimized image upload:", e);
-        return res.status(400).json({ success: false, message: e.message || "Não foi possível enviar a foto." });
+        return res.status(400).json({ success: false, message: adminErrorMessage(e, "Não foi possível enviar a foto.") });
     }
 });
 
@@ -2111,7 +2205,7 @@ app.post("/api/admin/uploads/carousel-image", requireAdmin, async (req,res)=>{
     return res.status(201).json({success:true,url});
   }catch(e){
     console.error("Admin carousel image upload:",e);
-    return res.status(400).json({success:false,message:e.message||"Não foi possível enviar a imagem."});
+    return res.status(400).json({success:false,message:adminErrorMessage(e,"Não foi possível enviar a imagem.")});
   }
 });
 
@@ -2126,13 +2220,25 @@ app.post("/api/admin/uploads/product-image", requireAdmin, async (req, res) => {
         return res.status(201).json({ success: true, url });
     } catch (error) {
         console.error("Admin image upload:", error);
-        return res.status(400).json({ success: false, message: error.message || "Não foi possível enviar a imagem." });
+        return res.status(400).json({ success: false, message: adminErrorMessage(error, "Não foi possível enviar a imagem.") });
     }
 });
 
+// Erro mostrado no painel: mensagens de validação escritas por nós passam; respostas internas
+// (Supabase, Olist, chaves de configuração) ficam só no log do servidor.
+function adminErrorMessage(error, fallback) {
+    const message = safeString(error?.message);
+    if (!message || /supabase|olist api|service_role|_key\b|token|\{|\bat\s|stack|ECONN|fetch failed/i.test(message)) return fallback;
+    return message.slice(0, 300);
+}
+function productSaveError(error) {
+    if (/duplicate key|23505|products_sku_key/i.test(safeString(error?.message))) return "Já existe outro produto com este SKU.";
+    return adminErrorMessage(error, "Não foi possível salvar o produto.");
+}
+
 function sanitizeProductPayload(b={}){return{name:safeString(b.name),sku:safeString(b.sku)||null,category:safeString(b.category)||"bolsas",price:Number(b.price||0),sale_price:b.sale_price===null||b.sale_price===""||b.sale_price===undefined?null:Number(b.sale_price),description:safeString(b.description),images:Array.isArray(b.images)?b.images:[],shipping_weight_kg:b.shipping_weight_kg===null||b.shipping_weight_kg===""||b.shipping_weight_kg===undefined?null:Number(b.shipping_weight_kg),shipping_height_cm:b.shipping_height_cm===null||b.shipping_height_cm===""||b.shipping_height_cm===undefined?null:Number(b.shipping_height_cm),shipping_width_cm:b.shipping_width_cm===null||b.shipping_width_cm===""||b.shipping_width_cm===undefined?null:Number(b.shipping_width_cm),shipping_length_cm:b.shipping_length_cm===null||b.shipping_length_cm===""||b.shipping_length_cm===undefined?null:Number(b.shipping_length_cm),is_new:Boolean(b.is_new),is_sale:Boolean(b.is_sale),is_presale:Boolean(b.is_presale),active:b.active!==false}}
-app.post("/api/admin/products",requireAdmin,async(req,res)=>{try{publicCache.delete("catalog");const p=sanitizeProductPayload(req.body);if(!p.name)return res.status(400).json({success:false,message:"Informe o nome do produto."});const d=await supabaseRequest("products",{method:"POST",body:JSON.stringify(p)});return res.status(201).json({success:true,product:d?.[0]||d})}catch(e){console.error("Admin products POST:",e);return res.status(500).json({success:false,message:e.message})}});
-app.put("/api/admin/products/:id",requireAdmin,async(req,res)=>{try{publicCache.delete("catalog");const p=sanitizeProductPayload(req.body);if(!p.name)return res.status(400).json({success:false,message:"Informe o nome do produto."});const d=await supabaseRequest(`products?id=eq.${encodeURIComponent(req.params.id)}`,{method:"PATCH",body:JSON.stringify(p)});return res.json({success:true,product:d?.[0]||d})}catch(e){console.error("Admin products PUT:",e);return res.status(500).json({success:false,message:e.message})}});
+app.post("/api/admin/products",requireAdmin,async(req,res)=>{try{publicCache.delete("catalog");const p=sanitizeProductPayload(req.body);if(!p.name)return res.status(400).json({success:false,message:"Informe o nome do produto."});const d=await supabaseRequest("products",{method:"POST",body:JSON.stringify(p)});return res.status(201).json({success:true,product:d?.[0]||d})}catch(e){console.error("Admin products POST:",e);return res.status(500).json({success:false,message:productSaveError(e)})}});
+app.put("/api/admin/products/:id",requireAdmin,async(req,res)=>{try{publicCache.delete("catalog");const p=sanitizeProductPayload(req.body);if(!p.name)return res.status(400).json({success:false,message:"Informe o nome do produto."});const d=await supabaseRequest(`products?id=eq.${encodeURIComponent(req.params.id)}`,{method:"PATCH",body:JSON.stringify(p)});return res.json({success:true,product:d?.[0]||d})}catch(e){console.error("Admin products PUT:",e);return res.status(500).json({success:false,message:productSaveError(e)})}});
 app.delete("/api/admin/products/:id",requireAdmin,async(req,res)=>{
     try{
         const productId=safeString(req.params.id);
@@ -3623,7 +3729,9 @@ app.patch("/api/admin/orders/:id/status",requireAdmin,async(req,res)=>{
         if(status==="shipped"){
             patch.shipping_carrier=safeString(req.body?.shipping_carrier)||null;
             patch.tracking_code=safeString(req.body?.tracking_code)||null;
-            patch.tracking_url=safeString(req.body?.tracking_url)||null;
+            const trackingUrl=safeString(req.body?.tracking_url);
+            if(trackingUrl&&!/^https:\/\/[^\s"'<>]+$/i.test(trackingUrl))return res.status(400).json({success:false,message:"O link de rastreio precisa começar com https://."});
+            patch.tracking_url=trackingUrl||null;
             if(!patch.tracking_code) return res.status(400).json({success:false,message:"Informe o código de rastreio para marcar como enviado."});
             patch.shipped_at=new Date().toISOString();
         }
@@ -3845,9 +3953,9 @@ app.get("/api/instagram/feed", async (req, res) => {
    Rota explícita para o painel. O Render executa o backend em /backend,
    enquanto admin.html permanece na raiz do repositório.
 ===================================================== */
-app.get("/admin", (req, res) => sendSitePage(res, "admin.html"));
+app.get("/admin", (req, res) => { res.setHeader("Content-Security-Policy", ADMIN_CONTENT_SECURITY_POLICY); return sendSitePage(res, "admin.html"); });
 
-app.get("/admin/", (req, res) => sendSitePage(res, "admin.html"));
+app.get("/admin/", (req, res) => { res.setHeader("Content-Security-Policy", ADMIN_CONTENT_SECURITY_POLICY); return sendSitePage(res, "admin.html"); });
 
 
 /* =====================================================
@@ -3911,15 +4019,15 @@ app.get("/", async (req, res) => {
         let page = html;
         if (Array.isArray(slides) && slides.length) {
             page = page
-                .replace(/<!-- SLIDES -->[\s\S]*?<!-- FIM DOS SLIDES -->/, heroSlidesHtml(slides))
+                .replace(/<!-- SLIDES -->[\s\S]*?<!-- FIM DOS SLIDES -->/, () => heroSlidesHtml(slides))
                 .replace('<div id="carouselSlides"', '<div id="carouselSlides" data-ssr="1"');
             const first = slides[0];
             const preload = '<link rel="preload" as="image" href="' + escapeAttribute(first.src) + '"' +
                 (first.small ? ' imagesrcset="' + escapeAttribute(first.small) + ' 960w, ' + escapeAttribute(first.src) + ' 2000w" imagesizes="100vw"' : "") + ' fetchpriority="high">';
-            page = page.replace("<!-- PRELOAD DO BANNER -->", preload);
+            page = page.replace("<!-- PRELOAD DO BANNER -->", () => preload);
         }
         if (Array.isArray(catalog)) {
-            page = page.replace("<!-- CATÁLOGO -->", '<script id="catalogData" type="application/json">' + jsonForHtml(catalog) + "</script>");
+            page = page.replace("<!-- CATÁLOGO -->", () => '<script id="catalogData" type="application/json">' + jsonForHtml(catalog) + "</script>");
         }
         res.setHeader("Cache-Control", "no-cache");
         return res.status(200).type("html").send(page);
@@ -5937,7 +6045,10 @@ app.use((req, res, next) => {
     return next();
 });
 
-app.use(
+// Só no Node (Render). No Workers os arquivos do site saem dos assets do Cloudflare, e o "disco"
+// que o express.static enxergaria é o sistema de arquivos virtual do Worker, onde fica o próprio
+// código do servidor (/bundle/worker.js): servir de lá exporia o código.
+if (!IS_WORKERS) app.use(
     express.static(
         SITE_DIR,
         {
@@ -6309,6 +6420,16 @@ function startNodeServer() {
         }
     );
 }
+
+// Último tratamento de erro: sem ele o Express devolve a pilha (stack) com caminhos do servidor.
+// JSON inválido ou grande demais vira uma resposta simples; o resto, erro genérico.
+app.use((error, req, res, next) => {
+    if (res.headersSent) return next(error);
+    const status = Number(error?.status || error?.statusCode) || 500;
+    if (status >= 500) console.error("Erro não tratado:", req.method, req.path, error?.message || error);
+    const message = status === 413 ? "Conteúdo grande demais." : status >= 400 && status < 500 ? "Requisição inválida." : "Erro interno.";
+    return res.status(status >= 400 && status < 600 ? status : 500).json({ success: false, message });
+});
 
 // "node server.js" (Render) sobe o servidor; o Worker importa o app (backend/worker.js).
 if (!IS_WORKERS && require.main === module) startNodeServer();

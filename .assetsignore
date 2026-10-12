@@ -14,3 +14,11 @@ backend/package.json
 backend/package-lock.json
 backend/.env*
 wrangler.jsonc
+# Variáveis de ambiente, bancos/backup e documentos internos nunca são publicados.
+.env*
+**/.env*
+*.sql
+*.md
+# Qualquer arquivo do servidor, também em subpastas (só as fotos padrão de backend/assets são públicas).
+backend/*
+!backend/assets/
