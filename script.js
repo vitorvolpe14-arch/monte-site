@@ -1645,7 +1645,7 @@ async function updateShipping() {
     } catch(error) {
         if (requestId !== shippingRequestId) return;
         shippingValueElement.textContent = "Não disponível";
-        if (optionsContainer) setHTML(optionsContainer, `<div class="shipping-error">${error.message || "Não foi possível calcular o frete."}</div>`);
+        if (optionsContainer) setHTML(optionsContainer, `<div class="shipping-error">${escapeHTML(error.message || "Não foi possível calcular o frete.")}</div>`);
         updatePaymentSummary();
     }
 }
