@@ -27,6 +27,8 @@
     // Rotas do servidor; o resto (páginas, CSS, JS, fotos) sai direto dos assets.
     "run_worker_first": [
       "/api/*",
+      // Fotos do bucket pelo endereço da loja, com cache da Cloudflare.
+      "/media/*",
       "/webhook-infinitepay",
       "/produto/*",
       "/sitemap.xml",

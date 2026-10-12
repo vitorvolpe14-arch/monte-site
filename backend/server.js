@@ -1865,7 +1865,7 @@ async function carouselSlides(){
       supabaseRequest("kv_store_48db9b7e",{method:"POST",body:JSON.stringify({key:CAROUSEL_KV_KEY,value}),headers:{"Prefer":"resolution=merge-duplicates,return=minimal"}}).catch(()=>{});
     }
   }
-  return config.images.map(src=>({src,small:smallImageUrl(src),width:sizes[src]?.[0]||null,height:sizes[src]?.[1]||null}));
+  return config.images.map(url=>{const src=siteMediaPath(url);return {src,small:smallImageUrl(src),width:sizes[url]?.[0]||null,height:sizes[url]?.[1]||null}});
 }
 app.get("/api/carousel",async(req,res)=>{
   try{const slides=await cachedPublic("carousel",60*1000,carouselSlides);return res.json({success:true,images:slides.map(s=>s.src),slides})}
@@ -1998,6 +1998,78 @@ function canonicalProductImageUrl(value) {
 function isAllowedProductImageUrl(value) {
     return !!canonicalProductImageUrl(value);
 }
+
+/* =====================================================
+   FOTOS PELO ENDEREÇO DA LOJA
+   A loja mostra as fotos do bucket como /media/product-images/<arquivo>. No Workers
+   a foto fica no cache da Cloudflare (o arquivo é o mesmo, byte a byte), então o
+   Supabase só entrega cada foto quando ela ainda não está no cache — o tráfego de
+   fotos (Cached Egress do plano Free) deixa de crescer a cada visita.
+===================================================== */
+const MEDIA_PREFIX = "/media/" + PRODUCT_IMAGE_BUCKET + "/";
+const MEDIA_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]);
+function isMediaObjectPath(objectPath) {
+    return objectPath.length > 0 && objectPath.length <= 300 && /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/.test(objectPath) && !/(^|\/)\.{1,2}(\/|$)/.test(objectPath);
+}
+// Foto do bucket → endereço da loja (/media/...); qualquer outro endereço fica igual.
+function siteMediaPath(value) {
+    const canonical = canonicalProductImageUrl(value);
+    if (!canonical) return value;
+    const objectPath = new URL(canonical).pathname.slice(("/storage/v1/object/public/" + PRODUCT_IMAGE_BUCKET + "/").length);
+    return isMediaObjectPath(objectPath) ? MEDIA_PREFIX + objectPath : value;
+}
+// O Supabase responde 400 para arquivo que não existe.
+function mediaNotFound(status) {
+    return new Response(null, { status: status === 400 || status === 404 ? 404 : 502, headers: { "Cache-Control": "no-store" } });
+}
+// Chamado pelo Worker antes do Express: devolve a resposta da foto, ou null se o
+// endereço não for de foto. A chave do cache ignora "?...": variar o endereço não
+// força o Supabase a mandar a foto de novo.
+async function serveMediaRequest(request, ctx) {
+    const url = new URL(request.url);
+    if (!url.pathname.startsWith(MEDIA_PREFIX)) return null;
+    if (request.method !== "GET" && request.method !== "HEAD") {
+        return new Response(null, { status: 405, headers: { Allow: "GET, HEAD", "Cache-Control": "no-store" } });
+    }
+    const objectPath = url.pathname.slice(MEDIA_PREFIX.length);
+    if (!isMediaObjectPath(objectPath)) return mediaNotFound(404);
+    const cache = caches.default;
+    const key = new Request(url.origin + url.pathname);
+    let response = await cache.match(key);
+    if (!response) {
+        let upstream;
+        try {
+            upstream = await fetch(storagePublicUrl(objectPath));
+        } catch (error) {
+            console.error("Foto do bucket:", error.message);
+            return mediaNotFound(502);
+        }
+        const type = String(upstream.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+        if (!upstream.ok || !MEDIA_TYPES.has(type)) {
+            if (upstream.body) upstream.body.cancel().catch(() => {});
+            return mediaNotFound(upstream.status);
+        }
+        const headers = new Headers({
+            "Content-Type": type,
+            // O nome do arquivo muda a cada envio: a mesma foto pode ficar um ano em cache.
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+            "Cross-Origin-Resource-Policy": "same-site"
+        });
+        const etag = upstream.headers.get("etag");
+        if (etag) headers.set("ETag", etag);
+        response = new Response(upstream.body, { status: 200, headers });
+        ctx.waitUntil(cache.put(key, response.clone()).catch(error => console.error("Cache da foto:", error.message)));
+    }
+    return request.method === "HEAD" ? new Response(null, { status: response.status, headers: response.headers }) : response;
+}
+// Fora do Workers (servidor Node) não há cache da Cloudflare: a foto sai direto do bucket.
+app.use(MEDIA_PREFIX, (req, res) => {
+    const objectPath = req.path.replace(/^\/+/, "");
+    if (!isMediaObjectPath(objectPath)) return res.status(404).end();
+    return res.redirect(302, storagePublicUrl(objectPath));
+});
 
 // Antes recortava as bordas da foto com o sharp, biblioteca nativa que não roda no
 // Cloudflare. O site não usa mais este endereço; ele só leva à foto original.
@@ -4156,6 +4228,7 @@ async function getPublicCatalog() {
         const rows = await supabaseRequest("products?select=*,product_variants(*)&active=eq.true&order=created_at.desc", { method: "GET" });
         return (Array.isArray(rows) ? rows : []).map(product => {
             const { images_original, ...publicProduct } = product;
+            if (Array.isArray(publicProduct.images)) publicProduct.images = publicProduct.images.map(siteMediaPath);
             return publicProduct;
         });
     });
@@ -6041,7 +6114,7 @@ function slugify(value) {
 }
 
 function publicImageUrl(value) {
-    const raw = safeString(value);
+    const raw = siteMediaPath(safeString(value));
     if (!raw) return "";
     if (/^https?:\/\//i.test(raw)) return raw;
     return new URL("/" + raw.replace(/^\/+/, ""), PUBLIC_SITE_URL).href;
@@ -6626,4 +6699,4 @@ app.use((error, req, res, next) => {
 // "node server.js" (Render) sobe o servidor; o Worker importa o app (backend/worker.js).
 if (!IS_WORKERS && require.main === module) startNodeServer();
 
-module.exports = { app, runScheduledTask, runCustomerUpkeep, setSiteAssets, setBackgroundRunner };
+module.exports = { app, runScheduledTask, runCustomerUpkeep, setSiteAssets, setBackgroundRunner, serveMediaRequest };
