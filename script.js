@@ -52,6 +52,7 @@ async function loadProductsFromDatabase() {
             : null,
         sale: !!product.is_sale,
         newProduct: !!product.is_new,
+        presale: !!product.is_presale,
         images: Array.isArray(product.images) ? product.images : [],
         variants: product.product_variants || [],
         stock: (product.product_variants || [])
@@ -196,7 +197,13 @@ function createProductCard(product) {
             }
 
             ${
-                product.newProduct
+                product.presale && !isOutOfStock
+                ?
+                `<span class="product-badge product-badge-presale">
+                    PRÉ-VENDA
+                </span>`
+                :
+                product.newProduct && !product.presale
                 ?
                 `<span class="product-badge">
                     NOVO
@@ -233,6 +240,8 @@ function createProductCard(product) {
             <div class="product-price">
                 ${priceHTML}
             </div>
+
+            ${product.presale && !isOutOfStock ? '<div class="presale-card-cta">Garanta a sua!</div>' : ""}
 
         </div>
 
@@ -275,17 +284,26 @@ function renderProducts() {
     const newContainer = document.getElementById("newProducts");
     if (newContainer) newContainer.replaceChildren();
 
+    // Bolsas em pré-venda ficam só na aba Pré-venda (com o aviso do prazo).
+    const inStore = products.filter(product => !product.presale);
+    const presale = products.filter(product => product.presale);
+
     renderCollectionProducts(
-        products.filter(product => product.category === "bolsas")
+        inStore.filter(product => product.category === "bolsas")
     );
 
     renderCategorySectionProducts(
         "cintos-acessorios",
-        products.filter(product => product.category === "cintos" || product.category === "acessorios")
+        inStore.filter(product => product.category === "cintos" || product.category === "acessorios")
     );
 
-    renderSaleProducts(products.filter(product => product.sale));
-    renderNewProducts(products.filter(product => product.newProduct));
+    // A aba e o link do menu só aparecem quando há produtos em pré-venda.
+    document.getElementById("prevenda")?.toggleAttribute("hidden", !presale.length);
+    document.querySelectorAll(".presale-nav-link").forEach(link => link.toggleAttribute("hidden", !presale.length));
+    renderCategorySectionProducts("prevenda", presale);
+
+    renderSaleProducts(inStore.filter(product => product.sale));
+    renderNewProducts(inStore.filter(product => product.newProduct));
 }
 
 
@@ -686,6 +704,7 @@ window.addEventListener("resize", () => {
     lastMobileCarouselMode = mobileMode;
     renderCollectionPage();
     renderCategorySection("cintos-acessorios");
+    renderCategorySection("prevenda");
     renderNewPage();
     renderSalePage();
 });
@@ -722,7 +741,7 @@ function filterProducts(category) {
 
             return product.category === category;
 
-        });
+        }).filter(product => !product.presale);
 
 
     renderCollectionProducts(filteredProducts);
@@ -817,6 +836,12 @@ function openProductModal(productId) {
     // Produtos da Sale não acompanham dustbag: o aviso aparece ao abrir qualquer um deles.
     const saleNotice = document.getElementById("modalSaleNotice");
     if (saleNotice) saleNotice.hidden = !selectedProduct.sale;
+
+    // Pré-venda: destaque "Garanta a sua!" e o prazo de pelo menos 10 dias úteis.
+    const presaleNotice = document.getElementById("modalPresaleNotice");
+    if (presaleNotice) presaleNotice.hidden = !selectedProduct.presale;
+    const buyNowLabel = document.getElementById("buyNowButton");
+    if (buyNowLabel) buyNowLabel.textContent = selectedProduct.presale ? "GARANTA A SUA!" : "COMPRAR AGORA";
 
     const variantSelector = document.getElementById("variantSelector");
     const variantOptions = document.getElementById("variantOptions");
@@ -1263,6 +1288,7 @@ function updateCart() {
                 </div>
 
                 ${item.variant_color ? `<div class="cart-item-variant">${escapeHTML(colorLabel(item.variant_color, item.name))}</div>` : ""}
+                ${item.presale ? '<div class="cart-item-presale">Pré-venda · entrega em pelo menos 10 dias úteis</div>' : ""}
 
                 <div class="cart-item-row">
 
@@ -1461,6 +1487,12 @@ function normalizeCity(city) {
 }
 
 
+// Pré-venda: bolsas que ainda vão chegar; o prazo de entrega é de pelo menos 10 dias úteis.
+const PRESALE_MIN_BUSINESS_DAYS = 10;
+function cartHasPresale() {
+    return cart.some(item => item.presale);
+}
+
 function getCartSubtotal() {
     return cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
 }
@@ -1563,8 +1595,10 @@ function renderShippingOptions() {
         label.dataset.optionId = String(option.id);
         const min = Number(option.delivery_min_days || 0);
         const max = Number(option.delivery_max_days || 0);
-        const days = min && max && min !== max ? `${min} a ${max} dias úteis` : (max || option.delivery_days) ? `${max || option.delivery_days} dias úteis` : "Prazo informado";
-        setHTML(label, `<input type="radio" name="shippingMethod" value="${String(option.id).replace(/"/g, "&quot;")}" ${selectedShippingOption?.id === option.id ? "checked" : ""}><span class="shipping-option-info"><strong>${option.name}</strong><small>${days}</small></span><strong class="shipping-option-price">${formatPrice(option.price)}</strong>`);
+        const carrierDays = min && max && min !== max ? `${min} a ${max} dias úteis` : (max || option.delivery_days) ? `${max || option.delivery_days} dias úteis` : "Prazo informado";
+        // Bolsa em pré-venda: ela ainda vai chegar, então o prazo é de pelo menos 10 dias úteis.
+        const days = cartHasPresale() ? `Pré-venda: a partir de ${Math.max(PRESALE_MIN_BUSINESS_DAYS, max || Number(option.delivery_days) || 0)} dias úteis` : carrierDays;
+        setHTML(label, `<input type="radio" name="shippingMethod" value="${escapeHTML(String(option.id))}" ${selectedShippingOption?.id === option.id ? "checked" : ""}><span class="shipping-option-info"><strong>${escapeHTML(option.name)}</strong><small>${escapeHTML(days)}</small></span><strong class="shipping-option-price">${formatPrice(option.price)}</strong>`);
         label.addEventListener("click", () => {
             selectedShippingOption = option;
             document.querySelectorAll(".shipping-option").forEach(el => el.classList.remove("selected"));
@@ -1576,6 +1610,7 @@ function renderShippingOptions() {
 }
 
 async function updateShipping() {
+    document.getElementById("presaleDeliveryNotice")?.toggleAttribute("hidden", !cartHasPresale());
     const shippingValueElement = document.getElementById("shippingValue");
     const optionsContainer = document.getElementById("shippingOptions");
     if (!shippingValueElement) return;
@@ -2219,6 +2254,7 @@ function loadCart() {
                     price: product.price,
                     oldPrice: product.oldPrice,
                     sale: product.sale,
+                    presale: product.presale,
                     images: product.images,
                     variants: product.variants,
                     stock: product.stock

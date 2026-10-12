@@ -33,7 +33,7 @@
     <meta name="twitter:description" content="Conheça a coleção MONTÊ e compre online.">
     <meta name="twitter:image" content="https://oficialmontee.com.br/backend/assets/carousel-photo-1.webp">
 
-    <link rel="stylesheet" href="style.css?v=20261012-frete2">
+    <link rel="stylesheet" href="style.css?v=20261012-prevenda">
     <!-- PRELOAD DO BANNER -->
 
     <link rel="preload" href="/fonts/dm-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
@@ -119,6 +119,15 @@
 
     <nav class="main-navigation"
          id="mainNavigation">
+
+        <a href="#prevenda"
+           class="presale-nav-link"
+           data-click="closeMobileMenu"
+           hidden>
+
+            PRÉ-VENDA
+
+        </a>
 
         <a href="#novidades"
            data-click="closeMobileMenu">
@@ -285,6 +294,27 @@
 <!-- =====================================================
      NOVIDADES
 ===================================================== -->
+
+<!-- =====================================================
+     PRÉ-VENDA — bolsas que ainda vão chegar (aparece só quando há produtos)
+===================================================== -->
+
+<section id="prevenda" class="product-section category-section category-showcase presale-section" aria-labelledby="presaleTitle" hidden>
+    <div class="category-intro reveal">
+        <p class="presale-highlight">GARANTA A SUA!</p>
+        <h2 id="presaleTitle">Pré-<em>venda</em>.</h2>
+        <p class="category-intro-text">Bolsas que ainda vão chegar. Compre agora e garanta a sua antes de todo mundo.</p>
+        <p class="presale-deadline"><strong>Prazo de entrega:</strong> pelo menos 10 dias úteis.</p>
+        <div class="category-intro-controls">
+            <button class="collection-carousel-arrow category-prev" data-click="previousCategoryPage" data-args='["prevenda"]' aria-label="Ver bolsas anteriores da pré-venda">‹</button>
+            <button class="collection-carousel-arrow category-next" data-click="nextCategoryPage" data-args='["prevenda"]' aria-label="Ver mais bolsas da pré-venda">›</button>
+        </div>
+    </div>
+
+    <div class="collection-products-viewport category-showcase-viewport">
+        <div id="prevendaProducts" class="products-grid collection-products-grid"></div>
+    </div>
+</section>
 
 <section id="colecao" class="product-section collection-section">
 
@@ -588,6 +618,10 @@
             MONTÊ
         </h3>
 
+        <a href="#prevenda" class="presale-nav-link" hidden>
+            Pré-venda
+        </a>
+
         <a href="#novidades">
             Novidades
         </a>
@@ -735,6 +769,15 @@
                    hidden>
                     <strong>Sale</strong>
                     Produtos da Sale não acompanham dustbag.
+                </p>
+
+                <!-- Aparece só nos produtos em pré-venda. -->
+                <p id="modalPresaleNotice"
+                   class="modal-presale-notice"
+                   role="note"
+                   hidden>
+                    <strong>Pré-venda · Garanta a sua!</strong>
+                    Esta bolsa ainda vai chegar. O prazo de entrega é de pelo menos 10 dias úteis.
                 </p>
 
 
@@ -948,6 +991,10 @@
                         <label class="field field-short"><input type="text" id="customerState" placeholder=" " maxlength="2" autocomplete="address-level1"><span>UF</span></label>
                     </div>
 
+                    <p id="presaleDeliveryNotice" class="presale-delivery-notice" role="note" hidden>
+                        <strong>Pré-venda:</strong> sua sacola tem bolsa que ainda vai chegar. O prazo de entrega é de pelo menos 10 dias úteis.
+                    </p>
+
                     <div class="shipping-result">
                         <div class="shipping-result-head">
                             <span>Frete</span>
@@ -1057,7 +1104,7 @@
 
 <!-- CATÁLOGO -->
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="script.js?v=20261012-frete2"></script>
+<script src="script.js?v=20261012-prevenda"></script>
 
 </body>
 </html>

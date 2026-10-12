@@ -1080,10 +1080,13 @@ async function sendOrderConfirmationEmail(order) {
       "<h1 style=\"margin:0 0 18px;font-size:28px;font-weight:500;\">Obrigada pela sua compra, " + escapeEmailHtml(customerName) + ".</h1>" +
       "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Seu pagamento foi confirmado e seu pedido já está registrado na MONTÊ.</p>" +
       "<div style=\"margin:28px 0;padding:20px;background:#f7f5f2;\"><p style=\"margin:0 0 8px;font-size:11px;letter-spacing:1.5px;color:#777;\">NÚMERO DO PEDIDO</p><strong style=\"font-size:20px;\">" + escapeEmailHtml(orderCode) + "</strong><p style=\"margin:14px 0 0;font-size:14px;color:#555;\">Total: <strong>R$ " + total.toFixed(2).replace(".", ",") + "</strong></p></div>" +
+      (orderHasPresale(order) ? "<p style=\"font-size:15px;line-height:1.7;color:#555;\"><strong>Pré-venda:</strong> seu pedido tem peça que ainda vai chegar. O prazo de entrega é de pelo menos " + PRESALE_MIN_BUSINESS_DAYS + " dias úteis.</p>" : "") +
       "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Acompanhe o status do seu pedido e novas atualizações pela área <strong>Minhas Compras</strong>.</p>" +
       "<div style=\"text-align:center;margin:30px 0;\"><a href=\"" + purchasesUrl + "\" style=\"display:inline-block;background:#111;color:#fff;text-decoration:none;padding:15px 26px;font-size:13px;letter-spacing:1.5px;\">ACESSAR MINHAS COMPRAS</a></div></div>" +
       "<p style=\"text-align:center;font-size:11px;color:#999;margin:20px 0;\">MONTÊ — Bolsas e acessórios</p></div></body></html>";
-    const text = "Compra confirmada na MONTÊ\n\nPedido: " + orderCode + "\nTotal: R$ " + total.toFixed(2).replace(".", ",") + "\n\nAcesse: " + purchasesUrl;
+    const text = "Compra confirmada na MONTÊ\n\nPedido: " + orderCode + "\nTotal: R$ " + total.toFixed(2).replace(".", ",") +
+        (orderHasPresale(order) ? "\n\nPré-venda: o prazo de entrega é de pelo menos " + PRESALE_MIN_BUSINESS_DAYS + " dias úteis." : "") +
+        "\n\nAcesse: " + purchasesUrl;
     const idempotencyKey = "monte-order-confirmation-" + String(order.order_nsu);
     const response = await fetch("https://api.resend.com/emails", {
         method:"POST",
@@ -1129,7 +1132,7 @@ async function sendAdminSaleNotificationEmail(order) {
             const color = safeString(item.variant_color || item.color);
             const qty = Math.max(1, Number(item.quantity || 1));
             const unit = Number(item.price ?? item.unit_price ?? 0);
-            return qty + "x " + name + (color ? " (" + color + ")" : "") + " — R$ " + unit.toFixed(2).replace(".", ",");
+            return qty + "x " + name + (color ? " (" + color + ")" : "") + (item.presale === true ? " — PRÉ-VENDA" : "") + " — R$ " + unit.toFixed(2).replace(".", ",");
         }).join("<br>")
         : "Consultar itens do pedido no painel.";
     const html =
@@ -1314,6 +1317,10 @@ async function supabaseRequest(path, options = {}) {
     console.log(`Supabase OK ${response.status} em ${Date.now() - startedAt}ms: ${String(path).slice(0, 140)}`);
     return data;
 }
+
+// Pré-venda: bolsas que ainda vão chegar. O prazo de entrega é de pelo menos 10 dias úteis.
+const PRESALE_MIN_BUSINESS_DAYS = 10;
+const orderHasPresale = order => Array.isArray(order?.items) && order.items.some(item => item?.presale === true);
 
 const METROPOLITAN_CITIES = new Set(["AQUIRAZ","CAUCAIA","EUSEBIO","GUAIUBA","ITAITINGA","MARACANAU"]);
 
@@ -2079,7 +2086,7 @@ app.post("/api/admin/uploads/product-image", requireAdmin, async (req, res) => {
     }
 });
 
-function sanitizeProductPayload(b={}){return{name:safeString(b.name),sku:safeString(b.sku)||null,category:safeString(b.category)||"bolsas",price:Number(b.price||0),sale_price:b.sale_price===null||b.sale_price===""||b.sale_price===undefined?null:Number(b.sale_price),description:safeString(b.description),images:Array.isArray(b.images)?b.images:[],shipping_weight_kg:b.shipping_weight_kg===null||b.shipping_weight_kg===""||b.shipping_weight_kg===undefined?null:Number(b.shipping_weight_kg),shipping_height_cm:b.shipping_height_cm===null||b.shipping_height_cm===""||b.shipping_height_cm===undefined?null:Number(b.shipping_height_cm),shipping_width_cm:b.shipping_width_cm===null||b.shipping_width_cm===""||b.shipping_width_cm===undefined?null:Number(b.shipping_width_cm),shipping_length_cm:b.shipping_length_cm===null||b.shipping_length_cm===""||b.shipping_length_cm===undefined?null:Number(b.shipping_length_cm),is_new:Boolean(b.is_new),is_sale:Boolean(b.is_sale),active:b.active!==false}}
+function sanitizeProductPayload(b={}){return{name:safeString(b.name),sku:safeString(b.sku)||null,category:safeString(b.category)||"bolsas",price:Number(b.price||0),sale_price:b.sale_price===null||b.sale_price===""||b.sale_price===undefined?null:Number(b.sale_price),description:safeString(b.description),images:Array.isArray(b.images)?b.images:[],shipping_weight_kg:b.shipping_weight_kg===null||b.shipping_weight_kg===""||b.shipping_weight_kg===undefined?null:Number(b.shipping_weight_kg),shipping_height_cm:b.shipping_height_cm===null||b.shipping_height_cm===""||b.shipping_height_cm===undefined?null:Number(b.shipping_height_cm),shipping_width_cm:b.shipping_width_cm===null||b.shipping_width_cm===""||b.shipping_width_cm===undefined?null:Number(b.shipping_width_cm),shipping_length_cm:b.shipping_length_cm===null||b.shipping_length_cm===""||b.shipping_length_cm===undefined?null:Number(b.shipping_length_cm),is_new:Boolean(b.is_new),is_sale:Boolean(b.is_sale),is_presale:Boolean(b.is_presale),active:b.active!==false}}
 app.post("/api/admin/products",requireAdmin,async(req,res)=>{try{publicCache.delete("catalog");const p=sanitizeProductPayload(req.body);if(!p.name)return res.status(400).json({success:false,message:"Informe o nome do produto."});const d=await supabaseRequest("products",{method:"POST",body:JSON.stringify(p)});return res.status(201).json({success:true,product:d?.[0]||d})}catch(e){console.error("Admin products POST:",e);return res.status(500).json({success:false,message:e.message})}});
 app.put("/api/admin/products/:id",requireAdmin,async(req,res)=>{try{publicCache.delete("catalog");const p=sanitizeProductPayload(req.body);if(!p.name)return res.status(400).json({success:false,message:"Informe o nome do produto."});const d=await supabaseRequest(`products?id=eq.${encodeURIComponent(req.params.id)}`,{method:"PATCH",body:JSON.stringify(p)});return res.json({success:true,product:d?.[0]||d})}catch(e){console.error("Admin products PUT:",e);return res.status(500).json({success:false,message:e.message})}});
 app.delete("/api/admin/products/:id",requireAdmin,async(req,res)=>{
@@ -3063,6 +3070,14 @@ async function syncProductWithOlist(product, ctx) {
     const snap = (variant, data) => { state.snapshot.variants[variant.id] = { p: product.id, at: now, ...data }; };
     const live = variants.filter(variant => variant.active !== false && safeString(variant.sku));
 
+    // Pré-venda: as bolsas ainda não chegaram; estoque, preço e cores ficam como no painel
+    // até a pré-venda ser desmarcada.
+    if (product.is_presale) {
+        state.snapshot.products[product.id] = { at: now, st: "pre_venda", price: null, promo: null };
+        live.forEach(variant => snap(variant, { st: "pre_venda", site: Number(variant.stock || 0) }));
+        return;
+    }
+
     // 1. A peça da Olist de cada cor (pelo SKU) e o produto pai dela.
     const sources = new Map();   // id na Olist do produto pai (ou da peça avulsa) → detalhe
     const sourceOf = new Map();  // cor do site → id da fonte
@@ -3255,7 +3270,7 @@ async function syncOlistStockBatch({ trigger = "agendada", calls = WORKER_CALL_L
         const since = new Date(Date.now() - OLIST_PENDING_SALE_DAYS * 24 * 60 * 60 * 1000).toISOString();
         const [products, pendingRows, skuRows] = await Promise.all([
             supabaseRequest(
-                "products?select=id,name,price,sale_price,is_sale,product_variants(id,color,sku,stock,active,olist_product_id)" +
+                "products?select=id,name,price,sale_price,is_sale,is_presale,product_variants(id,color,sku,stock,active,olist_product_id)" +
                 "&active=eq.true" + (cycle.after ? "&id=gt." + encodeURIComponent(cycle.after) : "") +
                 "&order=id.asc&limit=" + OLIST_SYNC_PRODUCT_PAGE,
                 { method: "GET" }
@@ -3381,7 +3396,7 @@ function olistStockStatusPayload(state) {
 // Conferência para o painel: cada produto ativo do site, com o que a última rodada viu na Olist.
 async function olistConferenceRows(state) {
     const products = await supabaseRequest(
-        "products?select=id,name,price,sale_price,is_sale,product_variants(id,color,sku,stock,active)&active=eq.true&order=name.asc",
+        "products?select=id,name,price,sale_price,is_sale,is_presale,product_variants(id,color,sku,stock,active)&active=eq.true&order=name.asc",
         { method: "GET" }
     );
     const snapshot = state.snapshot || { products: {}, variants: {} };
@@ -3390,6 +3405,7 @@ async function olistConferenceRows(state) {
         return {
             id: product.id,
             name: product.name,
+            presale: product.is_presale === true,
             price: Number(product.price),
             sale_price: product.is_sale && product.sale_price !== null ? Number(product.sale_price) : null,
             olist: seen && { st: seen.st, price: seen.price, promo: seen.promo, note: seen.note || "", at: seen.at },
@@ -4347,7 +4363,7 @@ app.post(
             const priceIds = [...new Set(normalizedItems.filter(item => String(item.sku || "").toUpperCase() !== "FRETE").map(priceKey))];
             const priceRows = priceIds.length ? await supabaseRequest(
                 "products?id=in.(" + priceIds.map(encodeURIComponent).join(",") + ")" +
-                "&active=eq.true&select=id,name,price,sale_price,is_sale"
+                "&active=eq.true&select=id,name,price,sale_price,is_sale,is_presale"
             ) : [];
             const pricedProducts = new Map((Array.isArray(priceRows) ? priceRows : []).map(row => [String(row.id).toLowerCase(), row]));
             for (const item of normalizedItems) {
@@ -4361,6 +4377,7 @@ app.post(
                     return res.status(400).json({success:false,message:"Produto sem preço válido."});
                 }
                 item.price = Number(serverPrice.toFixed(2));
+                item.presale = product.is_presale === true;
                 item.name = product.name || item.name;
                 item.description = product.name || item.description;
             }
@@ -4427,6 +4444,11 @@ app.post(
                     });
                 }
             }
+
+            // Pedido com peça em pré-venda: prazo de pelo menos PRESALE_MIN_BUSINESS_DAYS dias úteis.
+            const hasPresale = productItems.some(item => item.presale);
+            const baseDeliveryDays = Number(shippingOption.delivery_days || shippingOption.delivery_max_days) || null;
+            const deliveryDays = hasPresale ? Math.max(PRESALE_MIN_BUSINESS_DAYS, baseDeliveryDays || 0) : baseDeliveryDays;
 
             // Frete grátis em Fortaleza e região a partir de R$ 599 nas peças (preço de tabela).
             const productsSubtotal = productItems.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0);
@@ -4517,8 +4539,9 @@ app.post(
             // A conferência usa só as chamadas que sobram na requisição: cada peça já usou
             // 2 (variação e frete) e o resto do pedido usa umas 10 (preços, cotação do frete,
             // número do pedido, pedido, itens, InfinitePay e folga).
+            // Peças em pré-venda ainda não chegaram: o estoque delas é o do site, não o da Olist.
             const olistShortage = await checkCartAgainstOlistStock(
-                checkedVariants,
+                checkedVariants.filter(entry => !entry.item.presale),
                 createCallBudget(WORKER_CALL_LIMIT - 10 - 2 * checkedVariants.length)
             );
             if (olistShortage) {
@@ -4623,7 +4646,7 @@ app.post(
                     value: Number(shippingValue.toFixed(2)),
                     service_id: shippingOption.id,
                     service_name: shippingOption.name,
-                    delivery_days: shippingOption.delivery_days || shippingOption.delivery_max_days || null
+                    delivery_days: deliveryDays
                 },
 
                 created_at:
@@ -4668,7 +4691,7 @@ app.post(
                     shipping: Number(shippingValue.toFixed(2)),
                     shipping_service_id: shippingOption.id,
                     shipping_service_name: shippingOption.name,
-                    shipping_delivery_days: shippingOption.delivery_days || shippingOption.delivery_max_days || null,
+                    shipping_delivery_days: deliveryDays,
                     total: checkoutTotal,
                     status: "pending",
                     payment_method: paymentMethod,
@@ -5717,12 +5740,13 @@ function productSeoUrl(product) {
 }
 
 function productAvailabilityForSchema(product) {
-    return Number(product.stock_total || 0) > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock";
+    if (Number(product.stock_total || 0) <= 0) return "https://schema.org/OutOfStock";
+    return product.is_presale ? "https://schema.org/PreOrder" : "https://schema.org/InStock";
 }
 
 async function getPublicProductsForSeo() {
     const rows = await supabaseRequest(
-        "products?active=eq.true&select=id,name,category,description,price,sale_price,is_sale,images,updated_at,product_variants(stock,active)",
+        "products?active=eq.true&select=id,name,category,description,price,sale_price,is_sale,is_presale,images,updated_at,product_variants(stock,active)",
         { method: "GET" }
     );
 
@@ -5763,7 +5787,7 @@ app.get("/produto/:id/:slug", async (req, res) => {
     try {
         const id = safeString(req.params.id);
         const rows = await supabaseRequest(
-            "products?id=eq." + encodeURIComponent(id) + "&active=eq.true&select=id,name,category,description,price,sale_price,is_sale,images,updated_at,product_variants(stock,active)",
+            "products?id=eq." + encodeURIComponent(id) + "&active=eq.true&select=id,name,category,description,price,sale_price,is_sale,is_presale,images,updated_at,product_variants(stock,active)",
             { method: "GET" }
         );
         const product = Array.isArray(rows) ? rows[0] : null;
@@ -5811,7 +5835,8 @@ ${image ? `<img src="${xmlEscape(image)}" alt="${xmlEscape(product.name)}">` : "
 <p>${xmlEscape(description).replace(/\n/g, "<br>")}</p>
 <p><strong>Preço: R$ ${price.toFixed(2).replace(".", ",")}</strong></p>
 ${product.is_sale ? '<p class="seo-sale-notice"><strong>Sale:</strong> produtos da Sale não acompanham dustbag.</p>' : ""}
-<p>${stockTotal > 0 ? "Disponível para compra." : "Produto esgotado."}</p>
+${product.is_presale ? '<p class="seo-sale-notice"><strong>Pré-venda — garanta a sua!</strong> Esta bolsa ainda vai chegar: o prazo de entrega é de pelo menos ' + PRESALE_MIN_BUSINESS_DAYS + ' dias úteis.</p>' : ""}
+<p>${stockTotal > 0 ? (product.is_presale ? "Disponível na pré-venda." : "Disponível para compra.") : "Produto esgotado."}</p>
 <p><a href="/">Voltar para a MONTÊ</a></p>
 </main>
 </body>
