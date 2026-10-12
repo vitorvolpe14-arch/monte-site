@@ -1046,14 +1046,14 @@ async function sendWhatsAppAdminNewOrderNotification(order) {
 
 function formatOrderCode(value) {
     const raw = safeString(value);
-    if (/^\d{4}$/.test(raw)) return "MONTÊ-" + raw;
-    if (/^MONTÊ-\d{4}$/i.test(raw)) return "MONTÊ-" + raw.slice(-4);
+    if (/^\d{4,8}$/.test(raw)) return "MONTÊ-" + raw;
+    if (/^MONTÊ-\d{4,8}$/i.test(raw)) return "MONTÊ-" + raw.replace(/^MONTÊ-/i, "");
     return raw;
 }
 
 function normalizeOrderCode(value) {
     const raw = safeString(value).trim();
-    const match = raw.match(/^MONT[EÊ]-?(\d{4})$/i);
+    const match = raw.match(/^MONT[EÊ]-?(\d{4,8})$/i);
     return match ? match[1] : raw;
 }
 
@@ -1114,6 +1114,18 @@ function trackingStatusLabel(status) {
 }
 
 
+// Comprovante da InfinitePay: só https e só nos domínios dela.
+function infinitePayReceiptUrl(value) {
+    try {
+        const url = new URL(safeString(value));
+        const host = url.hostname.toLowerCase();
+        const allowed = ["infinitepay.io", "infinitepay.com.br", "infinitepay.com"].some(domain => host === domain || host.endsWith("." + domain));
+        return url.protocol === "https:" && allowed ? url.href : null;
+    } catch {
+        return null;
+    }
+}
+
 async function sendAdminSaleNotificationEmail(order) {
     if (!order?.order_nsu) return { sent: false, status: "invalid_order" };
     if (!RESEND_API_KEY || !RESEND_FROM_EMAIL) return { sent: false, status: "not_configured" };
@@ -1132,7 +1144,7 @@ async function sendAdminSaleNotificationEmail(order) {
             const color = safeString(item.variant_color || item.color);
             const qty = Math.max(1, Number(item.quantity || 1));
             const unit = Number(item.price ?? item.unit_price ?? 0);
-            return qty + "x " + name + (color ? " (" + color + ")" : "") + (item.presale === true ? " — PRÉ-VENDA" : "") + " — R$ " + unit.toFixed(2).replace(".", ",");
+            return qty + "x " + escapeEmailHtml(name) + (color ? " (" + escapeEmailHtml(color) + ")" : "") + (item.presale === true ? " — PRÉ-VENDA" : "") + " — R$ " + unit.toFixed(2).replace(".", ",");
         }).join("<br>")
         : "Consultar itens do pedido no painel.";
     const html =
@@ -1142,6 +1154,7 @@ async function sendAdminSaleNotificationEmail(order) {
         "<div style=\"background:#fff;padding:30px;\">" +
         "<p style=\"margin:0 0 8px;font-size:11px;letter-spacing:2px;color:#777;\">NOVA VENDA</p>" +
         "<h1 style=\"margin:0 0 22px;font-size:28px;font-weight:500;\">Pagamento confirmado</h1>" +
+        (order.pix_paid_by_card ? "<p style=\"padding:14px;background:#fff4e5;border-left:3px solid #b35c00;font-size:14px;line-height:1.6;\"><strong>Atenção:</strong> este pedido foi feito com o desconto de 5% do Pix, mas a cliente pagou com cartão no link da InfinitePay. Confira antes de enviar.</p>" : "") +
         "<div style=\"padding:18px;background:#f7f5f2;margin-bottom:20px;\"><strong style=\"font-size:20px;\">" + escapeEmailHtml(orderCode) + "</strong><br><span style=\"font-size:14px;color:#555;\">Total: <strong>R$ " + total.toFixed(2).replace(".", ",") + "</strong></span></div>" +
         "<h3 style=\"font-size:14px;letter-spacing:1px;\">CLIENTE</h3>" +
         "<p style=\"line-height:1.7;font-size:14px;\">Nome: " + escapeEmailHtml(customerName) + "<br>E-mail: " + escapeEmailHtml(customerEmail) + "<br>Telefone: " + escapeEmailHtml(customerPhone) + "<br>Endereço: " + escapeEmailHtml(address) + "</p>" +
@@ -1156,8 +1169,8 @@ async function sendAdminSaleNotificationEmail(order) {
         "\nPagamento: " + paymentMethod + "\nTotal: R$ " + total.toFixed(2).replace(".", ",");
     const response = await fetch("https://api.resend.com/emails", {
         method:"POST",
-        headers:{"Authorization":"Bearer "+RESEND_API_KEY,"Content-Type":"application/json","Accept":"application/json"},
-        body:JSON.stringify({from:RESEND_FROM_NAME+" <"+RESEND_FROM_EMAIL+">",to:recipients,subject:"MONTÊ — NOVA VENDA "+orderCode+" — R$ "+total.toFixed(2).replace(".", ","),text,html})
+        headers:{"Authorization":"Bearer "+RESEND_API_KEY,"Content-Type":"application/json","Accept":"application/json","Idempotency-Key":"monte-admin-sale-"+String(order.order_nsu)},
+        body:JSON.stringify({from:RESEND_FROM_NAME+" <"+RESEND_FROM_EMAIL+">",to:recipients,subject:(order.pix_paid_by_card?"⚠️ PIX PAGO NO CARTÃO — ":"")+"MONTÊ — NOVA VENDA "+orderCode+" — R$ "+total.toFixed(2).replace(".", ","),text,html})
     });
     const responseText=await response.text();
     let data={}; try{data=responseText?JSON.parse(responseText):{}}catch{data={raw:responseText};}
@@ -1334,6 +1347,12 @@ function shippingChargeFor(option, productsSubtotal) {
     return FREE_SHIPPING_OPTION_IDS.has(option?.id) && productsSubtotal >= FREE_SHIPPING_MIN ? 0 : price;
 }
 
+// CEPs de Fortaleza e da região metropolitana começam com 60 ou 61 (60000-000 a 61999-999).
+function isLocalDeliveryCep(cep) {
+    const digits = safeString(cep).replace(/\D/g, "");
+    return digits.length === 8 && /^6[01]/.test(digits);
+}
+
 function localShippingOption(city, state) {
     const normalized = normalizeCity(city);
     const normalizedState = safeString(state).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
@@ -1497,15 +1516,18 @@ app.use(
 
 // Fotos chegam em base64 só nas rotas de upload do painel (até 20 MB por foto). O resto da
 // API aceita no máximo 1 MB por requisição: menos espaço para abuso e menos CPU no Cloudflare.
-app.use("/api/admin/uploads", express.json({ limit: "30mb" }));
+// Corpo grande (fotos) só é lido depois de conferir a sessão do painel.
+app.use("/api/admin/uploads", requireAdmin, express.json({ limit: "30mb" }));
 app.use(express.json({ limit: "1mb" }));
 
 /* =====================================================
    RATE LIMITING — proteção contra abuso de endpoints
 ===================================================== */
-// IP real do visitante: no Cloudflare vem no cabeçalho CF-Connecting-IP.
+// IP real do visitante. No Workers o Cloudflare preenche CF-Connecting-IP (o visitante não
+// consegue trocar); fora dele o cabeçalho viria do próprio visitante e não vale.
 function clientIp(req) {
-    return safeString(req.headers["cf-connecting-ip"]) || req.ip || "unknown";
+    if (IS_WORKERS) return safeString(req.headers["cf-connecting-ip"]) || "unknown";
+    return req.ip || "unknown";
 }
 
 function createRateLimiter({ windowMs, max, keyFn = req => clientIp(req) }) {
@@ -1771,6 +1793,27 @@ function analyticsClientInfo(req){
     os:/windows/i.test(ua)?"Windows":/mac os|macintosh/i.test(ua)?"macOS":/android/i.test(ua)?"Android":/iphone|ipad|ipod/i.test(ua)?"iOS":/linux/i.test(ua)?"Linux":"Outro"
   };
 }
+// O que o visitante manda para o analytics fica pequeno: objetos acima do limite viram {}.
+function smallJson(value, maxChars) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    try { return JSON.stringify(value).length <= maxChars ? value : {}; } catch { return {}; }
+}
+// Itens da sacola guardados para o painel e para o lembrete: só os campos usados, com tamanho limitado.
+function cartSnapshotItems(items) {
+    const money = value => Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
+    return (Array.isArray(items) ? items : []).slice(0, 30).filter(item => item && typeof item === "object").map(item => ({
+        id: safeString(item.id || item.product_id).slice(0, 80),
+        product_id: safeString(item.product_id || item.id).slice(0, 80),
+        product_name: safeString(item.product_name || item.name).slice(0, 160),
+        sku: safeString(item.sku).slice(0, 80) || null,
+        variant_id: safeString(item.variant_id).slice(0, 80) || null,
+        variant_color: safeString(item.variant_color || item.color).slice(0, 80) || null,
+        quantity: Math.min(20, Math.max(1, Math.floor(Number(item.quantity) || 1))),
+        unit_price: money(item.unit_price ?? item.price),
+        total_price: money(item.total_price)
+    }));
+}
+
 app.post("/api/analytics/event",analyticsRateLimit,async(req,res)=>{
   try{
     const b=req.body||{}, allowed=["page_view","view_product","add_to_cart","remove_from_cart","begin_checkout","checkout_started","checkout_completed","purchase"];
@@ -1787,10 +1830,10 @@ app.post("/api/analytics/event",analyticsRateLimit,async(req,res)=>{
       await supabaseRequest("site_sessions?id=eq."+encodeURIComponent(session.id),{method:"PATCH",body:JSON.stringify({last_seen_at:now,...info})});
     }
     await supabaseRequest("site_events",{method:"POST",body:JSON.stringify({
-      session_id:session.id,visitor_id,event_name,path:safeString(b.path).slice(0,500),product_id:safeString(b.product_id)||null,
-      product_name:safeString(b.product_name).slice(0,160)||null,variant_id:safeString(b.variant_id)||null,
+      session_id:session.id,visitor_id,event_name,path:safeString(b.path).slice(0,500),product_id:safeString(b.product_id).slice(0,80)||null,
+      product_name:safeString(b.product_name).slice(0,160)||null,variant_id:safeString(b.variant_id).slice(0,80)||null,
       quantity:Number.isFinite(Number(b.quantity))?Math.max(1,Math.min(100,Number(b.quantity))):null,
-      value:Number.isFinite(Number(b.value))?Number(b.value):null,metadata:b.metadata&&typeof b.metadata==="object"?b.metadata:{}
+      value:Number.isFinite(Number(b.value))?Number(b.value):null,metadata:smallJson(b.metadata,2000)
     })});
     res.status(201).json({success:true});
   }catch(e){console.error("Analytics:",e);res.status(400).json({success:false,message:"Não foi possível registrar o evento."})}
@@ -1802,7 +1845,7 @@ app.post("/api/analytics/cart",analyticsRateLimit,async(req,res)=>{
     const ses=await supabaseRequest("site_sessions?session_id=eq."+encodeURIComponent(session_key)+"&select=id",{method:"GET"});
     const session_id=Array.isArray(ses)?ses[0]?.id:null;
     const subtotal=Math.max(0,Number(b.subtotal||0)),shipping=Math.max(0,Number(b.shipping||0)),total=Math.max(0,Number(b.total||subtotal+shipping));
-    const row={visitor_id,session_id,cart_key:session_key,customer_name:safeString(b.customer_name).slice(0,160)||null,customer_email:safeString(b.customer_email).slice(0,160)||null,customer_phone:safeString(b.customer_phone).slice(0,60)||null,items:Array.isArray(b.items)?b.items.slice(0,50):[],subtotal,shipping,total,status:"active",last_activity_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+    const row={visitor_id,session_id,cart_key:session_key,customer_name:safeString(b.customer_name).slice(0,160)||null,customer_email:safeString(b.customer_email).trim().toLowerCase().slice(0,160)||null,customer_phone:safeString(b.customer_phone).slice(0,60)||null,items:cartSnapshotItems(b.items),subtotal,shipping,total,status:"active",last_activity_at:new Date().toISOString(),updated_at:new Date().toISOString()};
     const updated=await supabaseRequest("cart_snapshots?cart_key=eq."+encodeURIComponent(session_key),{method:"PATCH",body:JSON.stringify(row)});
     if(!Array.isArray(updated)||!updated.length) await supabaseRequest("cart_snapshots",{method:"POST",body:JSON.stringify(row)});
     res.status(201).json({success:true});
@@ -4004,11 +4047,15 @@ if (!IS_WORKERS) setInterval(
 app.post("/api/frete/cotacao", shippingQuoteRateLimit, async (req,res)=>{
     try{
         const toCep=safeString(req.body?.to_cep||req.body?.cep).replace(/\D/g,"");
-        const items=Array.isArray(req.body?.items)?req.body.items:[];
+        // Cada produto vira uma consulta ao banco: no máximo 20, e só ids válidos.
+        const items=(Array.isArray(req.body?.items)?req.body.items:[])
+            .filter(item=>item&&typeof item==="object"&&/^[0-9a-f-]{36}$/i.test(safeString(item.id||item.product_id)))
+            .slice(0,20)
+            .map(item=>({id:safeString(item.id||item.product_id),quantity:Math.min(20,Math.max(1,Math.floor(Number(item.quantity)||1)))}));
         const city=normalizeCity(req.body?.city||"");
         const state=safeString(req.body?.state||"").toUpperCase();
         if(toCep.length!==8)return res.status(400).json({success:false,message:"CEP de destino inválido."});
-        const local=localShippingOption(city,state);
+        const local=isLocalDeliveryCep(toCep)?localShippingOption(city,state):null;
         if(local)return res.json({success:true,source:"monte",options:[local]});
         const options=await calculateSuperfreteQuotes({toCep,items});
         if(!options.length)return res.status(422).json({success:false,message:"Nenhuma modalidade de frete disponível para este CEP."});
@@ -4203,6 +4250,17 @@ app.post(
                 safeString(address.city).length > 100 ||
                 safeString(address.state).length > 30
             ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Confira os dados informados no checkout."
+                });
+            }
+
+            // Cada campo do cliente e do endereço precisa ser texto (um objeto passaria pelos
+            // limites de tamanho e iria inteiro para o pedido e para a InfinitePay).
+            const customerFields = [customer.name, customer.email, customer.phone, customer.cpf, customer.whatsapp_phone];
+            const addressFields = ["cep", "street", "number", "complement", "neighborhood", "city", "state"].map(key => address[key]);
+            if ([...customerFields, ...addressFields].some(value => value !== undefined && value !== null && typeof value !== "string" && typeof value !== "number")) {
                 return res.status(400).json({
                     success: false,
                     message: "Confira os dados informados no checkout."
@@ -4417,6 +4475,13 @@ app.post(
             const deliveryCity = normalizeCity(customer.address.city);
             const deliveryState = safeString(customer.address.state).toUpperCase();
             const localShipping = localShippingOption(deliveryCity, deliveryState);
+            // A entrega MONTÊ (e o frete grátis dela) vale só para CEP de Fortaleza e região.
+            if (localShipping && !isLocalDeliveryCep(customer.address.cep)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "O CEP informado não é de Fortaleza ou da região metropolitana. Confira o CEP e a cidade."
+                });
+            }
             let shippingOption = null;
 
             if (localShipping) {
@@ -4531,8 +4596,24 @@ app.post(
                 }
 
                 item.variant_color = variant.color;
-                item.variant_sku = variant.sku || item.sku || null;
+                // O SKU vem do cadastro, nunca do navegador (ele vai para a Olist e para o pedido).
+                item.variant_sku = variant.sku || null;
+                item.sku = variant.sku || null;
                 checkedVariants.push({ item, variant });
+            }
+
+            // A mesma cor em mais de uma linha da sacola: confere a soma das quantidades.
+            const quantityByVariant = new Map();
+            for (const { item, variant } of checkedVariants) {
+                const total = (quantityByVariant.get(variant.id) || 0) + Number(item.quantity || 0);
+                quantityByVariant.set(variant.id, total);
+                if (total > Number(variant.stock || 0)) {
+                    return res.status(409).json({
+                        success: false,
+                        message: "Estoque insuficiente para " + item.description +
+                            (item.variant_color ? " (" + item.variant_color + ")" : "") + "."
+                    });
+                }
             }
 
             // A peça pode ter sido vendida na Olist depois da última sincronização.
@@ -4565,7 +4646,7 @@ app.post(
 
             const orderCodeRows = await supabaseRequest("rpc/next_monte_order_code", { method: "POST" });
             const orderCode = Array.isArray(orderCodeRows) ? orderCodeRows[0] : orderCodeRows;
-            if (!orderCode || !/^\d{4}$/.test(String(orderCode))) {
+            if (!orderCode || !/^\d{4,8}$/.test(String(orderCode))) {
                 throw new Error("Não foi possível gerar o número de pedido da MONTÊ.");
             }
 
@@ -5217,31 +5298,9 @@ app.post(
                 order.transaction_nsu === transactionNsu &&
                 order.stock_decremented === true
             ) {
-                let olistRetry = {status:"skipped"};
-                if (order.status === "paid" && order.olist_sync_status !== "completed") {
-                    try {
-                        const result = await syncPaidOrderToOlist({
-                            ...order,
-                            payment_method: order.payment_method || "credit_card",
-                            transaction_nsu: transactionNsu,
-                            customer_cpf: order.customer_cpf,
-                            customer_whatsapp: order.customer_whatsapp
-                        });
-                        olistRetry = {status:"completed", result};
-                    } catch (olistError) {
-                        olistRetry = {
-                            status:"error",
-                            error:String(olistError.message || olistError)
-                        };
-                        await supabaseRequest(
-                            "orders?id=eq." + encodeURIComponent(order.id),
-                            {method:"PATCH",body:JSON.stringify({
-                                olist_sync_status:"error",
-                                olist_sync_error:olistRetry.error
-                            })}
-                        ).catch(()=>{});
-                    }
-                }
+                // A Olist fica com o envio automático (cron a cada minuto, com trava): uma
+                // repetição do aviso não dispara outro envio, que poderia duplicar o pedido lá.
+                const olistRetry = {status: order.olist_sync_status === "completed" ? "completed" : "queued"};
 
                 processedPayments.add(orderNsu);
                 const confirmationEmail = await ensureOrderConfirmationEmail(order);
@@ -5296,8 +5355,13 @@ app.post(
             }
 
             const payment = verification.data;
-            const paidAmount = Number(payment.paid_amount ?? webhook.paid_amount ?? 0);
+            const paidAmount = Number(payment.paid_amount ?? 0);
             const resolvedPaymentMethod = payment.capture_method === "pix" ? "pix" : "credit_card";
+            // Pedido com o desconto do Pix pago com cartão no link da InfinitePay: a venda vale
+            // (o valor pago confere), mas o aviso de venda destaca para a loja decidir.
+            const pixPaidByCard = safeString(order.payment_method).toLowerCase() === "pix" && resolvedPaymentMethod !== "pix";
+            // Comprovante só do domínio da InfinitePay (o corpo do aviso pode ser forjado).
+            const receiptUrl = infinitePayReceiptUrl(payment.receipt_url || webhook.receipt_url);
 
             // IMPORTANTE: Olist é integração secundária.
             // A confirmação da venda MONTÊ não pode depender do ERP.
@@ -5315,9 +5379,15 @@ app.post(
             // Persiste o pagamento. Em caso de webhook simultâneo, a restrição
             // UNIQUE de transaction_nsu evita duplicidade.
             const existingPayments = await supabaseRequest(
-                `payments?transaction_nsu=eq.${encodeURIComponent(transactionNsu)}&select=id`,
+                `payments?transaction_nsu=eq.${encodeURIComponent(transactionNsu)}&select=id,order_id`,
                 { method: "GET" }
             );
+
+            // A mesma transação não pode confirmar dois pedidos.
+            if (Array.isArray(existingPayments) && existingPayments[0]?.id && String(existingPayments[0].order_id) !== String(order.id)) {
+                console.error("❌ Transação já usada em outro pedido:", orderNsu);
+                return res.status(409).json({ success: false, message: "Pagamento já vinculado a outro pedido." });
+            }
 
             if (!Array.isArray(existingPayments) || !existingPayments[0]?.id) {
                 try {
@@ -5332,9 +5402,9 @@ app.post(
                             paid_amount: Number.isFinite(paidAmount)
                                 ? paidAmount / 100
                                 : null,
-                            installments: payment.installments || webhook.installments || null,
-                            capture_method: payment.capture_method || webhook.capture_method || null,
-                            receipt_url: webhook.receipt_url || null,
+                            installments: payment.installments || null,
+                            capture_method: payment.capture_method || null,
+                            receipt_url: receiptUrl,
                             status: "paid",
                             webhook_data: {
                                 webhook,
@@ -5360,9 +5430,9 @@ app.post(
                         payment_method: resolvedPaymentMethod,
                         invoice_slug: invoiceSlug,
                         transaction_nsu: transactionNsu,
-                        receipt_url: webhook.receipt_url || null,
-                        installments: payment.installments || webhook.installments || null,
-                        capture_method: payment.capture_method || webhook.capture_method || null,
+                        receipt_url: receiptUrl,
+                        installments: payment.installments || null,
+                        capture_method: payment.capture_method || null,
                         paid_amount: Number.isFinite(paidAmount)
                             ? paidAmount / 100
                             : null,
@@ -5389,8 +5459,10 @@ app.post(
                 customer_phone: order.customer_phone, customer_whatsapp: order.customer_whatsapp,
                 customer_address: order.customer_address, payment_method: order.payment_method,
                 shipping: order.shipping, total: order.total, items: order.items,
-                admin_sale_email_sent_at: order.admin_sale_email_sent_at
+                admin_sale_email_sent_at: order.admin_sale_email_sent_at,
+                pix_paid_by_card: pixPaidByCard
             });
+            if (pixPaidByCard) console.warn("⚠️ Pedido com desconto do Pix pago com cartão:", orderNsu);
 
             const adminWhatsApp = await ensureWhatsAppAdminNewOrderNotification({
                 ...order,
@@ -5451,100 +5523,36 @@ app.post(
 );
 
 
-/* =====================================================
-   WEBHOOK PIX — CHECKOUT INDEPENDENTE INFINITEPAY
-   Recebe somente pagamentos Pix do checkout independente.
-   A confirmação é validada pelo payment_check da InfinitePay.
-===================================================== */
-app.post("/webhook-pix", infinitePayWebhookRateLimit, async (req, res) => {
-    try {
-        const webhook = req.body || {};
-        const orderNsu = safeString(webhook.order_nsu);
-        const transactionNsu = safeString(webhook.transaction_nsu);
-        const invoiceSlug = safeString(webhook.invoice_slug || webhook.slug);
-        const captureMethod = safeString(webhook.capture_method).toLowerCase();
 
-        console.log("PIX — Webhook InfinitePay recebido:", orderNsu);
-
-        if (!orderNsu || !transactionNsu || !invoiceSlug) {
-            return res.status(400).json({
-                success: false,
-                paid: false,
-                message: "Webhook Pix sem order_nsu, transaction_nsu ou invoice_slug."
-            });
-        }
-
-        if (captureMethod && captureMethod !== "pix") {
-            return res.status(400).json({
-                success: false,
-                paid: false,
-                message: "Este endpoint aceita somente pagamentos Pix."
-            });
-        }
-
-        const webhookAmount = Number(webhook.amount);
-        if (!Number.isFinite(webhookAmount) || webhookAmount <= 0) {
-            return res.status(400).json({
-                success: false,
-                paid: false,
-                message: "Valor do pagamento não informado."
-            });
-        }
-
-        const verification = await verifyInfinitePayPayment({
-            orderNsu,
-            transactionNsu,
-            invoiceSlug,
-            expectedAmount: webhookAmount / 100
-        });
-
-        if (!verification.verified) {
-            console.warn("PIX — pagamento ainda não confirmado:", orderNsu);
-            return res.status(400).json({
-                success: false,
-                paid: false,
-                message: "Pagamento Pix ainda não confirmado pela InfinitePay."
-            });
-        }
-
-        const payment = verification.data;
-        if (safeString(payment.capture_method).toLowerCase() !== "pix") {
-            return res.status(400).json({
-                success: false,
-                paid: false,
-                message: "A confirmação da InfinitePay não corresponde a Pix."
-            });
-        }
-
-        console.log("PIX — pagamento confirmado pela InfinitePay:", {
-            order_nsu: orderNsu,
-            transaction_nsu: transactionNsu,
-            amount: Number(payment.amount || 0) / 100
-        });
-
-        return res.status(200).json({
-            success: true,
-            paid: true,
-            payment_method: "pix",
-            order_nsu: orderNsu,
-            transaction_nsu: transactionNsu,
-            invoice_slug: invoiceSlug,
-            amount: Number(payment.amount || 0) / 100,
-            paid_amount: Number(payment.paid_amount || 0) / 100
-        });
-    } catch (error) {
-        console.error("PIX — erro no webhook independente:", error);
-        return res.status(500).json({
-            success: false,
-            paid: false,
-            message: "Erro interno na confirmação do Pix."
-        });
-    }
-});
 
 /* =====================================================
    MINHAS COMPRAS — CONSULTA SEGURA POR PEDIDO + E-MAIL
 ===================================================== */
+
+// Os números de pedido são curtos e seguidos: quem souber o e-mail de alguém poderia testar
+// números até achar. Depois de ORDER_LOOKUP_MAX_FAILURES erros para o mesmo e-mail, a consulta
+// fica bloqueada por uma hora (guardado no Supabase, vale para todas as instâncias do Worker).
+const ORDER_LOOKUP_MAX_FAILURES = 5;
+const ORDER_LOOKUP_LOCK_MS = 60 * 60 * 1000;
+function orderLookupKey(email) {
+    return "order_lookup:" + crypto.createHash("sha256").update(email).digest("hex").slice(0, 40);
+}
+async function orderLookupBlocked(email) {
+    const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + orderLookupKey(email) + "&select=value&limit=1", { method: "GET" });
+    const value = rows?.[0]?.value || {};
+    return Number(value.count) >= ORDER_LOOKUP_MAX_FAILURES && Date.now() - Number(value.first_at || 0) < ORDER_LOOKUP_LOCK_MS;
+}
+async function recordOrderLookupFailure(email) {
+    const key = orderLookupKey(email);
+    const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + key + "&select=value&limit=1", { method: "GET" });
+    const value = rows?.[0]?.value || {};
+    const fresh = !(Date.now() - Number(value.first_at || 0) < ORDER_LOOKUP_LOCK_MS);
+    await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({ key, value: { count: fresh ? 1 : Number(value.count || 0) + 1, first_at: fresh ? Date.now() : Number(value.first_at) } })
+    });
+}
 
 app.get("/api/minhas-compras", orderStatusRateLimit, async (req, res) => {
     try {
@@ -5554,14 +5562,18 @@ app.get("/api/minhas-compras", orderStatusRateLimit, async (req, res) => {
         if (!orderNsu || !email || orderNsu.length > 80 || email.length > 160) {
             return res.status(400).json({ success: false, message: "Informe o número do pedido e o e-mail usado na compra." });
         }
+        if (await orderLookupBlocked(email)) {
+            return res.status(429).json({ success: false, message: "Muitas tentativas para este e-mail. Tente de novo em 1 hora ou fale com a MONTÊ pelo WhatsApp." });
+        }
 
         const rows = await supabaseRequest(
-            `orders?${/^\d{4}$/.test(orderNsu) ? "order_code=eq."+encodeURIComponent(orderNsu) : "order_nsu=eq."+encodeURIComponent(orderNsu)}&customer_email=eq.${encodeURIComponent(email)}&select=id,order_nsu,order_code,customer_name,customer_email,status,total,subtotal,shipping,shipping_carrier,tracking_code,tracking_url,shipping_service_name,created_at,paid_at,processing_at,shipped_at,delivered_at,order_items(product_name,variant_color,sku,quantity,unit_price,total_price)`,
+            `orders?${/^\d{4,8}$/.test(orderNsu) ? "order_code=eq."+encodeURIComponent(orderNsu) : "order_nsu=eq."+encodeURIComponent(orderNsu)}&customer_email=eq.${encodeURIComponent(email)}&select=id,order_nsu,order_code,customer_name,customer_email,status,total,subtotal,shipping,shipping_carrier,tracking_code,tracking_url,shipping_service_name,created_at,paid_at,processing_at,shipped_at,delivered_at,order_items(product_name,variant_color,sku,quantity,unit_price,total_price)`,
             { method: "GET" }
         );
 
         const order = Array.isArray(rows) ? rows[0] : null;
         if (!order) {
+            await recordOrderLookupFailure(email).catch(error => console.warn("Minhas compras — tentativa não registrada:", error.message));
             return res.status(404).json({ success: false, message: "Não encontramos um pedido com esses dados." });
         }
 
@@ -5956,7 +5968,7 @@ const REMINDER_CART_AFTER_MS = 2 * 60 * 60 * 1000;
 const REMINDER_WINDOW_MS = 24 * 60 * 60 * 1000;
 const PENDING_ORDER_EXPIRE_MS = 2 * 24 * 60 * 60 * 1000;
 // Por lembrete: compras posteriores, estoque, e-mail e marcação = 4 chamadas.
-const REMINDER_CALLS_EACH = 4;
+const REMINDER_CALLS_EACH = 5;
 const PAID_ORDER_STATUSES = ["paid", "processing", "shipped", "delivered"];
 const isEmailAddress = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeString(value));
 const isoAgo = ms => encodeURIComponent(new Date(Date.now() - ms).toISOString());
@@ -6062,7 +6074,7 @@ async function expireOldPendingOrders(budget) {
 async function laterOrdersOf(email, since, budget) {
     spend(budget);
     const rows = await supabaseRequest(
-        "orders?customer_email=ilike." + encodeURIComponent(safeString(email)) + "&created_at=gt." + encodeURIComponent(since) + "&select=id,status&limit=10",
+        "orders?customer_email=eq." + encodeURIComponent(safeString(email).trim().toLowerCase()) + "&created_at=gt." + encodeURIComponent(since) + "&select=id,status&limit=10",
         { method: "GET" }
     );
     return Array.isArray(rows) ? rows : [];
@@ -6094,7 +6106,7 @@ async function remindPendingOrders(budget) {
         const items = await availableReminderItems(order.items);
         if (!items.length) { await mark("skipped_sold_out"); continue; }
         const code = formatOrderCode(order.order_code || order.order_nsu);
-        const firstName = safeString(order.customer_name).split(/\s+/)[0] || "";
+        const firstName = reminderFirstName(order.customer_name);
         const url = cartRestoreUrl(items, "pagamento_pendente");
         const pix = safeString(order.payment_method).toLowerCase() === "pix";
         try {
@@ -6129,6 +6141,22 @@ async function remindPendingOrders(budget) {
     return sent;
 }
 
+// Primeiro nome para a saudação, só com letras (o nome vem do que foi digitado no site).
+function reminderFirstName(name) {
+    const first = safeString(name).trim().split(/\s+/)[0] || "";
+    return /^[\p{L}'’-]{1,30}$/u.test(first) ? first : "";
+}
+
+async function cartReminderSentRecently(email, budget) {
+    spend(budget);
+    const rows = await supabaseRequest(
+        "cart_snapshots?customer_email=eq." + encodeURIComponent(safeString(email).trim().toLowerCase()) +
+        "&reminder_status=eq.sent&reminder_sent_at=gt." + isoAgo(7 * 24 * 60 * 60 * 1000) + "&select=id&limit=1",
+        { method: "GET" }
+    );
+    return Array.isArray(rows) && rows.length > 0;
+}
+
 async function remindAbandonedCarts(budget) {
     spend(budget);
     const rows = await supabaseRequest(
@@ -6154,10 +6182,13 @@ async function remindAbandonedCarts(budget) {
         const paid = orders.find(o => PAID_ORDER_STATUSES.includes(o.status));
         if (paid) { await mark("skipped_purchased", { status: "converted", converted_order_id: paid.id }); continue; }
         if (orders.length) { await mark("skipped_has_order"); continue; }
+        // Um lembrete de sacola por e-mail a cada 7 dias: a sacola é salva sem login, então
+        // alguém poderia cadastrar o e-mail de outra pessoa várias vezes.
+        if (await cartReminderSentRecently(cart.customer_email, budget)) { await mark("skipped_recent_reminder"); continue; }
         spend(budget);
         const items = await availableReminderItems(cart.items);
         if (!items.length) { await mark("skipped_sold_out"); continue; }
-        const firstName = safeString(cart.customer_name).split(/\s+/)[0] || "";
+        const firstName = reminderFirstName(cart.customer_name);
         const url = cartRestoreUrl(items, "sacola_abandonada");
         try {
             spend(budget);
