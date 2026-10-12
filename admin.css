@@ -2338,3 +2338,26 @@ input:focus,select:focus,textarea:focus{
 .photo-optimizer p{margin:4px 0 0;max-width:640px}
 .photo-optimizer button[hidden]{display:none}
 @media(max-width:700px){.photo-optimizer{flex-direction:column;align-items:flex-start}}
+/* Olist → site: opções e conferência */
+.olist-sync-options{display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;margin-top:14px}
+.olist-sync-options .field-help{margin:0}
+.olist-conference{margin-top:18px}
+.olist-conference-title{margin:0;font:400 19px Georgia,serif}
+.olist-table td{vertical-align:middle}
+.olist-table .olist-product-row td{background:#fafafa;border-top:1px solid #e4e4e4}
+.olist-table .olist-product-row td small{display:block;max-width:320px}
+.olist-table .olist-diferente td{background:#fff7f5}
+.olist-table td small{display:block;margin-top:4px;color:var(--ad-muted);font-size:11px;white-space:normal;max-width:260px}
+@media (max-width:700px){
+  .olist-table thead{display:none}
+  .olist-table,.olist-table tbody{display:block;width:100%;min-width:0}
+  .olist-table tr{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:12px 10px;border-bottom:1px solid #eee}
+  .olist-table td{display:block;padding:0;border:0;white-space:normal;background:none!important}
+  .olist-table td:empty{display:none}
+  .olist-table tr.olist-product-row{background:#fafafa;border-top:1px solid #e4e4e4}
+  .olist-table .olist-product-row td:first-child{flex-basis:100%}
+  .olist-table tr.olist-diferente{background:#fff7f5}
+  .olist-table td:last-child{flex-basis:100%}
+  .olist-table td,.olist-table .olist-product-row td{max-width:100%;border:0}
+  .olist-table td small,.olist-table .olist-product-row td small{max-width:none}
+}

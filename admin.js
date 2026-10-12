@@ -58,6 +58,7 @@ async function init(){
   const refreshStock=$("refreshStock"); if(refreshStock) refreshStock.onclick=loadStockMovements;
   const compareSkuButton=$("compareSkuButton"); if(compareSkuButton) compareSkuButton.onclick=compareSkus;
   const stockSyncButton=$("stockSyncButton"); if(stockSyncButton) stockSyncButton.onclick=runStockSync;
+  ["olistSyncPrices","olistSyncColors"].forEach(id=>{const el=$(id); if(el) el.onchange=saveOlistSyncSettings;});
   const refreshAnalytics=$("refreshAnalytics"); if(refreshAnalytics) refreshAnalytics.onclick=loadAnalytics;
   const analyticsDays=$("analyticsDays"); if(analyticsDays) analyticsDays.onchange=loadAnalytics;
   try{const s=await api("/api/admin/session");await enterApp(s)}catch{showLogin()}
@@ -319,28 +320,89 @@ async function applySkuSync(){
   }catch(e){btn.disabled=false;btn.textContent="TENTAR DE NOVO";alert(e.message)}
 }
 
-/* Estoque da Olist → site (só baixa) */
+/* Olist → site: estoque, preço/promoção e cores (a Olist manda) */
+const OLIST_CHANGE_LABEL={estoque:"Estoque",preco:"Preço",cor:"Nome da cor",nova_cor:"Cor nova"};
+let olistConference=null,olistShowAll=false;
+function olistChangeItem(x){
+  const what=x.what||"estoque";
+  return `<li>${esc(x.product)}${x.color?" · "+esc(x.color):""}${x.sku?` <code>${esc(x.sku)}</code>`:""} — ${OLIST_CHANGE_LABEL[what]||esc(what)}: ${esc(x.from===""?"—":x.from)} → <strong>${esc(x.to)}</strong></li>`;
+}
 function renderStockSync(d){
   const box=$("stockSyncStatus");if(!box)return;
   if(d&&d.enabled===false){setHTML(box, '<p class="field-help">A integração com a Olist está desligada neste servidor.</p>');return}
+  if(d&&d.settings){const p=$("olistSyncPrices"),c=$("olistSyncColors");if(p)p.checked=d.settings.prices!==false;if(c)c.checked=d.settings.colors!==false}
   const last=d&&d.last,cycle=d&&d.cycle;
-  const progress=cycle?`<p class="stock-sync-line"><strong>Conferência em andamento:</strong> começou ${esc(date(cycle.started_at))} (${cycle.trigger==="painel"?"pelo painel":"automática"}) · ${cycle.checked||0} peça${cycle.checked===1?"":"s"} conferida${cycle.checked===1?"":"s"} até agora${(cycle.lowered||[]).length?` · ${cycle.lowered.length} baixada${cycle.lowered.length===1?"":"s"}`:""}</p>`:"";
+  const plural=(n,one,many)=>`${n} ${n===1?one:many}`;
+  const progress=cycle?`<p class="stock-sync-line"><strong>Conferência em andamento:</strong> começou ${esc(date(cycle.started_at))} (${cycle.trigger==="painel"?"pelo painel":"automática"}) · ${plural(cycle.products||0,"produto conferido","produtos conferidos")} até agora${(cycle.changes||[]).length?` · ${plural(cycle.changes.length,"alteração","alterações")}`:""}</p>`:"";
   if(!last){setHTML(box, progress||'<p class="field-help">Ainda não rodou. A primeira conferência começa em instantes, ou clique em SINCRONIZAR AGORA.</p>');return}
-  const when=date(last.finished_at||last.ran_at),how=last.trigger==="painel"?"pelo painel":"automática";
-  const lowered=last.lowered||[],missing=last.not_found||[];
-  setHTML(box, `${progress}<p class="stock-sync-line"><strong>Última conferência completa:</strong> ${esc(when)} (${how}) · ${last.checked||0} peça${last.checked===1?"":"s"} conferida${last.checked===1?"":"s"} · ${lowered.length} baixada${lowered.length===1?"":"s"}${missing.length?` · ${missing.length} sem SKU correspondente na Olist`:""}${last.errors?` · ${last.errors} com erro`:""}</p>
+  const when=date(last.finished_at||last.started_at),how=last.trigger==="painel"?"pelo painel":"automática";
+  const changes=last.changes||[],missing=last.not_found||[],dups=last.duplicates||[];
+  setHTML(box, `${progress}<p class="stock-sync-line"><strong>Última conferência completa:</strong> ${esc(when)} (${how}) · ${plural(last.products||0,"produto","produtos")} · ${plural(last.checked||0,"cor conferida","cores conferidas")} · ${plural(changes.length,"alteração no site","alterações no site")}${missing.length?` · ${plural(missing.length,"cor sem SKU na Olist","cores sem SKU na Olist")}`:""}${last.errors?` · ${last.errors} com erro`:""}</p>
   ${last.error?`<p class="error">${esc(last.error)}${/RECONECTAR/.test(last.error)?' <a class="secondary-link" href="/api/olist/auth" target="_blank" rel="noopener">RECONECTAR OLIST</a>':""}</p>`:""}
-  ${lowered.length?`<ul class="stock-sync-list">${lowered.map(x=>`<li>${esc(x.product)}${x.color?" · "+esc(x.color):""} <code>${esc(x.sku)}</code>: ${x.from} → <strong>${x.to}</strong></li>`).join("")}</ul>`:""}
-  ${missing.length?`<details class="stock-sync-missing"><summary>Peças do site sem SKU correspondente na Olist (não são conferidas)</summary><ul>${missing.map(x=>`<li>${esc(x.product)}${x.color?" · "+esc(x.color):""} <code>${esc(x.sku)}</code></li>`).join("")}</ul></details>`:""}`);
+  ${changes.length?`<details class="stock-sync-missing" open><summary>O que a última conferência mudou no site</summary><ul class="stock-sync-list">${changes.slice().reverse().map(olistChangeItem).join("")}</ul></details>`:""}
+  ${dups.length?`<details class="stock-sync-missing" open><summary>SKU repetido em duas peças do site (não são conferidas até corrigir o SKU de uma delas)</summary><ul>${dups.map(x=>`<li>${esc(x.product)}${x.color?" · "+esc(x.color):""} <code>${esc(x.sku)}</code></li>`).join("")}</ul></details>`:""}
+  ${missing.length?`<details class="stock-sync-missing"><summary>Cores do site com SKU que não existe na Olist (não são conferidas)</summary><ul>${missing.map(x=>`<li>${esc(x.product)}${x.color?" · "+esc(x.color):""} <code>${esc(x.sku)}</code></li>`).join("")}</ul></details>`:""}`);
+}
+function olistVariantStatus(v){
+  const o=v.olist;
+  if(!o)return["aguardando","AGUARDANDO CONFERÊNCIA","pending"];
+  if(o.st==="sem_olist")return["sem_olist","SKU NÃO ACHADO NA OLIST","processing"];
+  if(o.st==="sku_repetido")return["repetido","SKU REPETIDO NO SITE","processing"];
+  if(o.st==="erro")return["erro","SEM ESTOQUE NA RESPOSTA","processing"];
+  if(o.target!==null&&o.target!==undefined&&v.stock!==o.target)return["diferente","DIFERENTE · CORRIGE NA PRÓXIMA RODADA","paid"];
+  return["igual","IGUAL","shipped"];
+}
+function olistPriceStatus(p){
+  const o=p.olist;
+  if(!o)return["aguardando","AGUARDANDO","pending",""];
+  if(!o.price)return["sem_preco",o.st==="sku_repetido"?"SKU REPETIDO NO SITE":o.st==="sem_olist"?"NÃO ACHADO NA OLIST":"SEM PREÇO NA OLIST","processing",""];
+  if(o.st==="aviso")return["aviso","CONFERIR","processing",o.note||""];
+  const same=(a,b)=>a!==null&&b!==null&&Math.abs(Number(a)-Number(b))<0.005;
+  const equal=same(p.price,o.price)&&(o.promo?same(p.sale_price,o.promo):true);
+  if(equal)return["igual","IGUAL","shipped",p.sale_price!==null&&!o.promo?"SALE feita no painel (na Olist não há promoção).":""];
+  if(o.st==="desligado")return["desligado","DIFERENTE · ATUALIZAÇÃO DE PREÇO DESLIGADA","paid",""];
+  return["diferente","DIFERENTE · CORRIGE NA PRÓXIMA RODADA","paid",""];
+}
+function renderOlistConference(){
+  const box=$("olistConference");if(!box||!olistConference)return;
+  const priceText=(price,sale)=>sale!==null&&sale!==undefined?`${money(price)} → <strong>${money(sale)}</strong>`:money(price);
+  const count={igual:0,diferente:0,outros:0};
+  const products=olistConference.map(p=>{
+    const priceSt=olistPriceStatus(p);
+    const variants=p.variants.map(v=>({v,st:olistVariantStatus(v)}));
+    variants.forEach(x=>count[x.st[0]==="igual"?"igual":x.st[0]==="diferente"?"diferente":"outros"]++);
+    const allEqual=priceSt[0]==="igual"&&variants.every(x=>x.st[0]==="igual");
+    return {p,priceSt,variants,allEqual};
+  });
+  const visible=products.filter(x=>olistShowAll||!x.allEqual);
+  const head=`<div class="sku-summary"><div class="sku-chips"><span class="badge shipped">${count.igual} ${count.igual===1?"COR IGUAL":"CORES IGUAIS"}</span>${count.diferente?`<span class="badge paid">${count.diferente} ${count.diferente===1?"DIFERENTE":"DIFERENTES"}</span>`:""}${count.outros?`<span class="badge processing">${count.outros} PARA CONFERIR</span>`:""}</div><label class="sku-toggle"><input id="olistShowAll" type="checkbox" ${olistShowAll?"checked":""}> Mostrar também os produtos iguais</label></div>`;
+  const rows=visible.map(({p,priceSt,variants})=>{
+    const olistPrice=p.olist&&p.olist.price?priceText(p.olist.price,p.olist.promo):"—";
+    return `<tr class="olist-product-row"><td colspan="3"><strong>${esc(p.name)}</strong></td><td>Site ${priceText(p.price,p.sale_price)}</td><td>Olist ${olistPrice}</td><td><span class="badge ${priceSt[2]}">${priceSt[1]}</span>${priceSt[3]?`<small>${esc(priceSt[3])}</small>`:""}</td></tr>`+
+      variants.map(({v,st})=>{
+        const o=v.olist,olist=o&&o.available!==null&&o.available!==undefined?String(o.available):"—";
+        const note=o&&o.waiting?`<small>${o.waiting} vendida${o.waiting>1?"s":""} no site ainda não baixada${o.waiting>1?"s":""} na Olist: o site fica com ${o.target}.</small>`:"";
+        return `<tr class="olist-variant-row olist-${st[0]}"><td></td><td>${esc(v.color)}</td><td><code>${esc(v.sku||"—")}</code></td><td>Site <strong>${v.stock}</strong></td><td>Olist <strong>${olist}</strong>${note}</td><td><span class="badge ${st[2]}">${st[1]}</span></td></tr>`;
+      }).join("");
+  }).join("");
+  setHTML(box, `<h3 class="olist-conference-title">Conferência site × Olist</h3>${head}${visible.length?`<div class="table-wrap"><table class="table sku-table olist-table"><thead><tr><th>PRODUTO</th><th>COR</th><th>SKU</th><th>SITE</th><th>OLIST</th><th>SITUAÇÃO</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p class="sku-empty">Tudo igual entre o site e a Olist na última conferência.</p>'}`);
+  $("olistShowAll").onchange=e=>{olistShowAll=e.target.checked;renderOlistConference()};
 }
 async function loadStockSyncStatus(){
   const box=$("stockSyncStatus");if(!box)return;
-  try{renderStockSync(await api("/api/admin/olist/stock-sync"))}catch(e){setHTML(box, '<p class="error">'+esc(e.message)+'</p>')}
+  try{const d=await api("/api/admin/olist/stock-sync?conference=1");renderStockSync(d);if(Array.isArray(d.conference)){olistConference=d.conference;renderOlistConference()}}
+  catch(e){setHTML(box, '<p class="error">'+esc(e.message)+'</p>')}
+}
+async function saveOlistSyncSettings(){
+  const p=$("olistSyncPrices"),c=$("olistSyncColors");
+  const msg=$("olistSyncOptionsMsg");
+  try{await api("/api/admin/olist/sync-settings",{method:"PUT",body:JSON.stringify({prices:p.checked,colors:c.checked})});if(msg)msg.textContent="Salvo. Vale a partir da próxima rodada."}
+  catch(e){if(msg)msg.textContent=e.message;loadStockSyncStatus()}
 }
 async function runStockSync(){
   const btn=$("stockSyncButton"),box=$("stockSyncStatus");
   btn.disabled=true;btn.textContent="CONFERINDO NA OLIST...";
-  setHTML(box, '<p class="sku-loading">Conferindo o estoque de cada peça na Olist, em lotes. Pode levar alguns minutos.</p>');
+  setHTML(box, '<p class="sku-loading">Conferindo cada produto na Olist, em lotes. Pode levar alguns minutos.</p>');
   // Cada chamada confere um lote; a primeira começa uma rodada nova e as seguintes continuam a mesma.
   try{
     let id="",d=null,rounds=0;
@@ -353,7 +415,7 @@ async function runStockSync(){
         await sleep(d.waiting?5000:500);
       }
     }while(!d.done&&rounds++<80);
-    renderStockSync({enabled:true,last:d.last,cycle:d.done?null:d.cycle});await loadProducts();loadStockMovements();
+    await loadStockSyncStatus();await loadProducts();loadStockMovements();
   }
   catch(e){setHTML(box, '<p class="error">'+esc(e.message)+'</p>');setTimeout(loadStockSyncStatus,1500)}
   finally{btn.disabled=false;btn.textContent="SINCRONIZAR AGORA"}
