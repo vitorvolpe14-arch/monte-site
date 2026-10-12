@@ -32,6 +32,15 @@ function revealCatalogSections() {
     document.documentElement.classList.remove("catalog-pending");
 }
 
+// Pré-venda é vendida mesmo sem estoque (a MONTÊ aceita ou recusa cada pedido no painel):
+// na loja, cada cor ativa da bolsa aparece disponível, até 20 por pedido (o limite do checkout).
+const PRESALE_MAX_PER_ORDER = 20;
+function storeVariants(product) {
+    const variants = product.product_variants || [];
+    if (!product.is_presale) return variants;
+    return variants.map(variant => variant.active === false ? variant : { ...variant, stock: PRESALE_MAX_PER_ORDER });
+}
+
 async function loadProductsFromDatabase() {
     let data;
     try {
@@ -54,8 +63,9 @@ async function loadProductsFromDatabase() {
         newProduct: !!product.is_new,
         presale: !!product.is_presale,
         images: Array.isArray(product.images) ? product.images : [],
-        variants: product.product_variants || [],
-        stock: (product.product_variants || [])
+        variants: storeVariants(product),
+        stock: storeVariants(product)
+            .filter(variant => variant.active !== false)
             .reduce((total, variant) => total + Number(variant.stock || 0), 0)
     }));
 

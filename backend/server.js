@@ -563,6 +563,8 @@ async function processPendingOlistOrder(order) {
     if (!OLIST_SYNC_ENABLED) return {skipped:true};
     if (!order?.id || olistSyncLocks.has(String(order.id))) return {skipped:true};
     if (safeString(order.status).toLowerCase() !== "paid") return {skipped:true};
+    // Pedido de pré-venda ainda não aceito (ou recusado) pela loja: não vai para a Olist.
+    if (order.approval_status && order.approval_status !== "accepted") return {skipped:true};
 
     olistSyncLocks.add(String(order.id));
     try {
@@ -621,7 +623,7 @@ async function runPendingOlistSync() {
     try {
         calls++;
         const rows = await supabaseRequest(
-            "orders?status=eq.paid&or=(olist_sync_status.is.null,olist_sync_status.neq.completed)&select=*&order=paid_at.asc&limit=10",
+            "orders?status=eq.paid&and=(or(olist_sync_status.is.null,olist_sync_status.neq.completed),or(approval_status.is.null,approval_status.eq.accepted))&select=*&order=paid_at.asc&limit=10",
             {method:"GET"}
         );
 
@@ -810,6 +812,13 @@ app.post("/api/admin/olist/sync-paid-order", requireAdmin, async (req, res) => {
                 success:false,
                 message:"A venda encontrada não está marcada como paga.",
                 status:order.status || null
+            });
+        }
+
+        if (order.approval_status && order.approval_status !== "accepted") {
+            return res.status(409).json({
+                success:false,
+                message:"Pedido de pré-venda: aceite o pedido antes de enviar para a Olist."
             });
         }
 
@@ -1106,7 +1115,7 @@ async function sendOrderConfirmationEmail(order) {
       "<h1 style=\"margin:0 0 18px;font-size:28px;font-weight:500;\">Obrigada pela sua compra, " + escapeEmailHtml(customerName) + ".</h1>" +
       "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Seu pagamento foi confirmado e seu pedido já está registrado na MONTÊ.</p>" +
       "<div style=\"margin:28px 0;padding:20px;background:#f7f5f2;\"><p style=\"margin:0 0 8px;font-size:11px;letter-spacing:1.5px;color:#777;\">NÚMERO DO PEDIDO</p><strong style=\"font-size:20px;\">" + escapeEmailHtml(orderCode) + "</strong><p style=\"margin:14px 0 0;font-size:14px;color:#555;\">Total: <strong>R$ " + total.toFixed(2).replace(".", ",") + "</strong></p></div>" +
-      (orderHasPresale(order) ? "<p style=\"font-size:15px;line-height:1.7;color:#555;\"><strong>Pré-venda:</strong> seu pedido tem peça que ainda vai chegar. A entrega é em " + PRESALE_MIN_BUSINESS_DAYS + " dias úteis.</p>" : "") +
+      (orderHasPresale(order) ? "<p style=\"font-size:15px;line-height:1.7;color:#555;\"><strong>Pré-venda:</strong> seu pedido tem peça que ainda vai chegar. A entrega é em " + PRESALE_MIN_BUSINESS_DAYS + " dias úteis. A MONTÊ confirma o seu pedido em breve; se não for possível atender, o valor pago é devolvido integralmente.</p>" : "") +
       "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Acompanhe o status do seu pedido e novas atualizações pela área <strong>Minhas Compras</strong>.</p>" +
       "<div style=\"text-align:center;margin:30px 0;\"><a href=\"" + purchasesUrl + "\" style=\"display:inline-block;background:#111;color:#fff;text-decoration:none;padding:15px 26px;font-size:13px;letter-spacing:1.5px;\">ACESSAR MINHAS COMPRAS</a></div></div>" +
       "<p style=\"text-align:center;font-size:11px;color:#999;margin:20px 0;\">MONTÊ — Bolsas e acessórios</p></div></body></html>";
@@ -1180,6 +1189,7 @@ async function sendAdminSaleNotificationEmail(order) {
         "<div style=\"background:#fff;padding:30px;\">" +
         "<p style=\"margin:0 0 8px;font-size:11px;letter-spacing:2px;color:#777;\">NOVA VENDA</p>" +
         "<h1 style=\"margin:0 0 22px;font-size:28px;font-weight:500;\">Pagamento confirmado</h1>" +
+        (order.approval_status === "pending" ? "<p style=\"padding:14px;background:#f6efe8;border-left:3px solid #571b29;font-size:14px;line-height:1.6;\"><strong>Pré-venda:</strong> aceite ou recuse este pedido no painel (Pedidos). Recusado, ele é cancelado e o valor precisa ser estornado no app da InfinitePay.</p>" : "") +
         (order.pix_paid_by_card ? "<p style=\"padding:14px;background:#fff4e5;border-left:3px solid #b35c00;font-size:14px;line-height:1.6;\"><strong>Atenção:</strong> este pedido foi feito com o desconto de 5% do Pix, mas a cliente pagou com cartão no link da InfinitePay. Confira antes de enviar.</p>" : "") +
         "<div style=\"padding:18px;background:#f7f5f2;margin-bottom:20px;\"><strong style=\"font-size:20px;\">" + escapeEmailHtml(orderCode) + "</strong><br><span style=\"font-size:14px;color:#555;\">Total: <strong>R$ " + total.toFixed(2).replace(".", ",") + "</strong></span></div>" +
         "<h3 style=\"font-size:14px;letter-spacing:1px;\">CLIENTE</h3>" +
@@ -1196,7 +1206,7 @@ async function sendAdminSaleNotificationEmail(order) {
     const response = await fetch("https://api.resend.com/emails", {
         method:"POST",
         headers:{"Authorization":"Bearer "+RESEND_API_KEY,"Content-Type":"application/json","Accept":"application/json","Idempotency-Key":"monte-admin-sale-"+String(order.order_nsu)},
-        body:JSON.stringify({from:RESEND_FROM_NAME+" <"+RESEND_FROM_EMAIL+">",to:recipients,subject:(order.pix_paid_by_card?"⚠️ PIX PAGO NO CARTÃO — ":"")+"MONTÊ — NOVA VENDA "+orderCode+" — R$ "+total.toFixed(2).replace(".", ","),text,html})
+        body:JSON.stringify({from:RESEND_FROM_NAME+" <"+RESEND_FROM_EMAIL+">",to:recipients,subject:(order.approval_status==="pending"?"PRÉ-VENDA (ACEITE NO PAINEL) — ":"")+(order.pix_paid_by_card?"⚠️ PIX PAGO NO CARTÃO — ":"")+"MONTÊ — NOVA VENDA "+orderCode+" — R$ "+total.toFixed(2).replace(".", ","),text,html})
     });
     const responseText=await response.text();
     let data={}; try{data=responseText?JSON.parse(responseText):{}}catch{data={raw:responseText};}
@@ -3718,12 +3728,181 @@ app.get("/api/admin/orders",requireAdmin,async(req,res)=>{try{const d=await supa
 
 
 
+/* =====================================================
+   PRÉ-VENDA — A LOJA ACEITA OU RECUSA O PEDIDO
+   Pedido com bolsa em pré-venda (vendida mesmo sem estoque) chega pago com
+   approval_status "pending" e não vai para a Olist.
+   - Aceito: segue o fluxo normal (Olist, separação, envio) e a cliente recebe um e-mail.
+   - Recusado: vira "cancelled", o estoque baixado de outras peças volta, a cliente
+     recebe um e-mail e o estorno fica pendente até a loja marcar como feito. A API de
+     checkout da InfinitePay (links e payment_check) não tem estorno: ele é feito no app.
+===================================================== */
+function orderEmailItems(order) {
+    return (Array.isArray(order.items) ? order.items : []).map(item => ({
+        name: safeString(item.name || item.description) || "Produto",
+        color: safeString(item.variant_color),
+        quantity: Math.max(1, Number(item.quantity || 1)),
+        price: Number(item.price || 0),
+        image: null
+    }));
+}
+
+async function sendOrderNoticeEmail(order, { type, subject, eyebrow, title, paragraphs, footnote }) {
+    if (!RESEND_API_KEY || !RESEND_FROM_EMAIL || !isEmailAddress(order.customer_email)) return { sent: false };
+    const code = formatOrderCode(order.order_code || order.order_nsu);
+    const url = PUBLIC_SITE_URL + "/minhas-compras.html?order_nsu=" + encodeURIComponent(code);
+    await sendReminderEmail({
+        to: safeString(order.customer_email).toLowerCase(),
+        subject: subject.replace("{code}", code),
+        type,
+        idempotencyKey: "monte-" + type + "-" + order.order_nsu,
+        html: reminderEmailHtml({ eyebrow, title, paragraphs, items: orderEmailItems(order), buttonUrl: url, buttonText: "VER MEU PEDIDO", footnote }),
+        text: [title, ...paragraphs, "Pedido: " + code, url].join("\n\n")
+    });
+    return { sent: true };
+}
+
+async function orderForDecision(id) {
+    if (!/^\d{1,12}$/.test(safeString(id))) return null;
+    const rows = await supabaseRequest("orders?id=eq." + encodeURIComponent(id) + "&select=*,order_items(*)&limit=1", { method: "GET" });
+    return Array.isArray(rows) ? rows[0] : null;
+}
+
+app.post("/api/admin/orders/:id/approve", requireAdmin, async (req, res) => {
+    try {
+        const order = await orderForDecision(req.params.id);
+        if (!order) return res.status(404).json({ success: false, message: "Pedido não encontrado." });
+        if (order.approval_status !== "pending") return res.status(409).json({ success: false, message: "Este pedido não está aguardando aprovação." });
+        if (order.status !== "paid") return res.status(409).json({ success: false, message: "O pedido ainda não foi pago." });
+        const now = new Date().toISOString();
+        const rows = await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id) + "&approval_status=eq.pending", {
+            method: "PATCH",
+            body: JSON.stringify({ approval_status: "accepted", approval_decided_at: now, updated_at: now })
+        });
+        if (!Array.isArray(rows) || !rows[0]) return res.status(409).json({ success: false, message: "O pedido mudou enquanto você decidia. Atualize a lista." });
+        // Agora o pedido segue para a Olist (aqui, ou pelo envio automático a cada minuto).
+        runInBackground(processPendingOlistOrder({ ...order, ...rows[0] }));
+        const firstName = reminderFirstName(order.customer_name);
+        const email = await sendOrderNoticeEmail(order, {
+            type: "presale_accepted",
+            subject: "MONTÊ — Pré-venda confirmada: pedido {code}",
+            eyebrow: "PRÉ-VENDA CONFIRMADA",
+            title: "Sua bolsa está garantida" + (firstName ? ", " + firstName : "") + "!",
+            paragraphs: [
+                "Confirmamos o seu pedido de pré-venda. Assim que as peças chegarem, ele é preparado e enviado.",
+                "A entrega é em " + PRESALE_MIN_BUSINESS_DAYS + " dias úteis. Você recebe o código de rastreio quando o pedido sair."
+            ],
+            footnote: "Dúvidas? É só responder este e-mail."
+        }).catch(error => { console.error("E-mail de pré-venda aceita:", error.message); return { sent: false }; });
+        return res.json({ success: true, order: rows[0], email_sent: email.sent });
+    } catch (error) {
+        console.error("Aceitar pedido:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível aceitar o pedido." });
+    }
+});
+
+app.post("/api/admin/orders/:id/reject", requireAdmin, async (req, res) => {
+    try {
+        const reason = safeString(req.body?.reason).slice(0, 300);
+        const order = await orderForDecision(req.params.id);
+        if (!order) return res.status(404).json({ success: false, message: "Pedido não encontrado." });
+        if (order.approval_status !== "pending") return res.status(409).json({ success: false, message: "Este pedido não está aguardando aprovação." });
+        const paid = order.status === "paid";
+        const now = new Date().toISOString();
+        const rows = await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id) + "&approval_status=eq.pending", {
+            method: "PATCH",
+            body: JSON.stringify({
+                status: "cancelled",
+                approval_status: "rejected",
+                approval_decided_at: now,
+                cancel_reason: reason || null,
+                refund_status: paid ? "pending" : null,
+                updated_at: now
+            })
+        });
+        if (!Array.isArray(rows) || !rows[0]) return res.status(409).json({ success: false, message: "O pedido mudou enquanto você decidia. Atualize a lista." });
+
+        // Peças do pedido que não são de pré-venda tiveram o estoque baixado no pagamento: voltam.
+        if (order.stock_decremented) {
+            const presale = new Set((Array.isArray(order.items) ? order.items : []).filter(item => item?.presale === true).map(item => String(item.variant_id)));
+            for (const item of Array.isArray(order.order_items) ? order.order_items : []) {
+                if (!item.variant_id || presale.has(String(item.variant_id)) || !(Number(item.quantity) > 0)) continue;
+                await supabaseRequest("rpc/adjust_product_variant_stock", {
+                    method: "POST",
+                    body: JSON.stringify({ p_variant_id: item.variant_id, p_delta: Number(item.quantity), p_movement_type: "restock", p_reason: "Pedido " + formatOrderCode(order.order_code || order.order_nsu) + " recusado", p_created_by: "admin" })
+                }).catch(error => console.error("Estoque do pedido recusado:", error.message));
+            }
+            await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), { method: "PATCH", headers: { "Prefer": "return=minimal" }, body: JSON.stringify({ stock_decremented: false }) });
+        }
+        publicCache.delete("catalog");
+
+        const firstName = reminderFirstName(order.customer_name);
+        const total = formatEmailMoney(order.total);
+        const pix = safeString(order.payment_method).toLowerCase() === "pix";
+        const email = await sendOrderNoticeEmail(order, {
+            type: "presale_rejected",
+            subject: "MONTÊ — Pedido {code} cancelado",
+            eyebrow: "PEDIDO CANCELADO",
+            title: "Não vamos conseguir atender o seu pedido" + (firstName ? ", " + firstName : "") + ".",
+            paragraphs: [
+                "Sentimos muito: o seu pedido de pré-venda foi cancelado." + (reason ? " Motivo: " + reason : ""),
+                paid
+                    ? "O valor de " + total + " será devolvido integralmente, " + (pix ? "na conta que fez o Pix." : "como estorno no cartão (o prazo para aparecer na fatura depende do banco).") + " Avisamos por e-mail quando o estorno for feito."
+                    : "Como o pagamento não tinha sido concluído, nada foi cobrado."
+            ],
+            footnote: "Dúvidas? É só responder este e-mail."
+        }).catch(error => { console.error("E-mail de pedido recusado:", error.message); return { sent: false }; });
+
+        const payment = (await supabaseRequest("payments?order_id=eq." + encodeURIComponent(order.id) + "&select=transaction_nsu,invoice_slug,capture_method,receipt_url,paid_amount&limit=1", { method: "GET" }).catch(() => []))?.[0] || null;
+        return res.json({ success: true, order: rows[0], email_sent: email.sent, refund: paid ? { amount: Number(order.total || 0), payment_method: order.payment_method, transaction_nsu: payment?.transaction_nsu || order.transaction_nsu || null, receipt_url: payment?.receipt_url || order.receipt_url || null } : null });
+    } catch (error) {
+        console.error("Recusar pedido:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível recusar o pedido." });
+    }
+});
+
+app.post("/api/admin/orders/:id/refund-done", requireAdmin, async (req, res) => {
+    try {
+        const order = await orderForDecision(req.params.id);
+        if (!order) return res.status(404).json({ success: false, message: "Pedido não encontrado." });
+        if (order.status !== "cancelled" || order.refund_status !== "pending") return res.status(409).json({ success: false, message: "Este pedido não tem estorno pendente." });
+        const now = new Date().toISOString();
+        const rows = await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id) + "&refund_status=eq.pending", {
+            method: "PATCH",
+            body: JSON.stringify({ refund_status: "done", refund_done_at: now, updated_at: now })
+        });
+        if (!Array.isArray(rows) || !rows[0]) return res.status(409).json({ success: false, message: "O pedido mudou. Atualize a lista." });
+        const firstName = reminderFirstName(order.customer_name);
+        const email = await sendOrderNoticeEmail(order, {
+            type: "refund_done",
+            subject: "MONTÊ — Estorno do pedido {code} realizado",
+            eyebrow: "ESTORNO REALIZADO",
+            title: "Seu estorno foi feito" + (firstName ? ", " + firstName : "") + ".",
+            paragraphs: [
+                "Devolvemos " + formatEmailMoney(order.total) + " referente ao pedido cancelado.",
+                safeString(order.payment_method).toLowerCase() === "pix"
+                    ? "No Pix, o valor volta para a conta que fez o pagamento."
+                    : "No cartão, o estorno aparece na fatura conforme o prazo do seu banco."
+            ],
+            footnote: "Dúvidas? É só responder este e-mail."
+        }).catch(error => { console.error("E-mail de estorno:", error.message); return { sent: false }; });
+        return res.json({ success: true, order: rows[0], email_sent: email.sent });
+    } catch (error) {
+        console.error("Estorno feito:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível registrar o estorno." });
+    }
+});
+
 app.patch("/api/admin/orders/:id/status",requireAdmin,async(req,res)=>{
     try{
         const id=encodeURIComponent(req.params.id);
         const status=safeString(req.body?.status).toLowerCase();
         const allowed=["pending","expired","paid","processing","shipped","delivered"];
         if(!allowed.includes(status)) return res.status(400).json({success:false,message:"Status inválido."});
+        const current=(await supabaseRequest(`orders?id=eq.${id}&select=status,approval_status`,{method:"GET"}))?.[0];
+        if(!current) return res.status(404).json({success:false,message:"Pedido não encontrado."});
+        if(current.status==="cancelled") return res.status(409).json({success:false,message:"Este pedido foi cancelado."});
+        if(current.approval_status==="pending"&&["processing","shipped","delivered"].includes(status)) return res.status(409).json({success:false,message:"Pedido de pré-venda: aceite ou recuse o pedido primeiro."});
         const patch={status,updated_at:new Date().toISOString()};
         if(status==="processing") patch.processing_at=new Date().toISOString();
         if(status==="shipped"){
@@ -4679,7 +4858,7 @@ app.post(
                 } else {
                     const variants = await supabaseRequest(
                         "product_variants?product_id=eq." + encodeURIComponent(item.id) +
-                        "&active=eq.true&stock=gt.0&select=id,color,sku,stock,olist_product_id&order=created_at.asc",
+                        "&active=eq.true" + (item.presale ? "" : "&stock=gt.0") + "&select=id,color,sku,stock,olist_product_id&order=created_at.asc",
                         { method: "GET" }
                     );
 
@@ -4696,7 +4875,8 @@ app.post(
                     });
                 }
 
-                if (Number(variant.stock || 0) < Number(item.quantity || 0)) {
+                // Pré-venda é vendida mesmo sem estoque: a loja aceita ou recusa o pedido no painel.
+                if (!item.presale && Number(variant.stock || 0) < Number(item.quantity || 0)) {
                     return res.status(409).json({
                         success: false,
                         message: "Estoque insuficiente para " + item.description +
@@ -4714,6 +4894,7 @@ app.post(
             // A mesma cor em mais de uma linha da sacola: confere a soma das quantidades.
             const quantityByVariant = new Map();
             for (const { item, variant } of checkedVariants) {
+                if (item.presale) continue;
                 const total = (quantityByVariant.get(variant.id) || 0) + Number(item.quantity || 0);
                 quantityByVariant.set(variant.id, total);
                 if (total > Number(variant.stock || 0)) {
@@ -4884,6 +5065,8 @@ app.post(
                     shipping_delivery_days: deliveryDays,
                     total: checkoutTotal,
                     status: "pending",
+                    // Pré-venda: depois de pago, o pedido espera a loja aceitar ou recusar.
+                    approval_status: hasPresale ? "pending" : null,
                     payment_method: paymentMethod,
                     whatsapp_tracking_opt_in: customer.whatsapp_updates === true,
                     whatsapp_tracking_status: customer.whatsapp_updates === true ? "pending" : "opted_out",
@@ -5397,6 +5580,12 @@ app.post(
                 });
             }
 
+            // Pedido recusado pela loja (pré-venda): o estorno é tratado no painel; um aviso
+            // repetido não pode reabrir o pedido nem baixar o estoque de novo.
+            if (order.status === "cancelled") {
+                return res.status(200).json({ success: true, paid: true, cancelled: true });
+            }
+
             // Webhook repetido do mesmo pagamento: nunca refaça a baixa local.
             // Se a Olist ainda estiver pendente/erro, aproveitamos a repetição para tentar
             // novamente sem bloquear a confirmação da compra.
@@ -5676,7 +5865,7 @@ app.get("/api/minhas-compras", orderStatusRateLimit, async (req, res) => {
         }
 
         const rows = await supabaseRequest(
-            `orders?${/^\d{4,8}$/.test(orderNsu) ? "order_code=eq."+encodeURIComponent(orderNsu) : "order_nsu=eq."+encodeURIComponent(orderNsu)}&customer_email=eq.${encodeURIComponent(email)}&select=id,order_nsu,order_code,customer_name,customer_email,status,total,subtotal,shipping,shipping_carrier,tracking_code,tracking_url,shipping_service_name,created_at,paid_at,processing_at,shipped_at,delivered_at,order_items(product_name,variant_color,sku,quantity,unit_price,total_price)`,
+            `orders?${/^\d{4,8}$/.test(orderNsu) ? "order_code=eq."+encodeURIComponent(orderNsu) : "order_nsu=eq."+encodeURIComponent(orderNsu)}&customer_email=eq.${encodeURIComponent(email)}&select=id,order_nsu,order_code,customer_name,customer_email,status,approval_status,refund_status,total,subtotal,shipping,shipping_carrier,tracking_code,tracking_url,shipping_service_name,created_at,paid_at,processing_at,shipped_at,delivered_at,order_items(product_name,variant_color,sku,quantity,unit_price,total_price)`,
             { method: "GET" }
         );
 
@@ -5693,6 +5882,8 @@ app.get("/api/minhas-compras", orderStatusRateLimit, async (req, res) => {
                 order_code: formatOrderCode(order.order_code || order.order_nsu),
                 customer_name: order.customer_name,
                 status: order.status,
+                approval_status: order.approval_status || null,
+                refund_status: order.refund_status || null,
                 subtotal: Number(order.subtotal || 0),
                 shipping: Number(order.shipping || 0),
                 total: Number(order.total || 0),
@@ -5861,8 +6052,9 @@ function productSeoUrl(product) {
 }
 
 function productAvailabilityForSchema(product) {
-    if (Number(product.stock_total || 0) <= 0) return "https://schema.org/OutOfStock";
-    return product.is_presale ? "https://schema.org/PreOrder" : "https://schema.org/InStock";
+    // Pré-venda é vendida mesmo sem estoque.
+    if (product.is_presale) return "https://schema.org/PreOrder";
+    return Number(product.stock_total || 0) > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock";
 }
 
 async function getPublicProductsForSeo() {
@@ -5957,7 +6149,7 @@ ${image ? `<img src="${xmlEscape(image)}" alt="${xmlEscape(product.name)}">` : "
 <p><strong>Preço: R$ ${price.toFixed(2).replace(".", ",")}</strong></p>
 ${product.is_sale ? '<p class="seo-sale-notice"><strong>Sale:</strong> produtos da Sale não acompanham dustbag.</p>' : ""}
 ${product.is_presale ? '<p class="seo-sale-notice"><strong>Pré-venda — garanta a sua!</strong> Esta bolsa ainda vai chegar: entrega em ' + PRESALE_MIN_BUSINESS_DAYS + ' dias úteis.</p>' : ""}
-<p>${stockTotal > 0 ? (product.is_presale ? "Disponível na pré-venda." : "Disponível para compra.") : "Produto esgotado."}</p>
+<p>${product.is_presale ? "Disponível na pré-venda." : stockTotal > 0 ? "Disponível para compra." : "Produto esgotado."}</p>
 <p><a href="/">Voltar para a MONTÊ</a></p>
 </main>
 </body>
