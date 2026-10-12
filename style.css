@@ -8333,3 +8333,189 @@ html.catalog-pending .footer {
         font-size: 20px;
     }
 }
+
+
+/* =====================================================
+   PRÉ-VENDA EM DESTAQUE
+   Faixa animada creme logo depois do banner, seção em bordô com texto branco,
+   "Garanta a sua!" pulsando e o link do menu como um selo bordô.
+===================================================== */
+
+.presale-ticker[hidden] {
+    display: none !important;
+}
+
+.presale-ticker {
+    overflow: hidden;
+    background: #f6efe8;
+    color: #571b29;
+    border-top: 1px solid rgba(87, 27, 41, .15);
+    border-bottom: 1px solid rgba(87, 27, 41, .15);
+}
+
+.presale-ticker-track {
+    display: flex;
+    width: max-content;
+    animation: presaleTicker 38s linear infinite;
+}
+
+.presale-ticker-group {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.presale-ticker span,
+.presale-ticker i {
+    padding: 13px 18px;
+    font-size: 12px;
+    font-style: normal;
+    font-weight: 600;
+    letter-spacing: .22em;
+    white-space: nowrap;
+}
+
+.presale-ticker i {
+    padding: 13px 0;
+    font-size: 11px;
+    opacity: .7;
+}
+
+@keyframes presaleTicker {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+}
+
+#prevenda.category-showcase {
+    background: #571b29;
+    color: #fff;
+}
+
+#prevenda .presale-highlight {
+    background: #fff;
+    color: #571b29;
+    font-size: 13px;
+    padding: 10px 16px;
+    animation: presalePulse 2.4s ease-in-out infinite;
+}
+
+@keyframes presalePulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, .45); }
+    50% { box-shadow: 0 0 0 9px rgba(255, 255, 255, 0); }
+}
+
+#prevenda .category-intro h2 {
+    color: #fff;
+}
+
+#prevenda .category-intro-text {
+    color: rgba(255, 255, 255, .82);
+}
+
+#prevenda .presale-deadline {
+    border-top-color: rgba(255, 255, 255, .3);
+    color: #fff;
+    font-size: 13px;
+    letter-spacing: .02em;
+}
+
+#prevenda .presale-deadline strong {
+    color: #fff;
+}
+
+#prevenda .category-intro-controls .collection-carousel-arrow {
+    border-color: rgba(255, 255, 255, .55);
+    color: #fff;
+}
+
+#prevenda .category-intro-controls .collection-carousel-arrow:hover:not(:disabled) {
+    background: #fff;
+    border-color: #fff;
+    color: #571b29;
+}
+
+#prevenda .product-info,
+#prevenda .product-name {
+    color: #fff;
+}
+
+#prevenda .product-price,
+#prevenda .product-price .old-price {
+    color: rgba(255, 255, 255, .85);
+}
+
+#prevenda .product-price .sale-price {
+    color: #fff;
+}
+
+#prevenda .presale-card-cta {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 7px 11px;
+    background: #fff;
+    color: #571b29;
+}
+
+#prevenda .product-card .product-image {
+    box-shadow: 0 18px 40px rgba(0, 0, 0, .18);
+}
+
+/* Link do menu em destaque. */
+.main-navigation .presale-nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 13px;
+    border-radius: 999px;
+    background: #571b29;
+    color: #fff !important;
+    font-weight: 600;
+}
+
+.main-navigation .presale-nav-link::after {
+    display: none;
+}
+
+.main-navigation .presale-nav-link::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #fff;
+    animation: presaleDot 1.6s ease-in-out infinite;
+}
+
+@keyframes presaleDot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .25; }
+}
+
+.main-navigation .presale-nav-link:hover {
+    background: #3f1320;
+}
+
+/* Menu do celular (lista em tela cheia): linha bordô em vez do selo arredondado. */
+@media (max-width: 900px) {
+    .main-navigation .presale-nav-link {
+        display: flex;
+        border-radius: 0;
+        padding: 18px 20px;
+    }
+}
+
+@media (max-width: 760px) {
+    .presale-ticker span,
+    .presale-ticker i {
+        font-size: 10px;
+        padding-top: 11px;
+        padding-bottom: 11px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .presale-ticker-track,
+    #prevenda .presale-highlight,
+    .main-navigation .presale-nav-link::before {
+        animation: none;
+    }
+}
