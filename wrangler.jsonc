@@ -28,7 +28,6 @@
     "run_worker_first": [
       "/api/*",
       "/webhook-infinitepay",
-      "/webhook-pix",
       "/produto/*",
       "/sitemap.xml",
       "/robots.txt",
