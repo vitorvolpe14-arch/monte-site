@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20261007-seguranca">
+<link rel="stylesheet" href="admin.css?v=20261012-olist">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -111,8 +111,10 @@
     <section id="stockSection" class="section hidden">
       <div class="section-actions"><div><p class="eyebrow">INVENTÁRIO</p><h2>Estoque</h2></div></div>
       <div class="panel stock-sync-panel">
-        <div class="panel-head"><div><h2>Estoque da Olist → site</h2><p class="field-help">O site confere o estoque disponível na Olist em pequenos lotes, o dia todo (uma rodada completa a cada poucos minutos), e baixa no site as peças que tiverem menos unidades lá. Na hora da compra, as peças do carrinho são conferidas de novo. O site nunca aumenta o estoque sozinho e nada é alterado na Olist. As peças são reconhecidas pelo SKU.</p></div><button id="stockSyncButton" type="button">SINCRONIZAR AGORA</button></div>
+        <div class="panel-head"><div><h2>Olist → site</h2><p class="field-help">A Olist manda: o site confere cada produto na Olist o dia todo, em pequenos lotes (uma rodada completa a cada poucos minutos), e deixa o site igual: estoque de cada cor (sobe e desce), preço e promoção, e cores. Vendas do site que a Olist ainda não registrou ficam descontadas, para a peça não ser vendida duas vezes. Nome, descrição e fotos continuam sendo os do site, e nada é alterado na Olist. As peças são reconhecidas pelo SKU.</p></div><button id="stockSyncButton" type="button">SINCRONIZAR AGORA</button></div>
+        <div class="olist-sync-options"><label class="sku-toggle"><input id="olistSyncPrices" type="checkbox" checked> Atualizar preço e promoção pela Olist</label><label class="sku-toggle"><input id="olistSyncColors" type="checkbox" checked> Atualizar cores pela Olist (nome da cor e cores novas)</label><span id="olistSyncOptionsMsg" class="field-help"></span></div>
         <div id="stockSyncStatus" class="stock-sync-status"></div>
+        <div id="olistConference" class="olist-conference"></div>
       </div>
       <div class="panel sku-sync-panel">
         <div class="panel-head"><div><h2>SKUs site × Olist</h2><p class="field-help">Compara os SKUs dos produtos do site com os da Olist. Se houver diferença, corrige só no site, apenas nos produtos que já existem. Nada é alterado na Olist.</p></div><div class="sku-head-actions"><a class="secondary-link" href="/api/olist/auth" target="_blank" rel="noopener">RECONECTAR OLIST</a><button id="compareSkuButton" type="button">COMPARAR COM A OLIST</button></div></div>
@@ -169,7 +171,7 @@
 </div></div>
 
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="admin.js?v=20261007-fotos"></script>
+<script src="admin.js?v=20261012-olist"></script>
 <script src="admin-carousel.js?v=20261007-banner"></script>
 </body>
 </html>

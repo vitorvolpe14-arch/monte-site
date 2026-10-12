@@ -2754,25 +2754,36 @@ app.post("/api/admin/olist/sku-sync", requireAdmin, async (req, res) => {
 });
 
 /* =====================================================
-   ESTOQUE — OLIST → SITE (só baixa)
-   O site lê o estoque disponível de cada peça na Olist e, quando lá
-   houver menos unidades do que no site, baixa o site para o mesmo
-   número. Nunca aumenta o estoque do site e nunca escreve na Olist:
-   assim uma venda do site que a Olist ainda não processou não faz o
-   estoque voltar. Confere em lotes pequenos a cada minuto (o plano gratuito
-   do Cloudflare permite 50 chamadas externas por execução), recomeça a
-   rodada alguns minutos depois de terminar e confere de novo, na hora da
-   compra, as peças do carrinho.
+   OLIST → SITE (estoque, preço, promoção e cores)
+   A Olist manda: o site confere cada produto ativo na Olist e deixa o
+   site igual a ela.
+   - Estoque de cada cor = disponível na Olist, menos as vendas do site
+     que a Olist ainda não registrou (pedidos pagos nos últimos dias que
+     ainda não foram enviados e não aparecem como reservados lá). Sobe e
+     desce, para ficar igual à Olist sem vender o que já foi vendido.
+   - Preço e preço promocional (promoção na Olist vira SALE no site; a
+     SALE feita à mão no painel continua até a Olist ter promoção).
+   - Cores: o nome da cor segue a Olist e cores novas da Olist (com
+     estoque) entram no produto.
+   Nome, descrição e fotos continuam sendo do site, e nada é alterado na
+   Olist. As peças são reconhecidas pelo SKU. Roda em lotes pequenos a
+   cada minuto (o plano gratuito do Cloudflare permite 50 chamadas
+   externas por execução) e recomeça a rodada logo depois de terminar;
+   na hora da compra, as peças do carrinho são conferidas de novo.
 ===================================================== */
 const OLIST_STOCK_PAUSE_MS = 900;
 const OLIST_STOCK_STATUS_KEY = "olist_stock_sync";
-// Pior caso de uma peça: achar o SKU de novo (3 chamadas, duas vezes) e baixar com nova tentativa (4).
-const OLIST_STOCK_VARIANT_CALLS = 10;
-const OLIST_STOCK_PAGE = 60;
+const OLIST_SYNC_SETTINGS_KEY = "olist_sync_settings";
+const OLIST_SYNC_DEFAULT_SETTINGS = { prices: true, colors: true };
+// Produtos lidos do Supabase por lote (o lote para antes se acabarem as chamadas).
+const OLIST_SYNC_PRODUCT_PAGE = 12;
 const OLIST_STOCK_BATCH_MS = 40 * 1000;
 const OLIST_STOCK_LEASE_MS = 90 * 1000;
 // Intervalo entre o fim de uma rodada automática e o começo da próxima.
-const OLIST_STOCK_CYCLE_GAP_MS = 5 * 60 * 1000;
+const OLIST_STOCK_CYCLE_GAP_MS = 60 * 1000;
+// Vendas do site desses últimos dias que ainda não foram enviadas contam como
+// "a Olist ainda pode não ter baixado".
+const OLIST_PENDING_SALE_DAYS = 7;
 
 function olistAvailableFrom(data) {
     const value = ["disponivel", "saldo"].map(key => Number(data?.[key])).find(Number.isFinite);
@@ -2831,7 +2842,7 @@ async function olistAvailableForVariant(variant, budget = null) {
     return { available: olistAvailableFrom(data), found: true };
 }
 
-// Baixa o estoque da variação até "target" (nunca aumenta) e registra no histórico.
+// Na hora da compra: baixa o estoque da variação até "target" (nunca aumenta) e registra no histórico.
 async function lowerSiteStock(variant, target, reason, budget = null) {
     for (let attempt = 0; attempt < 2; attempt++) {
         spend(budget);
@@ -2854,32 +2865,370 @@ async function lowerSiteStock(variant, target, reason, budget = null) {
     return { changed: false };
 }
 
-// Estado guardado no Supabase: a rodada em andamento (cycle, com o cursor "after"),
-// a última rodada concluída (last) e a trava do lote que está rodando (lease_until).
-async function readOlistStockState() {
-    const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + OLIST_STOCK_STATUS_KEY + "&select=value&limit=1", { method: "GET" });
-    const value = rows?.[0]?.value || {};
+// Estado guardado no Supabase: a rodada em andamento (cycle, com o cursor "after"), a última
+// rodada concluída (last), a trava do lote que está rodando (lease_until), a última conferência
+// de cada produto e cor (snapshot, para o painel), o produto pai na Olist de cada cor (links) e
+// as promoções que vieram da Olist (sales). As opções do painel ficam numa chave separada.
+function normalizeOlistStockState(value = {}) {
     // Formato antigo (a rodada inteira de uma vez): vira a última rodada concluída.
-    if (value.ran_at && !value.version) return { version: 2, last: value, cycle: null, lease_until: 0 };
-    return { version: 2, last: value.last || null, cycle: value.cycle || null, lease_until: Number(value.lease_until) || 0 };
+    if (value.ran_at && !value.version) value = { last: value };
+    return {
+        last: value.last || null,
+        cycle: value.cycle || null,
+        lease_until: Number(value.lease_until) || 0,
+        snapshot: { products: value.snapshot?.products || {}, variants: value.snapshot?.variants || {} },
+        links: value.links || {},
+        sales: value.sales || {}
+    };
+}
+
+async function readOlistStockState() {
+    const rows = await supabaseRequest(
+        "kv_store_48db9b7e?key=in.(" + OLIST_STOCK_STATUS_KEY + "," + OLIST_SYNC_SETTINGS_KEY + ")&select=key,value",
+        { method: "GET" }
+    );
+    const byKey = new Map((Array.isArray(rows) ? rows : []).map(row => [row.key, row.value]));
+    const state = normalizeOlistStockState(byKey.get(OLIST_STOCK_STATUS_KEY) || {});
+    state.settings = { ...OLIST_SYNC_DEFAULT_SETTINGS, ...(byKey.get(OLIST_SYNC_SETTINGS_KEY) || {}) };
+    return state;
 }
 
 async function writeOlistStockState(state) {
+    const { settings, ...value } = state;
     await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
-        body: JSON.stringify({ key: OLIST_STOCK_STATUS_KEY, value: { ...state, version: 2, updated_at: new Date().toISOString() } })
+        body: JSON.stringify({ key: OLIST_STOCK_STATUS_KEY, value: { ...value, version: 3, updated_at: new Date().toISOString() } })
     });
 }
 
-// Um lote da rodada: confere as próximas peças até gastar as chamadas ou o tempo.
+// Espaça as consultas à Olist (limite de requisições por minuto da API).
+function createOlistPacer(ms = OLIST_STOCK_PAUSE_MS) {
+    let last = 0;
+    return async () => {
+        const wait = last + ms - Date.now();
+        if (wait > 0) await pause(wait);
+        last = Date.now();
+    };
+}
+
+// Valor em reais vindo da Olist (número ou texto "1.234,56"). null quando vazio ou zero.
+function olistMoney(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const number = typeof value === "number"
+        ? value
+        : Number(String(value).trim().replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", "."));
+    return Number.isFinite(number) && number > 0 ? Math.round(number * 100) / 100 : null;
+}
+
+// Preço e preço promocional de um produto ou variação da Olist.
+function olistPricesOf(item) {
+    const price = olistMoney(item?.precos?.preco ?? item?.preco);
+    const promo = olistMoney(item?.precos?.precoPromocional ?? item?.precoPromocional);
+    return { price, promo: price && promo && promo < price - 0.004 ? promo : null };
+}
+
+// Nome da cor de uma variação da Olist, só quando a grade tem "Cor" (ex.: "Café").
+function olistColorLabel(variation) {
+    const grade = Array.isArray(variation?.grade) ? variation.grade : [];
+    const value = safeString(grade.find(g => /^cor/i.test(safeString(g?.chave)))?.valor);
+    return value ? value.charAt(0).toUpperCase() + value.slice(1) : "";
+}
+
+const sameMoney = (a, b) => a !== null && b !== null && a !== undefined && b !== undefined && Math.abs(Number(a) - Number(b)) < 0.005;
+const brlText = value => "R$ " + Number(value || 0).toFixed(2).replace(".", ",");
+
+async function olistDetail(id, ctx) {
+    await ctx.pace();
+    spend(ctx.budget);
+    try {
+        return await olistRequest("/produtos/" + encodeURIComponent(id));
+    } catch (error) {
+        if (error?.status === 404) return null;
+        throw error;
+    }
+}
+
+// Disponível e reservado de uma peça da Olist pelo id. null quando a peça não existe.
+async function olistStockById(id, ctx) {
+    await ctx.pace();
+    spend(ctx.budget);
+    let data;
+    try {
+        data = await olistRequest("/estoque/" + encodeURIComponent(id));
+    } catch (error) {
+        if (error?.status === 404) return null;
+        throw error;
+    }
+    const reserved = Number(data?.reservado);
+    return {
+        codigo: safeString(data?.codigo),
+        available: olistAvailableFrom(data),
+        reserved: Number.isFinite(reserved) ? Math.max(0, Math.floor(reserved)) : 0
+    };
+}
+
+// Estoque da cor na Olist. found=false quando o SKU não existe lá.
+async function olistStockForVariant(variant, ctx) {
+    let stock = variant.olist_product_id ? await olistStockById(variant.olist_product_id, ctx) : null;
+    // O SKU mudou ou a peça foi apagada na Olist: procura de novo pelo SKU.
+    if (!stock || (stock.codigo && skuKey(stock.codigo) !== skuKey(variant.sku))) {
+        await ctx.pace();
+        const id = await olistItemIdForVariant(variant, { refresh: true, budget: ctx.budget });
+        delete ctx.state.links[variant.id];
+        if (!id) return { found: false };
+        stock = await olistStockById(id, ctx);
+        if (!stock) return { found: false };
+    }
+    return { found: true, available: stock.available, reserved: stock.reserved };
+}
+
+// Deixa o estoque da cor em "target" (sobe ou desce) e registra no histórico. Se uma venda
+// do site mexeu no estoque no meio do caminho, desconta a venda e tenta mais uma vez.
+async function setSiteStock(variant, target, reason, budget) {
+    const loaded = Number(variant.stock || 0);
+    let current = loaded;
+    let wanted = Math.max(0, target);
+    for (let attempt = 0; attempt < 2; attempt++) {
+        if (wanted === current) return attempt ? { from: loaded, to: current } : null;
+        try {
+            spend(budget);
+            const rows = await supabaseRequest("rpc/adjust_product_variant_stock", {
+                method: "POST",
+                body: JSON.stringify({ p_variant_id: variant.id, p_delta: wanted - current, p_movement_type: "correction", p_reason: reason, p_created_by: "olist" })
+            });
+            const row = Array.isArray(rows) ? rows[0] : rows;
+            const to = Number.isFinite(Number(row?.stock)) ? Number(row.stock) : wanted;
+            variant.stock = to;
+            return { from: loaded, to };
+        } catch (error) {
+            if (attempt || !/Estoque insuficiente/.test(String(error.message))) throw error;
+            spend(budget);
+            const fresh = await supabaseRequest("product_variants?id=eq." + encodeURIComponent(variant.id) + "&select=stock", { method: "GET" });
+            current = Number(fresh?.[0]?.stock || 0);
+            wanted = Math.max(0, target - Math.max(0, loaded - current));
+        }
+    }
+    return null;
+}
+
+// Preço e promoção da Olist no produto do site. Promoção da Olist vira SALE; a SALE feita
+// à mão no painel só sai quando a Olist tiver promoção (aí vale a da Olist).
+async function applyOlistPrices(product, olist, ctx) {
+    const id = String(product.id);
+    const sales = ctx.state.sales;
+    const sitePrice = Number(product.price);
+    const siteSale = product.is_sale && product.sale_price !== null && product.sale_price !== undefined ? Number(product.sale_price) : null;
+    const patch = {};
+    if (olist.promo) {
+        if (!sameMoney(sitePrice, olist.price)) patch.price = olist.price;
+        if (!sameMoney(siteSale, olist.promo)) { patch.sale_price = olist.promo; patch.is_sale = true; }
+        sales[id] = olist.promo;
+    } else if (sales[id] !== undefined && sameMoney(siteSale, sales[id])) {
+        // A promoção tinha vindo da Olist e acabou lá.
+        patch.is_sale = false;
+        patch.sale_price = null;
+        if (!sameMoney(sitePrice, olist.price)) patch.price = olist.price;
+        delete sales[id];
+    } else {
+        // SALE do painel (ou alterada à mão depois de vir da Olist): continua.
+        delete sales[id];
+        if (siteSale !== null && olist.price <= siteSale + 0.004) {
+            return { note: "O preço na Olist (" + brlText(olist.price) + ") não é maior que o preço da SALE no site (" + brlText(siteSale) + "). O preço do site não foi trocado; confira." };
+        }
+        if (!sameMoney(sitePrice, olist.price)) patch.price = olist.price;
+    }
+    if (!Object.keys(patch).length) return {};
+    spend(ctx.budget);
+    await supabaseRequest("products?id=eq." + encodeURIComponent(product.id), {
+        method: "PATCH",
+        headers: { "Prefer": "return=minimal" },
+        body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() })
+    });
+    publicCache.delete("catalog");
+    const before = siteSale !== null ? brlText(sitePrice) + " → SALE " + brlText(siteSale) : brlText(sitePrice);
+    const price = patch.price ?? sitePrice;
+    const sale = patch.is_sale === false ? null : (patch.sale_price ?? siteSale);
+    Object.assign(product, { price, sale_price: sale, is_sale: sale !== null });
+    return { changed: { from: before, to: sale !== null ? brlText(price) + " → SALE " + brlText(sale) : brlText(price) } };
+}
+
+// Confere um produto do site na Olist e deixa o site igual: preço, cores e estoque.
+async function syncProductWithOlist(product, ctx) {
+    const { budget, state, settings } = ctx;
+    const now = new Date().toISOString();
+    const name = safeString(product.name);
+    const variants = Array.isArray(product.product_variants) ? product.product_variants : [];
+    const label = variant => ({ product: name, color: safeString(variant.color), sku: safeString(variant.sku) });
+    const snap = (variant, data) => { state.snapshot.variants[variant.id] = { p: product.id, at: now, ...data }; };
+    const live = variants.filter(variant => variant.active !== false && safeString(variant.sku));
+
+    // 1. A peça da Olist de cada cor (pelo SKU) e o produto pai dela.
+    const sources = new Map();   // id na Olist do produto pai (ou da peça avulsa) → detalhe
+    const sourceOf = new Map();  // cor do site → id da fonte
+    const checked = [];
+    for (const variant of live) {
+        if (ctx.dupSkus.has(skuKey(variant.sku))) {
+            snap(variant, { st: "sku_repetido", site: Number(variant.stock || 0) });
+            ctx.cycle.duplicates.push(label(variant));
+            continue;
+        }
+        if (!variant.olist_product_id) {
+            await ctx.pace();
+            await olistItemIdForVariant(variant, { budget });
+        }
+        let item = variant.olist_product_id ? Number(variant.olist_product_id) : null;
+        let link = state.links[variant.id];
+        if (item && (!link || Number(link.item) !== item)) {
+            let detail = await olistDetail(item, ctx);
+            if (!detail) {
+                // A peça foi apagada ou trocada na Olist: procura o SKU de novo.
+                await ctx.pace();
+                item = await olistItemIdForVariant(variant, { refresh: true, budget });
+                detail = item ? await olistDetail(item, ctx) : null;
+            }
+            if (detail) {
+                const pai = detail.produtoPai;
+                const parent = pai?.id && String(pai.id) !== String(item) ? Number(pai.id) : 0;
+                link = state.links[variant.id] = { item, parent };
+                if (!parent) sources.set(item, detail);
+            } else {
+                item = null;
+            }
+        }
+        if (!item) {
+            delete state.links[variant.id];
+            snap(variant, { st: "sem_olist", site: Number(variant.stock || 0) });
+            ctx.cycle.not_found.push(label(variant));
+            continue;
+        }
+        sourceOf.set(variant.id, link.parent || item);
+        checked.push(variant);
+    }
+
+    // 2. Detalhe de cada fonte: o produto pai traz as variações; a peça avulsa, o próprio preço.
+    for (const id of new Set(sourceOf.values())) {
+        if (!sources.has(id)) sources.set(id, await olistDetail(id, ctx));
+        // O produto pai sumiu: as cores dele procuram o pai de novo na próxima rodada.
+        if (!sources.get(id)) checked.filter(v => sourceOf.get(v.id) === id).forEach(v => delete state.links[v.id]);
+    }
+
+    // 3. Preço e promoção: a variação tem preço próprio; se não tiver, vale o do produto pai.
+    const report = { at: now, st: "igual", price: null, promo: null };
+    const priceList = [];
+    for (const [id, detail] of sources) {
+        if (!detail) continue;
+        const variations = Array.isArray(detail.variacoes) ? detail.variacoes : [];
+        const own = olistPricesOf(detail);
+        checked.filter(v => sourceOf.get(v.id) === id).forEach(variant => {
+            const variation = variations.find(x => skuKey(x?.sku) === skuKey(variant.sku));
+            const prices = variation ? olistPricesOf(variation) : { price: null, promo: null };
+            priceList.push(prices.price ? prices : own);
+        });
+    }
+    const known = priceList.filter(p => p.price);
+    if (known.length) Object.assign(report, { price: known[0].price, promo: known[0].promo });
+    if (!known.length) {
+        report.st = checked.length ? "sem_preco" : live.some(v => ctx.dupSkus.has(skuKey(v.sku))) ? "sku_repetido" : "sem_olist";
+    } else if (new Set(known.map(p => p.price + "/" + (p.promo || ""))).size > 1) {
+        report.st = "aviso";
+        report.note = "Na Olist, as cores deste produto têm preços diferentes; o site usa um preço só. Confira.";
+    } else if (!settings.prices) {
+        report.st = "desligado";
+    } else {
+        const result = await applyOlistPrices(product, known[0], ctx);
+        if (result.note) Object.assign(report, { st: "aviso", note: result.note });
+        if (result.changed) {
+            report.st = "atualizado";
+            ctx.changes.push({ product: name, color: "", sku: "", what: "preco", ...result.changed });
+        }
+    }
+    state.snapshot.products[product.id] = report;
+
+    // 4. Cores: nome da cor igual ao da Olist e cores novas da Olist (com estoque) no site.
+    if (settings.colors) {
+        for (const [id, detail] of sources) {
+            const variations = Array.isArray(detail?.variacoes) ? detail.variacoes : [];
+            for (const variation of variations) {
+                const sku = skuKey(variation?.sku);
+                const color = olistColorLabel(variation);
+                if (!sku || !color) continue;
+                const siteVariant = variants.find(v => skuKey(v.sku) === sku);
+                if (siteVariant) {
+                    if (siteVariant.active === false || ctx.dupSkus.has(sku)) continue;
+                    if (stemKey(colorKey(siteVariant.color, name)) === stemKey(colorKey(color, name))) continue;
+                    if (variants.some(v => v.id !== siteVariant.id && nameKey(v.color) === nameKey(color))) continue;
+                    spend(budget);
+                    await supabaseRequest("product_variants?id=eq." + encodeURIComponent(siteVariant.id), {
+                        method: "PATCH",
+                        headers: { "Prefer": "return=minimal" },
+                        body: JSON.stringify({ color, updated_at: new Date().toISOString() })
+                    });
+                    ctx.changes.push({ ...label(siteVariant), what: "cor", from: safeString(siteVariant.color), to: color });
+                    siteVariant.color = color;
+                    publicCache.delete("catalog");
+                } else if (!ctx.allSkus.has(sku) && variation.id && !variants.some(v => nameKey(v.color) === nameKey(color))) {
+                    if (!budget.has(4)) break;
+                    const stock = await olistStockById(variation.id, ctx);
+                    if (!stock || !(stock.available > 0)) continue;
+                    spend(budget);
+                    const rows = await supabaseRequest("product_variants", {
+                        method: "POST",
+                        body: JSON.stringify({ product_id: product.id, color, sku: safeString(variation.sku), stock: 0, active: true, olist_product_id: Number(variation.id) })
+                    });
+                    const created = Array.isArray(rows) ? rows[0] : rows;
+                    if (!created?.id) continue;
+                    ctx.allSkus.add(sku);
+                    variants.push(created);
+                    state.links[created.id] = { item: Number(variation.id), parent: id };
+                    const target = stock.available;
+                    const change = await setSiteStock(created, target, "Cor nova da Olist: " + stock.available + " disponível", budget);
+                    snap(created, { st: "igual", olist: stock.available, res: stock.reserved, pend: 0, target, site: change ? change.to : 0 });
+                    ctx.changes.push({ ...label(created), what: "nova_cor", from: "", to: color + " · " + target + " em estoque" });
+                    publicCache.delete("catalog");
+                }
+            }
+        }
+    }
+
+    // 5. Estoque de cada cor: disponível na Olist menos as vendas do site que ela ainda não registrou.
+    for (const variant of checked) {
+        const stock = await olistStockForVariant(variant, ctx);
+        ctx.cycle.checked++;
+        if (!stock.found) {
+            snap(variant, { st: "sem_olist", site: Number(variant.stock || 0) });
+            ctx.cycle.not_found.push(label(variant));
+            continue;
+        }
+        if (stock.available === null) {
+            snap(variant, { st: "erro", site: Number(variant.stock || 0) });
+            continue;
+        }
+        const waiting = Math.max(0, (ctx.pending.get(String(variant.id)) || 0) - stock.reserved);
+        const target = Math.max(0, stock.available - waiting);
+        const change = await setSiteStock(
+            variant,
+            target,
+            "Estoque da Olist: " + stock.available + " disponível" + (waiting ? " (" + waiting + " vendida" + (waiting > 1 ? "s" : "") + " no site aguardando a Olist)" : ""),
+            budget
+        );
+        if (change) {
+            ctx.changes.push({ ...label(variant), what: "estoque", from: change.from, to: change.to });
+            publicCache.delete("catalog");
+        }
+        snap(variant, { st: "igual", olist: stock.available, res: stock.reserved, pend: waiting, target, site: change ? change.to : Number(variant.stock || 0) });
+    }
+}
+
+// Um lote da rodada: confere os próximos produtos até gastar as chamadas ou o tempo.
 // restart começa uma rodada nova (botão do painel); cycleId diz qual rodada o painel acompanha.
 async function syncOlistStockBatch({ trigger = "agendada", calls = WORKER_CALL_LIMIT - 4, restart = false, cycleId = "", maxMs = OLIST_STOCK_BATCH_MS } = {}) {
     if (!OLIST_SYNC_ENABLED) return { skipped: "disabled" };
     const started = Date.now();
     const budget = createCallBudget(calls);
-    // Ler e travar o estado, consultar as peças e gravar no fim: 4 chamadas, mais uma peça.
-    if (!budget.has(4 + 3 + OLIST_STOCK_VARIANT_CALLS)) return { skipped: "budget" };
+    // Estado, trava, produtos, vendas pendentes, SKUs e gravação final (6), acesso à Olist (3)
+    // e pelo menos um produto pequeno.
+    if (!budget.has(6 + 3 + 6)) return { skipped: "budget" };
 
     budget.use();
     const state = await readOlistStockState();
@@ -2891,71 +3240,102 @@ async function syncOlistStockBatch({ trigger = "agendada", calls = WORKER_CALL_L
     if (!cycle) {
         const lastEnd = Date.parse(state.last?.finished_at || "") || 0;
         if (!restart && Date.now() - lastEnd < OLIST_STOCK_CYCLE_GAP_MS) return { skipped: "rest", state };
-        cycle = { id: new Date().toISOString(), started_at: new Date().toISOString(), trigger, after: "", checked: 0, lowered: [], not_found: [], errors: 0 };
+        cycle = { id: new Date().toISOString(), started_at: new Date().toISOString(), trigger, after: "", products: 0, checked: 0, changes: [], not_found: [], duplicates: [], errors: 0 };
     }
+    ["changes", "not_found", "duplicates"].forEach(key => { if (!Array.isArray(cycle[key])) cycle[key] = []; });
     budget.use();
     await writeOlistStockState({ ...state, cycle, lease_until: Date.now() + OLIST_STOCK_LEASE_MS });
 
-    const loweredNow = [];
+    const changesNow = [];
     let finished = false;
     budget.use(); // gravação final
     try {
         await ensureOlistAccess(budget);
-        budget.use();
-        // Só peças ativas, com SKU e com estoque no site: as zeradas não têm o que baixar.
-        const variants = await supabaseRequest(
-            "product_variants?select=id,sku,stock,color,olist_product_id,products!inner(name,active)" +
-            "&active=eq.true&stock=gt.0&sku=not.is.null&products.active=eq.true" +
-            (cycle.after ? "&id=gt." + encodeURIComponent(cycle.after) : "") +
-            "&order=id.asc&limit=" + OLIST_STOCK_PAGE,
-            { method: "GET" }
-        );
-        const list = Array.isArray(variants) ? variants : [];
+        budget.use(3);
+        const since = new Date(Date.now() - OLIST_PENDING_SALE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+        const [products, pendingRows, skuRows] = await Promise.all([
+            supabaseRequest(
+                "products?select=id,name,price,sale_price,is_sale,product_variants(id,color,sku,stock,active,olist_product_id)" +
+                "&active=eq.true" + (cycle.after ? "&id=gt." + encodeURIComponent(cycle.after) : "") +
+                "&order=id.asc&limit=" + OLIST_SYNC_PRODUCT_PAGE,
+                { method: "GET" }
+            ),
+            // Vendas do site já baixadas no site e ainda não enviadas.
+            supabaseRequest(
+                "order_items?select=variant_id,quantity,orders!inner(status,stock_decremented,created_at)" +
+                "&variant_id=not.is.null&orders.status=in.(paid,processing)&orders.stock_decremented=is.true" +
+                "&orders.created_at=gte." + encodeURIComponent(since),
+                { method: "GET" }
+            ),
+            supabaseRequest("product_variants?select=sku,active,products!inner(active)&sku=not.is.null", { method: "GET" })
+        ]);
+        const pending = new Map();
+        (Array.isArray(pendingRows) ? pendingRows : []).forEach(row => {
+            pending.set(String(row.variant_id), (pending.get(String(row.variant_id)) || 0) + Math.max(0, Number(row.quantity) || 0));
+        });
+        // Um SKU em duas peças ativas do site não é conferido: o estoque da Olist seria vendido duas vezes.
+        const allSkus = new Set();
+        const activeCount = new Map();
+        (Array.isArray(skuRows) ? skuRows : []).forEach(row => {
+            const sku = skuKey(row.sku);
+            if (!sku) return;
+            allSkus.add(sku);
+            if (row.active !== false && row.products?.active !== false) activeCount.set(sku, (activeCount.get(sku) || 0) + 1);
+        });
+        const dupSkus = new Set([...activeCount].filter(([, count]) => count > 1).map(([sku]) => sku));
+
+        const ctx = { budget, state, settings: state.settings, cycle, pending, allSkus, dupSkus, changes: changesNow, pace: createOlistPacer() };
+        const list = Array.isArray(products) ? products : [];
         let index = 0;
         for (; index < list.length; index++) {
-            const variant = list[index];
-            if (!budget.has(OLIST_STOCK_VARIANT_CALLS) || Date.now() - started > maxMs) break;
-            if (safeString(variant.sku)) {
-                const label = { product: safeString(variant.products?.name), color: safeString(variant.color), sku: safeString(variant.sku) };
-                try {
-                    const { available, found } = await olistAvailableForVariant(variant, budget);
-                    cycle.checked++;
-                    if (!found) cycle.not_found.push(label);
-                    else if (available !== null && available < Number(variant.stock || 0)) {
-                        const change = await lowerSiteStock(variant, available, "Estoque da Olist: " + available + " disponível", budget);
-                        if (change.changed) loweredNow.push({ ...label, from: change.from, to: change.to });
-                    }
-                } catch (error) {
-                    // Limite da Olist ou das chamadas: a peça fica para o próximo lote.
-                    if (error?.status === 429 || error?.budget) break;
-                    if (/OLIST_AUTH|OLIST_SYNC_DISABLED/.test(String(error.message))) throw error;
-                    cycle.errors++;
-                    console.error("Estoque Olist —", variant.sku, error.message);
-                }
-                await pause(OLIST_STOCK_PAUSE_MS);
+            const product = list[index];
+            const live = (product.product_variants || []).filter(v => v.active !== false && safeString(v.sku)).length;
+            if (Date.now() - started > maxMs || !budget.has(Math.min(30, 4 + 3 * live))) break;
+            try {
+                await syncProductWithOlist(product, ctx);
+                cycle.products++;
+            } catch (error) {
+                // Limite da Olist ou das chamadas: o produto fica para o próximo lote.
+                if (error?.status === 429 || error?.budget) break;
+                if (/OLIST_AUTH|OLIST_SYNC_DISABLED/.test(String(error.message))) throw error;
+                cycle.errors++;
+                console.error("Olist → site —", product.name, error.message);
             }
-            cycle.after = variant.id;
+            cycle.after = product.id;
         }
-        finished = index >= list.length && list.length < OLIST_STOCK_PAGE;
+        finished = index >= list.length && list.length < OLIST_SYNC_PRODUCT_PAGE;
     } catch (error) {
         // Sem acesso à Olist: encerra a rodada com o aviso para o painel.
         cycle.error = /OLIST_AUTH/.test(String(error.message))
             ? "A conexão com a Olist expirou. Clique em RECONECTAR OLIST."
             : "Não foi possível consultar a Olist agora.";
-        console.error("Estoque Olist:", error.message);
+        console.error("Olist → site:", error.message);
         finished = true;
     }
 
-    cycle.lowered = cycle.lowered.concat(loweredNow).slice(-100);
-    cycle.not_found = cycle.not_found.slice(0, 60);
-    const next = { last: state.last, cycle, lease_until: 0 };
+    cycle.changes = cycle.changes.concat(changesNow).slice(-150);
+    // Um produto que ficou para o lote seguinte entra de novo nessas listas: uma vez só.
+    const once = list => [...new Map(list.map(x => [x.product + "|" + x.sku, x])).values()];
+    cycle.not_found = once(cycle.not_found).slice(0, 60);
+    cycle.duplicates = once(cycle.duplicates).slice(0, 20);
+    const next = { ...state, cycle, lease_until: 0 };
     if (finished) {
         next.last = { ...cycle, ran_at: cycle.started_at, finished_at: new Date().toISOString() };
         next.cycle = null;
+        // Produto ou cor que saiu do site (ou foi desativado) sai da conferência.
+        if (!cycle.error) {
+            const keepAfter = Date.parse(cycle.started_at) - 24 * 60 * 60 * 1000;
+            for (const group of ["products", "variants"]) {
+                for (const [id, entry] of Object.entries(state.snapshot[group])) {
+                    if (!(Date.parse(entry?.at || "") >= keepAfter)) delete next.snapshot[group][id];
+                }
+            }
+            for (const id of Object.keys(next.links)) if (!next.snapshot.variants[id]) delete next.links[id];
+        }
     }
-    await writeOlistStockState(next).catch(error => console.error("Estoque Olist — status não salvo:", error.message));
-    if (loweredNow.length) console.log("📦 Estoque do site baixado pela Olist:", loweredNow);
-    return { done: finished, state: next, cycle_id: cycle.id, lowered: loweredNow };
+    await writeOlistStockState(next).catch(error => console.error("Olist → site — status não salvo:", error.message));
+    if (changesNow.length) console.log("📦 Site atualizado pela Olist:", changesNow);
+    return { done: finished, state: next, cycle_id: cycle.id, changes: changesNow };
 }
 
 // Na hora da compra: confere na Olist as peças do carrinho, dentro das chamadas que
@@ -2990,16 +3370,50 @@ async function checkCartAgainstOlistStock(entries, budget) {
 }
 
 function olistStockStatusPayload(state) {
-    const cycle = state?.cycle ? { id: state.cycle.id, started_at: state.cycle.started_at, trigger: state.cycle.trigger, checked: state.cycle.checked, lowered: state.cycle.lowered, errors: state.cycle.errors } : null;
-    return { last: state?.last || null, cycle, running: Number(state?.lease_until || 0) > Date.now() };
+    const summary = cycle => cycle ? {
+        id: cycle.id, started_at: cycle.started_at, finished_at: cycle.finished_at || null, trigger: cycle.trigger,
+        products: cycle.products || 0, checked: cycle.checked || 0, errors: cycle.errors || 0, error: cycle.error || "",
+        changes: cycle.changes || cycle.lowered || [], not_found: cycle.not_found || [], duplicates: cycle.duplicates || []
+    } : null;
+    return { last: summary(state?.last), cycle: summary(state?.cycle), running: Number(state?.lease_until || 0) > Date.now(), settings: state?.settings || OLIST_SYNC_DEFAULT_SETTINGS };
+}
+
+// Conferência para o painel: cada produto ativo do site, com o que a última rodada viu na Olist.
+async function olistConferenceRows(state) {
+    const products = await supabaseRequest(
+        "products?select=id,name,price,sale_price,is_sale,product_variants(id,color,sku,stock,active)&active=eq.true&order=name.asc",
+        { method: "GET" }
+    );
+    const snapshot = state.snapshot || { products: {}, variants: {} };
+    return (Array.isArray(products) ? products : []).map(product => {
+        const seen = snapshot.products[product.id] || null;
+        return {
+            id: product.id,
+            name: product.name,
+            price: Number(product.price),
+            sale_price: product.is_sale && product.sale_price !== null ? Number(product.sale_price) : null,
+            olist: seen && { st: seen.st, price: seen.price, promo: seen.promo, note: seen.note || "", at: seen.at },
+            variants: (product.product_variants || [])
+                .filter(variant => variant.active !== false)
+                .sort((a, b) => safeString(a.color).localeCompare(safeString(b.color), "pt-BR"))
+                .map(variant => {
+                    const entry = snapshot.variants[variant.id] || null;
+                    return {
+                        id: variant.id, color: variant.color, sku: variant.sku, stock: Number(variant.stock || 0),
+                        olist: entry && { st: entry.st, available: entry.olist ?? null, reserved: entry.res || 0, waiting: entry.pend || 0, target: entry.target ?? null, at: entry.at }
+                    };
+                })
+        };
+    });
 }
 
 app.get("/api/admin/olist/stock-sync", requireAdmin, async (req, res) => {
     try {
         const state = await readOlistStockState();
-        return res.json({ success: true, enabled: OLIST_SYNC_ENABLED, ...olistStockStatusPayload(state) });
+        const conference = req.query.conference === "1" ? await olistConferenceRows(state) : undefined;
+        return res.json({ success: true, enabled: OLIST_SYNC_ENABLED, ...olistStockStatusPayload(state), conference });
     } catch (error) {
-        console.error("Estoque Olist — status:", error);
+        console.error("Olist → site — status:", error);
         return res.status(500).json({ success: false, message: "Não foi possível ler a última sincronização." });
     }
 });
@@ -3019,8 +3433,24 @@ app.post("/api/admin/olist/stock-sync", requireAdmin, async (req, res) => {
         if (result.skipped) return res.status(503).json({ success: false, message: "Não foi possível conferir agora. Tente de novo em instantes." });
         return res.json({ success: true, done: result.done, cycle_id: result.cycle_id, ...olistStockStatusPayload(result.state) });
     } catch (error) {
-        console.error("Estoque Olist — painel:", error);
-        return res.status(500).json({ success: false, message: "Não foi possível conferir o estoque agora." });
+        console.error("Olist → site — painel:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível conferir a Olist agora." });
+    }
+});
+
+// Opções do painel: atualizar preço/promoção e cores pela Olist (o estoque é sempre atualizado).
+app.put("/api/admin/olist/sync-settings", requireAdmin, async (req, res) => {
+    try {
+        const settings = { prices: req.body?.prices !== false, colors: req.body?.colors !== false };
+        await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
+            method: "POST",
+            headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+            body: JSON.stringify({ key: OLIST_SYNC_SETTINGS_KEY, value: settings })
+        });
+        return res.json({ success: true, settings });
+    } catch (error) {
+        console.error("Olist → site — opções:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível salvar as opções." });
     }
 });
 
@@ -5774,8 +6204,8 @@ async function refreshOlistAccess() {
 }
 
 // Tarefas periódicas. No Render rodam em timers; no Cloudflare, pelos Cron Triggers
-// do wrangler.jsonc ("* * * * *" = um pedido pago pendente e um lote do estoque
-// Olist → site; a cada 3 horas = acesso Olist). Cada execução tem 50 chamadas externas:
+// do wrangler.jsonc ("* * * * *" = um pedido pago pendente e um lote da conferência
+// Olist → site (estoque, preço e cores); a cada 3 horas = acesso Olist). Cada execução tem 50 chamadas externas:
 // o pedido vai primeiro e o lote de estoque usa o que sobrar.
 async function runScheduledTask(cron) {
     if (cron === "* * * * *") {
@@ -5814,7 +6244,7 @@ function startNodeServer() {
             // enquanto o servidor estiver no ar, mesmo sem vendas.
             setInterval(refreshOlistAccess, 3 * 60 * 60 * 1000);
 
-            // Estoque Olist → site (só baixa), um lote por minuto.
+            // Olist → site (estoque, preço e cores), um lote por minuto.
             setInterval(() => syncOlistStockBatch().catch(() => {}), 60000);
 
             // Pedidos sem pagamento antigos e lembretes por e-mail, a cada 5 minutos.
