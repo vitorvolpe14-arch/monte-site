@@ -358,8 +358,9 @@ function olistPriceStatus(p){
   if(!o.price)return["sem_preco",o.st==="sku_repetido"?"SKU REPETIDO NO SITE":o.st==="sem_olist"?"NÃO ACHADO NA OLIST":"SEM PREÇO NA OLIST","processing",""];
   if(o.st==="aviso")return["aviso","CONFERIR","processing",o.note||""];
   const same=(a,b)=>a!==null&&b!==null&&Math.abs(Number(a)-Number(b))<0.005;
-  const equal=same(p.price,o.price)&&(o.promo?same(p.sale_price,o.promo):true);
-  if(equal)return["igual","IGUAL","shipped",p.sale_price!==null&&!o.promo?"SALE feita no painel (na Olist não há promoção).":""];
+  // SALE do painel: vale o preço que o cliente paga (a SALE) quando a Olist cobra menos que o "de".
+  const equal=o.promo?same(p.price,o.price)&&same(p.sale_price,o.promo):p.sale_price!==null&&o.price<p.price-0.004?same(p.sale_price,o.price):same(p.price,o.price);
+  if(equal)return["igual","IGUAL","shipped",p.sale_price!==null&&!o.promo?"SALE feita no painel.":""];
   if(o.st==="desligado")return["desligado","DIFERENTE · ATUALIZAÇÃO DE PREÇO DESLIGADA","paid",""];
   return["diferente","DIFERENTE · CORRIGE NA PRÓXIMA RODADA","paid",""];
 }

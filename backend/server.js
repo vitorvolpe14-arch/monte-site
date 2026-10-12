@@ -3012,8 +3012,8 @@ async function setSiteStock(variant, target, reason, budget) {
     return null;
 }
 
-// Preço e promoção da Olist no produto do site. Promoção da Olist vira SALE; a SALE feita
-// à mão no painel só sai quando a Olist tiver promoção (aí vale a da Olist).
+// Preço e promoção da Olist no produto do site. Promoção da Olist vira SALE (e sai quando
+// acaba lá); a SALE feita no painel continua, com o preço que a Olist cobrar.
 async function applyOlistPrices(product, olist, ctx) {
     const id = String(product.id);
     const sales = ctx.state.sales;
@@ -3030,12 +3030,14 @@ async function applyOlistPrices(product, olist, ctx) {
         patch.sale_price = null;
         if (!sameMoney(sitePrice, olist.price)) patch.price = olist.price;
         delete sales[id];
-    } else {
-        // SALE do painel (ou alterada à mão depois de vir da Olist): continua.
+    } else if (siteSale !== null && olist.price < sitePrice - 0.004) {
+        // SALE do painel e, na Olist, o preço de venda já é o da SALE (ex.: "de" R$ 489 no site,
+        // R$ 299 na Olist): o preço da SALE segue a Olist e o "de" do site continua.
         delete sales[id];
-        if (siteSale !== null && olist.price <= siteSale + 0.004) {
-            return { note: "O preço na Olist (" + brlText(olist.price) + ") não é maior que o preço da SALE no site (" + brlText(siteSale) + "). O preço do site não foi trocado; confira." };
-        }
+        if (!sameMoney(siteSale, olist.price)) patch.sale_price = olist.price;
+    } else {
+        // Sem SALE, ou SALE do painel com a Olist no preço cheio: o preço segue a Olist e a SALE continua.
+        delete sales[id];
         if (!sameMoney(sitePrice, olist.price)) patch.price = olist.price;
     }
     if (!Object.keys(patch).length) return {};
