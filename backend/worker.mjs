@@ -6,7 +6,7 @@ import * as cloudflareWorkers from "cloudflare:workers";
 import { httpServerHandler } from "cloudflare:node";
 import server from "./server.js";
 
-const { app, runScheduledTask, setSiteAssets, setBackgroundRunner } = server;
+const { app, runScheduledTask, setSiteAssets, setBackgroundRunner, serveMediaRequest } = server;
 
 // Páginas sem ".html" no endereço (/, /admin, /pagamento-sucesso) são lidas dos assets.
 setSiteAssets(env.ASSETS);
@@ -30,7 +30,12 @@ function redirectToSite(request) {
 }
 
 export default {
-    fetch: (request, env, ctx) => redirectToSite(request) || http.fetch(request, env, ctx),
+    async fetch(request, env, ctx) {
+        const redirect = redirectToSite(request);
+        if (redirect) return redirect;
+        // Fotos (/media/...) saem do cache da Cloudflare, sem passar pelo Express.
+        return (await serveMediaRequest(request, ctx)) || http.fetch(request, env, ctx);
+    },
     scheduled(controller, env, ctx) {
         ctx.waitUntil(runScheduledTask(controller.cron));
     }
