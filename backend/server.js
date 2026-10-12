@@ -3012,29 +3012,29 @@ async function setSiteStock(variant, target, reason, budget) {
     return null;
 }
 
-// Preço e promoção da Olist no produto do site. Promoção da Olist vira SALE; a SALE feita
-// à mão no painel só sai quando a Olist tiver promoção (aí vale a da Olist).
+// Preço e promoção da Olist no produto do site. A SALE feita no site continua com os preços
+// dela (nada muda nesses produtos). Promoção na Olist vira SALE no site e sai quando acaba lá.
 async function applyOlistPrices(product, olist, ctx) {
     const id = String(product.id);
     const sales = ctx.state.sales;
     const sitePrice = Number(product.price);
     const siteSale = product.is_sale && product.sale_price !== null && product.sale_price !== undefined ? Number(product.sale_price) : null;
+    // A SALE é do site quando não veio da Olist (ou foi mudada no painel depois de vir).
+    if (siteSale !== null && !(sales[id] !== undefined && sameMoney(siteSale, sales[id]))) {
+        delete sales[id];
+        return { kept: true };
+    }
     const patch = {};
     if (olist.promo) {
         if (!sameMoney(sitePrice, olist.price)) patch.price = olist.price;
         if (!sameMoney(siteSale, olist.promo)) { patch.sale_price = olist.promo; patch.is_sale = true; }
         sales[id] = olist.promo;
-    } else if (sales[id] !== undefined && sameMoney(siteSale, sales[id])) {
-        // A promoção tinha vindo da Olist e acabou lá.
-        patch.is_sale = false;
-        patch.sale_price = null;
-        if (!sameMoney(sitePrice, olist.price)) patch.price = olist.price;
-        delete sales[id];
     } else {
-        // SALE do painel (ou alterada à mão depois de vir da Olist): continua.
-        delete sales[id];
-        if (siteSale !== null && olist.price <= siteSale + 0.004) {
-            return { note: "O preço na Olist (" + brlText(olist.price) + ") não é maior que o preço da SALE no site (" + brlText(siteSale) + "). O preço do site não foi trocado; confira." };
+        if (sales[id] !== undefined) {
+            // A promoção tinha vindo da Olist e acabou lá.
+            patch.is_sale = false;
+            patch.sale_price = null;
+            delete sales[id];
         }
         if (!sameMoney(sitePrice, olist.price)) patch.price = olist.price;
     }
@@ -3137,7 +3137,7 @@ async function syncProductWithOlist(product, ctx) {
         report.st = "desligado";
     } else {
         const result = await applyOlistPrices(product, known[0], ctx);
-        if (result.note) Object.assign(report, { st: "aviso", note: result.note });
+        if (result.kept) report.st = "sale_site";
         if (result.changed) {
             report.st = "atualizado";
             ctx.changes.push({ product: name, color: "", sku: "", what: "preco", ...result.changed });
