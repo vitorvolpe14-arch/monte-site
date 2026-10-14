@@ -32,3 +32,6 @@
   Cache-Control: public, max-age=2592000
 /backend/assets/*
   Cache-Control: public, max-age=2592000
+# Imagem de pré-visualização do link (Instagram, WhatsApp...). Ao trocar a foto, mude o ?v= no index.html.
+/og-image.jpg
+  Cache-Control: public, max-age=2592000
