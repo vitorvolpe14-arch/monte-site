@@ -2225,6 +2225,35 @@ function restoreCartFromLink() {
 }
 
 /* =====================================================
+   LINK DIRETO PARA UM PRODUTO
+   /?produto=ID abre a vitrine com o produto já aberto, depois da
+   animação de abertura.
+===================================================== */
+
+function openProductFromLink() {
+    let productId = "";
+    try { productId = new URLSearchParams(location.search).get("produto") || ""; } catch { return; }
+    if (!productId) return;
+
+    if (!products.some(p => p.id === productId)) return;
+
+    const root = document.documentElement;
+    let done = false;
+    const run = () => {
+        if (done) return;
+        done = true;
+        observer.disconnect();
+        openProductModal(productId);
+    };
+    const observer = new MutationObserver(() => {
+        if (!root.classList.contains("intro-playing")) run();
+    });
+    if (!root.classList.contains("intro-playing")) return run();
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+    setTimeout(run, 9000);
+}
+
+/* =====================================================
    LOCAL STORAGE
 ===================================================== */
 
@@ -2296,6 +2325,7 @@ document.addEventListener(
         loadCart();
 
         restoreCartFromLink();
+        openProductFromLink();
 
     }
 );
