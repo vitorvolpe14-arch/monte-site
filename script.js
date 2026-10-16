@@ -1421,6 +1421,8 @@ function closeCart() {
 
     unlockPageScroll();
 
+    setPaymentHelp(false);
+
 }
 
 
@@ -1713,19 +1715,23 @@ async function lookupAddressByCep() {
    CHECKOUT — INFINITEPAY
 ===================================================== */
 
-// Quando o pagamento não abre, aparece junto do botão de finalizar uma linha discreta com o
-// atalho para concluir a compra pelo WhatsApp, com as peças da sacola já escritas na mensagem.
+// Quando o pagamento não abre, aparece um balão preto que abre o WhatsApp da loja ao tocar, com
+// as peças da sacola já escritas na mensagem. Fica até a cliente tocar, tentar de novo ou fechar a sacola.
 function setPaymentHelp(visible, paymentMethod) {
-    const help = document.getElementById("paymentHelp");
-    if (!help) return;
-    help.hidden = !visible;
-    help.closest(".checkout-bar")?.classList.toggle("has-help", visible);
-    if (!visible) return;
+    const balloon = document.getElementById("paymentHelp");
+    if (!balloon) return;
+    if (!visible) {
+        balloon.classList.remove("show");
+        balloon.hidden = true;
+        return;
+    }
     const items = cart.map(item => Number(item.quantity || 1) + "x " + item.name +
         (item.variant_color ? " (" + colorLabel(item.variant_color, item.name) + ")" : "")).join(", ");
     const message = "Olá, MONTÊ! Tentei finalizar minha compra no site, mas o pagamento não abriu. " +
         "Peças: " + items + ". Pagamento: " + (paymentMethod === "pix" ? "Pix" : "cartão") + ".";
-    document.getElementById("paymentHelpLink").href = "https://wa.me/5585992163305?text=" + encodeURIComponent(message);
+    balloon.href = "https://wa.me/5585992163305?text=" + encodeURIComponent(message);
+    balloon.hidden = false;
+    requestAnimationFrame(() => balloon.classList.add("show"));
 }
 
 async function checkout() {
@@ -1837,7 +1843,7 @@ async function checkout() {
         },1200);
     }catch(error){
         console.error("ERRO COMPLETO NO CHECKOUT:",error);
-        // Pagamento que não abriu: só o atalho para chamar no WhatsApp, junto do botão de finalizar.
+        // Pagamento que não abriu: só o balão para chamar no WhatsApp.
         // Sem internet o navegador dá "Failed to fetch" / "Load failed": a cliente vê a explicação.
         if(error.paymentUnavailable){hideToast();setPaymentHelp(true,paymentMethod);}
         else showToast(error instanceof TypeError?"Sem conexão. Confira sua internet e tente novamente.":(error.message||"Não foi possível concluir. Tente novamente."));

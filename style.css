@@ -8113,8 +8113,7 @@ html.catalog-pending .footer {
 /* Avisos longos (erro ao abrir o pagamento): caixa em vez de pílula. */
 .toast.is-long { border-radius: 14px; text-align: left; line-height: 1.5; }
 
-/* Pagamento não abriu: linha discreta acima do botão de finalizar, com o atalho do WhatsApp. */
-#cartOverlay .checkout-bar.has-help { flex-wrap: wrap; row-gap: 10px; }
-.payment-help { flex: 1 0 100%; margin: 0; font-size: 12.5px; color: var(--co-muted, #6b6b6b); }
-.payment-help[hidden] { display: none; }
-.payment-help a { margin-left: 4px; color: var(--wine); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
+/* Pagamento não abriu: balão preto (o mesmo dos avisos) que abre o WhatsApp da loja ao tocar. */
+.toast.payment-balloon { z-index: 10001; pointer-events: auto; cursor: pointer; border-radius: 22px; line-height: 1.5; text-decoration: none; }
+.toast.payment-balloon[hidden] { display: none; }
+.payment-balloon u { text-underline-offset: 3px; }
