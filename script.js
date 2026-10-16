@@ -273,7 +273,11 @@ function createProductCard(product) {
         if (productImageElement.complete) {
             applyProductBackground();
         } else {
-            productImageElement.addEventListener("load", applyProductBackground, { once: true });
+            // Enquanto a foto baixa, o cartão mostra um fundo suave em vez de ficar em branco.
+            productImageFrame.classList.add("is-loading");
+            const loaded = () => productImageFrame.classList.remove("is-loading");
+            productImageElement.addEventListener("load", () => { loaded(); applyProductBackground(); }, { once: true });
+            productImageElement.addEventListener("error", loaded, { once: true });
         }
     }
 
@@ -344,6 +348,41 @@ function renderNewProducts(list) {
 }
 
 
+// As vitrines mostram poucos produtos por vez. A próxima página já fica baixada enquanto a
+// cliente olha a atual: antes as fotos só começavam a baixar no toque da seta e o cartão
+// ficava em branco. Só baixa quando a vitrine está na tela, para não gastar dados à toa.
+const preloadedImages = new Map();
+const pendingPreloads = new WeakMap();
+const preloadObserver = "IntersectionObserver" in window ? new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const urls = pendingPreloads.get(entry.target);
+        pendingPreloads.delete(entry.target);
+        (urls || []).forEach(preloadImage);
+    });
+}, { rootMargin: "300px 0px" }) : null;
+
+function preloadImage(url) {
+    if (!url || preloadedImages.has(url)) return;
+    const image = new Image();
+    image.decoding = "async";
+    image.src = url;
+    preloadedImages.set(url, image);
+}
+
+function preloadNextPage(container, list, start, count) {
+    if (!container || !Array.isArray(list) || list.length <= count) return;
+    const urls = [];
+    for (let offset = count; offset < count * 2; offset++) {
+        const image = list[(start + offset) % list.length]?.images?.[0];
+        if (image) urls.push(smallImage(image));
+    }
+    if (!preloadObserver) return urls.forEach(preloadImage);
+    pendingPreloads.set(container, urls);
+    preloadObserver.unobserve(container);
+    preloadObserver.observe(container);
+}
+
 function renderNewPage() {
 
     const container =
@@ -386,6 +425,8 @@ function renderNewPage() {
             createProductCard(product)
         );
     }
+
+    preloadNextPage(container, newProducts, start, Math.min(getCarouselVisibleCount(), total));
 
     const hasCarousel =
         total > getCarouselVisibleCount();
@@ -486,6 +527,8 @@ function renderSalePage() {
         );
     }
 
+    preloadNextPage(container, saleProducts, start, Math.min(getCarouselVisibleCount(), total));
+
     const hasCarousel =
         total > getCarouselVisibleCount();
 
@@ -585,6 +628,8 @@ function renderCollectionPage() {
 
     }
 
+    preloadNextPage(container, collectionProducts, start, Math.min(getCarouselVisibleCount(), total));
+
 
     const hasCarousel =
         total > getCarouselVisibleCount();
@@ -669,6 +714,7 @@ function renderCategorySection(category) {
     for (let offset = 0; offset < Math.min(getCategoryVisibleCount(), total); offset++) {
         container.appendChild(createProductCard(list[(start + offset) % total]));
     }
+    preloadNextPage(container, list, start, Math.min(getCategoryVisibleCount(), total));
 
     const hasCarousel = total > getCategoryVisibleCount();
     if (prev) {
@@ -866,7 +912,16 @@ function setGalleryImage(index) {
     const mainImage = document.getElementById("modalMainImage");
 
     if (mainImage) {
-        mainImage.src = image;
+        // A foto pequena já está no aparelho (cartão e miniaturas): aparece na hora, e a grande
+        // entra no lugar quando terminar de baixar. Antes a janela ficava sem foto até lá.
+        const small = smallImage(image);
+        mainImage.dataset.full = image;
+        mainImage.src = small;
+        if (small !== image) {
+            const full = new Image();
+            full.onload = () => { if (mainImage.dataset.full === image) mainImage.src = image; };
+            full.src = image;
+        }
         mainImage.alt = selectedProduct.name || "Produto MONTÊ";
     }
 

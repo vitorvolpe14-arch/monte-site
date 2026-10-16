@@ -8154,3 +8154,11 @@ html.catalog-pending .footer {
     .institutional-table td { display: block; padding: 3px 0; border: 0; overflow-wrap: anywhere; }
     .institutional-table td::before { content: attr(data-label); display: block; color: #8a847d; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; }
 }
+
+/* Foto do cartão ainda baixando: camada bege com brilho (antes ficava em branco). Fica no ::after
+   porque o fundo do cartão é branco com !important e o ::before está desligado; os selos ficam por cima. */
+.product-card .product-image.is-loading::after { content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none; background: linear-gradient(100deg, #ebe5de 30%, #f5f1ec 50%, #ebe5de 70%); background-size: 200% 100%; animation: productImageLoading 1.2s ease-in-out infinite; }
+.product-card .product-image img { transition: opacity .25s ease; }
+.product-card .product-image.is-loading img { opacity: 0; }
+@keyframes productImageLoading { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .product-card .product-image.is-loading::after { animation: none; } }
