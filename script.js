@@ -1345,10 +1345,14 @@ function updateCart() {
         formatPrice(cartTotal);
 
 
-    localStorage.setItem(
-        "monteCart",
-        JSON.stringify(cart)
-    );
+    // Navegador com dados de site bloqueados (Safari com "Bloquear todos os cookies", por
+    // exemplo): o localStorage dá erro. A sacola continua funcionando, só não fica salva.
+    try {
+        localStorage.setItem(
+            "monteCart",
+            JSON.stringify(cart)
+        );
+    } catch {}
 
     updateShipping();
 
@@ -1767,7 +1771,9 @@ async function checkout() {
         flagCheckoutFields(); showToast("Preencha todos os dados do cliente e da entrega."); return;
     }
     const cpfDigits=cpf.replace(/\D/g,"");
-    const whatsappNumber=phone.replace(/\D/g,"");
+    const whatsappNumber=phoneDigits(phone);
+    // A InfinitePay não abre o pagamento com telefone incompleto.
+    if(!CHECKOUT_RULES.customerPhone(phone)){flagCheckoutFields(["customerPhone"]);showToast("Informe seu WhatsApp com DDD e 9 dígitos. Ex.: (85) 99999-9999.");return;}
     if(cpfDigits.length!==11){flagCheckoutFields(["customerCpf"]);showToast("Informe um CPF válido com 11 dígitos.");return;}
 
     const items=cart.map(item=>{
@@ -2113,6 +2119,8 @@ function closeMobileMenu() {
    TOAST
 ===================================================== */
 
+let toastTimer = null;
+
 function showToast(message) {
 
     const toast =
@@ -2130,7 +2138,9 @@ function showToast(message) {
     );
 
 
-    setTimeout(
+    // Mensagens longas (erro no pagamento, com o WhatsApp da loja) ficam o tempo de serem lidas.
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(
         () => {
 
             toast.classList.remove(
@@ -2138,7 +2148,7 @@ function showToast(message) {
             );
 
         },
-        3000
+        Math.max(3000, String(message || "").length * 60)
     );
 
 }
@@ -2259,10 +2269,13 @@ function openProductFromLink() {
 
 function loadCart() {
 
-    const saved =
-        localStorage.getItem(
-            "monteCart"
-        );
+    let saved = null;
+    try {
+        saved =
+            localStorage.getItem(
+                "monteCart"
+            );
+    } catch {}
 
 
     if (saved) {
@@ -2289,8 +2302,21 @@ function loadCart() {
             .map(item => {
                 const product = products.find(p => p.id === item.id);
                 if (!product) return null;
+                // A cor salva pode ter esgotado ou saído do site desde a última visita: o
+                // checkout recusaria a sacola inteira. Sem cor salva, só vale se houver uma única.
+                const inStock = (product.variants || []).filter(v => v.active !== false && Number(v.stock || 0) > 0);
+                const variant = item.variant_id
+                    ? inStock.find(v => v.id === item.variant_id)
+                    : (inStock.length === 1 ? inStock[0] : null);
+                if (!variant && (item.variant_id || (product.variants || []).length)) return null;
+                const stock = variant ? Number(variant.stock || 0) : Number(product.stock || 0);
+                if (stock <= 0) return null;
                 return {
                     ...item,
+                    variant_id: variant?.id || null,
+                    variant_color: variant?.color || item.variant_color || null,
+                    variant_sku: variant?.sku || item.variant_sku || null,
+                    quantity: Math.min(Math.max(1, Number(item.quantity) || 1), stock),
                     name: product.name,
                     price: product.price,
                     oldPrice: product.oldPrice,
@@ -2723,10 +2749,16 @@ function renderCheckoutNote(summary) {
    botão de finalizar sempre à vista.
 ===================================================== */
 
+// Celular com DDD e 9 dígitos. O preenchimento automático pode trazer o +55 na frente.
+function phoneDigits(value) {
+    const digits = String(value || "").replace(/\D/g, "");
+    return digits.length > 11 && digits.startsWith("55") ? digits.slice(2) : digits;
+}
+
 const CHECKOUT_RULES = {
     customerName: v => v.trim().split(/\s+/).filter(Boolean).length >= 2,
     customerEmail: v => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim()),
-    customerPhone: v => v.replace(/\D/g, "").length >= 10,
+    customerPhone: v => /^[1-9]{2}9\d{8}$/.test(phoneDigits(v)),
     customerCpf: v => v.replace(/\D/g, "").length === 11,
     customerCep: v => v.replace(/\D/g, "").length === 8,
     customerStreet: v => v.trim().length > 1,
@@ -2854,7 +2886,7 @@ function renderCheckoutExtras({ subtotal, shipping, pixDiscount, paymentMethod }
         const phone = document.getElementById("customerPhone");
         if (phone) {
             phone.addEventListener("input", () => {
-                const d = phone.value.replace(/\D/g, "").slice(0, 11);
+                const d = phoneDigits(phone.value).slice(0, 11);
                 phone.value = d.length > 10 ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
                     : d.length > 6 ? `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
                     : d.length > 2 ? `(${d.slice(0, 2)}) ${d.slice(2)}`
