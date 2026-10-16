@@ -37,7 +37,7 @@
     <meta name="twitter:description" content="Conheça a coleção MONTÊ e compre online.">
     <meta name="twitter:image" content="https://oficialmontee.com.br/og-image.jpg?v=1">
 
-    <link rel="stylesheet" href="style.css?v=20261012-prevenda2">
+    <link rel="stylesheet" href="style.css?v=20261016-busca">
     <!-- PRELOAD DO BANNER -->
 
     <link rel="preload" href="/fonts/dm-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
@@ -221,7 +221,8 @@
     <div class="search-box">
 
         <button data-click="closeSearch"
-                class="close-search">
+                class="close-search"
+                aria-label="Fechar busca">
 
             ×
 
@@ -231,7 +232,12 @@
             type="text"
             id="searchInput"
             placeholder="Buscar produto..."
+            enterkeyhint="search"
+            autocomplete="off"
+            aria-controls="searchResults"
         >
+
+        <div id="searchResults" class="search-results" aria-live="polite"></div>
 
     </div>
 
@@ -1116,7 +1122,7 @@
 
 <!-- CATÁLOGO -->
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="script.js?v=20261016-telefone"></script>
+<script src="script.js?v=20261016-busca"></script>
 
 </body>
 </html>

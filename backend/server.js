@@ -1092,8 +1092,9 @@ function formatOrderCode(value) {
 
 function normalizeOrderCode(value) {
     const raw = safeString(value).trim();
-    const match = raw.match(/^MONT[EÊ]-?(\d{4,8})$/i);
-    return match ? match[1] : raw;
+    // Como a cliente digita o número: "0057", "57", "#0057", "MONTÊ-0057", "MONTÊ 0057", "Pedido 0057".
+    const match = raw.match(/^(?:pedido\s*)?(?:MONT[EÊ]\s*-?\s*)?(?:n[ºo°.]?\s*)?#?\s*(\d{1,8})$/i);
+    return match ? match[1].padStart(4, "0") : raw;
 }
 
 function escapeEmailHtml(value) {
@@ -6193,6 +6194,28 @@ function productSchema(product) {
     };
 }
 
+function sendNotFoundPage(res, title, message) {
+    return res.status(404).type("html").send(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml">
+<title>${xmlEscape(title)} | MONTÊ</title>
+<link rel="stylesheet" href="/produto-seo.css?v=20261016-comprar">
+</head>
+<body>
+<main class="seo-product seo-not-found">
+<p class="seo-brand">MONTÊ</p>
+<h1>${xmlEscape(title)}</h1>
+<p>${xmlEscape(message)}</p>
+<p><a class="seo-buy" href="/">IR PARA A LOJA</a></p>
+</main>
+</body>
+</html>`);
+}
+
 app.get("/produto/:id/:slug", async (req, res) => {
     try {
         const id = safeString(req.params.id);
@@ -6202,7 +6225,7 @@ app.get("/produto/:id/:slug", async (req, res) => {
         );
         const product = Array.isArray(rows) ? rows[0] : null;
 
-        if (!product) return res.status(404).send("Produto não encontrado.");
+        if (!product) return sendNotFoundPage(res, "Esta peça não está mais na loja", "Ela esgotou ou saiu da coleção. Veja as outras peças da MONTÊ.");
 
         const stockTotal = Array.isArray(product.product_variants)
             ? product.product_variants.filter(v => v.active !== false).reduce((sum, v) => sum + Number(v.stock || 0), 0)
@@ -6236,7 +6259,7 @@ ${image ? `<meta property="og:image" content="${xmlEscape(image)}">` : ""}
 <meta name="twitter:description" content="${xmlEscape(description.slice(0, 200))}">
 ${image ? `<meta name="twitter:image" content="${xmlEscape(image)}">` : ""}
 <script type="application/ld+json">${JSON.stringify(schema).replace(/</g, "\\u003c")}</script>
-<link rel="stylesheet" href="/produto-seo.css?v=20261008-dustbag">
+<link rel="stylesheet" href="/produto-seo.css?v=20261016-comprar">
 </head>
 <body>
 <main class="seo-product">
@@ -6247,6 +6270,7 @@ ${image ? `<img src="${xmlEscape(image)}" alt="${xmlEscape(product.name)}">` : "
 ${product.is_sale ? '<p class="seo-sale-notice"><strong>Sale:</strong> produtos da Sale não acompanham dustbag.</p>' : ""}
 ${product.is_presale ? '<p class="seo-sale-notice"><strong>Pré-venda — garanta a sua!</strong> Peças em produção com estoque limitado. Garanta a sua antecipadamente. Entrega em ' + PRESALE_MIN_BUSINESS_DAYS + ' dias úteis.</p>' : ""}
 <p>${product.is_presale ? "Disponível na pré-venda." : stockTotal > 0 ? "Disponível para compra." : "Produto esgotado."}</p>
+<p><a class="seo-buy" href="/?produto=${encodeURIComponent(product.id)}">${product.is_presale || stockTotal > 0 ? "COMPRAR NA LOJA" : "VER NA LOJA"}</a></p>
 <p><a href="/">Voltar para a MONTÊ</a></p>
 </main>
 </body>
@@ -6712,6 +6736,19 @@ function startNodeServer() {
 
 // Último tratamento de erro: sem ele o Express devolve a pilha (stack) com caminhos do servidor.
 // JSON inválido ou grande demais vira uma resposta simples; o resto, erro genérico.
+// Páginas digitadas sem ".html" (/minhas-compras) levam à página certa; o resto mostra uma
+// página com o caminho de volta para a loja, em vez do "Cannot GET" do Express.
+const PAGES_WITHOUT_EXTENSION = new Set(["minhas-compras", "trocas-devolucoes", "termos-de-compra", "politica-privacidade", "entrega-frete"]);
+app.use((req, res) => {
+    const page = req.path.replace(/^\/+|\/+$/g, "").toLowerCase();
+    if ((req.method === "GET" || req.method === "HEAD") && PAGES_WITHOUT_EXTENSION.has(page)) {
+        const query = req.originalUrl.includes("?") ? req.originalUrl.slice(req.originalUrl.indexOf("?")) : "";
+        return res.redirect(301, "/" + page + ".html" + query);
+    }
+    if (req.path.startsWith("/api/") || req.method !== "GET") return res.status(404).json({ success: false, message: "Não encontrado." });
+    return sendNotFoundPage(res, "Página não encontrada", "O endereço pode ter mudado. As peças da MONTÊ estão na loja.");
+});
+
 app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);
     const status = Number(error?.status || error?.statusCode) || 500;

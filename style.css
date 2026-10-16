@@ -8519,3 +8519,21 @@ html.catalog-pending .footer {
         animation: none;
     }
 }
+
+/* =====================================================
+   BUSCA — resultados dentro da caixa (toque abre o produto)
+===================================================== */
+.search-results { margin-top: 14px; max-height: min(60vh, 460px); overflow-y: auto; overscroll-behavior: contain; }
+.search-result { display: flex; align-items: center; gap: 14px; width: 100%; padding: 10px 4px; border: 0; border-bottom: 1px solid #ece8e3; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.search-result:hover, .search-result:focus-visible { background: #f7f5f2; outline: none; }
+.search-result img { flex: none; width: 52px; height: 64px; object-fit: cover; background: #f3f3f1; }
+.search-result strong { display: block; font-weight: 500; font-size: 15px; }
+.search-result small { display: block; margin-top: 4px; color: var(--wine); font-size: 13px; }
+.search-empty { margin: 0; padding: 14px 4px; color: #6b6b6b; }
+@media (max-width: 600px) {
+    .search-overlay { padding-top: 72px; }
+    .search-box { padding: 26px 20px 18px; }
+}
+
+/* Avisos longos (erro ao abrir o pagamento): caixa em vez de pílula. */
+.toast.is-long { border-radius: 14px; text-align: left; line-height: 1.5; }

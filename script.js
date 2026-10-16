@@ -1985,54 +1985,65 @@ function closeSearch() {
         "searchInput"
     ).value = "";
 
+    document.getElementById("searchResults")?.replaceChildren();
+
 }
 
 
+// A busca mostra os resultados dentro da própria caixa: antes eles iam para a vitrine
+// "Bolsas", atrás da tela escura, e não dava para tocar no produto encontrado.
+function searchText(value) {
+    return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
 function searchProducts() {
-
-    const search =
-        document
-            .getElementById(
-                "searchInput"
-            )
-            .value
-            .toLowerCase();
-
-
-    const container =
-        document.getElementById(
-            "allProducts"
-        );
-
-
+    const term = searchText(document.getElementById("searchInput").value);
+    const container = document.getElementById("searchResults");
+    if (!container) return [];
     container.replaceChildren();
+    if (!term) return [];
 
+    const found = products.filter(product =>
+        searchText(product.name + " " + (product.category || "")).includes(term)
+    );
 
-    products
-        .filter(
-            product =>
-                product.name
-                    .toLowerCase()
-                    .includes(search)
-        )
-        .forEach(
-            product =>
-                container.appendChild(
-                    createProductCard(
-                        product
-                    )
-                )
-        );
+    if (!found.length) {
+        const empty = document.createElement("p");
+        empty.className = "search-empty";
+        empty.textContent = "Nenhum produto encontrado.";
+        container.appendChild(empty);
+        return found;
+    }
 
+    found.forEach(product => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "search-result";
+        button.dataset.productId = product.id;
 
-    document
-        .getElementById(
-            "colecao"
-        )
-        .scrollIntoView({
-            behavior: "smooth"
+        const image = document.createElement("img");
+        image.alt = "";
+        image.loading = "lazy";
+        image.decoding = "async";
+        if (product.images?.[0]) image.src = smallImage(product.images[0]);
+        image.dataset.imgError = "hide";
+
+        const info = document.createElement("span");
+        const name = document.createElement("strong");
+        name.textContent = product.name;
+        const detail = document.createElement("small");
+        detail.textContent = formatPrice(product.price) +
+            (product.presale ? " · Pré-venda" : Number(product.stock || 0) <= 0 ? " · Esgotado" : "");
+        info.append(name, detail);
+
+        button.append(image, info);
+        button.addEventListener("click", () => {
+            closeSearch();
+            openProductModal(product.id);
         });
-
+        container.appendChild(button);
+    });
+    return found;
 }
 
 
@@ -2139,6 +2150,7 @@ function showToast(message) {
 
 
     // Mensagens longas (erro no pagamento, com o WhatsApp da loja) ficam o tempo de serem lidas.
+    toast.classList.toggle("is-long", String(message || "").length > 60);
     clearTimeout(toastTimer);
     toastTimer = setTimeout(
         () => {
@@ -3051,6 +3063,18 @@ registerClickActions({
 });
 
 document.getElementById("searchInput")?.addEventListener("input", () => searchProducts());
+// Enter abre o primeiro resultado; Esc ou um toque fora da caixa fecham a busca.
+document.getElementById("searchInput")?.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+        event.preventDefault();
+        document.querySelector("#searchResults .search-result")?.click();
+    } else if (event.key === "Escape") {
+        closeSearch();
+    }
+});
+document.getElementById("searchOverlay")?.addEventListener("click", event => {
+    if (event.target.id === "searchOverlay") closeSearch();
+});
 document.getElementById("newsletterForm")?.addEventListener("submit", event => subscribeNewsletter(event));
 document.getElementById("carouselSlides")?.addEventListener("keydown", event => {
     if (event.key === "Enter" || event.key === " ") {
