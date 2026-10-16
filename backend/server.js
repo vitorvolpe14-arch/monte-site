@@ -108,6 +108,10 @@ const INFINITEPAY_HANDLE =
     process.env.INFINITEPAY_HANDLE ||
     "monte-64839705-0z9";
 
+// Quando o pagamento não abre, a cliente precisa saber o que fazer (antes via só "A InfinitePay
+// recusou a criação do checkout" e desistia). O motivo técnico fica no log do servidor.
+const CHECKOUT_FAILED_MESSAGE = "Não conseguimos abrir o pagamento agora. Confira seu WhatsApp e e-mail e tente de novo. Se continuar, fale com a gente no WhatsApp (85) 99216-3305 que finalizamos sua compra.";
+
 /* =====================================================
    OLIST ERP — integração somente de pedidos
    Olist NÃO sincroniza catálogo nem estoque do MONTÊ.
@@ -1416,6 +1420,9 @@ function normalizeShippingProduct(row, quantity) {
     const resolved = values.map((value, index) => (
         Number.isFinite(value) && value > 0 ? value : fallback[index]
     ));
+    // O painel pede o peso em kg. Acima de 30 kg (limite dos Correios) é peso digitado em
+    // gramas (480 em vez de 0,480), que deixaria o produto sem nenhuma opção de frete.
+    if (resolved[0] > 30) resolved[0] = resolved[0] / 1000;
     return {
         quantity: Math.max(1, Number(quantity || 1)),
         weight: resolved[0],
@@ -1645,7 +1652,9 @@ const ADMIN_SESSION_TTL = 1000 * 60 * 60 * 8;
 function signingKey(){return crypto.createHash("sha256").update("monte-signing:"+safeString(process.env.ADMIN_SESSION_SECRET)+":"+ADMIN_PASSWORD_HASH+":"+SUPABASE_SERVICE_ROLE_KEY).digest()}
 function createSignedToken(data,ttlMs){const payload=Buffer.from(JSON.stringify({...data,exp:Date.now()+ttlMs,n:crypto.randomBytes(8).toString("hex")})).toString("base64url");const sig=crypto.createHmac("sha256",signingKey()).update(payload).digest("base64url");return payload+"."+sig}
 function verifySignedToken(token){const [payload,sig]=String(token||"").split(".");if(!payload||!sig)return null;const expected=Buffer.from(crypto.createHmac("sha256",signingKey()).update(payload).digest("base64url"));const given=Buffer.from(sig);if(given.length!==expected.length||!crypto.timingSafeEqual(given,expected))return null;try{const data=JSON.parse(Buffer.from(payload,"base64url").toString("utf8"));if(!data||typeof data.exp!=="number"||Date.now()>data.exp)return null;return data}catch{return null}}
-function createOrderConfirmationToken(orderNsu){return createSignedToken({purpose:"order-confirmation",order_nsu:String(orderNsu)},30*60*1000)}
+// Vale enquanto o pedido pode ser pago (48 h): quem leva mais de 30 min no pagamento (Pix pago
+// depois, por exemplo) voltava para "Token de confirmação inválido ou expirado" com a compra paga.
+function createOrderConfirmationToken(orderNsu){return createSignedToken({purpose:"order-confirmation",order_nsu:String(orderNsu)},PENDING_ORDER_EXPIRE_MS)}
 function verifyOrderConfirmationToken(token,orderNsu){const data=verifySignedToken(token);return !!(data&&data.purpose==="order-confirmation"&&String(data.order_nsu)===String(orderNsu))}
 const adminLoginAttempts = new Map();
 function parseCookies(req){const h=req.headers.cookie||"";const o={};h.split(";").filter(Boolean).forEach(p=>{const i=p.indexOf("=");if(i<0)return;const v=p.slice(i+1).trim();try{o[p.slice(0,i).trim()]=decodeURIComponent(v)}catch{o[p.slice(0,i).trim()]=v}});return o}
@@ -5258,7 +5267,7 @@ app.post(
                     console.error("PIX — erro ao criar checkout InfinitePay:", pixResponse.status, pixData);
                     return res.status(pixResponse.ok ? 502 : pixResponse.status).json({
                         success: false,
-                        message: "A InfinitePay não conseguiu criar o checkout Pix."
+                        message: CHECKOUT_FAILED_MESSAGE
                     });
                 }
 
@@ -5485,7 +5494,7 @@ app.post(
                         false,
 
                     message:
-                        "A InfinitePay recusou a criação do checkout."
+                        CHECKOUT_FAILED_MESSAGE
 
                 });
 
@@ -5521,7 +5530,7 @@ app.post(
                         false,
 
                     message:
-                        "A InfinitePay não retornou o link de pagamento."
+                        CHECKOUT_FAILED_MESSAGE
 
                 });
 
@@ -5573,7 +5582,7 @@ app.post(
                     false,
 
                 message:
-                    "Erro interno ao criar checkout.",
+                    CHECKOUT_FAILED_MESSAGE,
 
                 error:
                     process.env.NODE_ENV ===

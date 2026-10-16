@@ -1345,10 +1345,14 @@ function updateCart() {
         formatPrice(cartTotal);
 
 
-    localStorage.setItem(
-        "monteCart",
-        JSON.stringify(cart)
-    );
+    // Navegador com dados de site bloqueados (Safari com "Bloquear todos os cookies", por
+    // exemplo): o localStorage dá erro. A sacola continua funcionando, só não fica salva.
+    try {
+        localStorage.setItem(
+            "monteCart",
+            JSON.stringify(cart)
+        );
+    } catch {}
 
     updateShipping();
 
@@ -2115,6 +2119,8 @@ function closeMobileMenu() {
    TOAST
 ===================================================== */
 
+let toastTimer = null;
+
 function showToast(message) {
 
     const toast =
@@ -2132,7 +2138,9 @@ function showToast(message) {
     );
 
 
-    setTimeout(
+    // Mensagens longas (erro no pagamento, com o WhatsApp da loja) ficam o tempo de serem lidas.
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(
         () => {
 
             toast.classList.remove(
@@ -2140,7 +2148,7 @@ function showToast(message) {
             );
 
         },
-        3000
+        Math.max(3000, String(message || "").length * 60)
     );
 
 }
@@ -2261,10 +2269,13 @@ function openProductFromLink() {
 
 function loadCart() {
 
-    const saved =
-        localStorage.getItem(
-            "monteCart"
-        );
+    let saved = null;
+    try {
+        saved =
+            localStorage.getItem(
+                "monteCart"
+            );
+    } catch {}
 
 
     if (saved) {
@@ -2291,8 +2302,21 @@ function loadCart() {
             .map(item => {
                 const product = products.find(p => p.id === item.id);
                 if (!product) return null;
+                // A cor salva pode ter esgotado ou saído do site desde a última visita: o
+                // checkout recusaria a sacola inteira. Sem cor salva, só vale se houver uma única.
+                const inStock = (product.variants || []).filter(v => v.active !== false && Number(v.stock || 0) > 0);
+                const variant = item.variant_id
+                    ? inStock.find(v => v.id === item.variant_id)
+                    : (inStock.length === 1 ? inStock[0] : null);
+                if (!variant && (item.variant_id || (product.variants || []).length)) return null;
+                const stock = variant ? Number(variant.stock || 0) : Number(product.stock || 0);
+                if (stock <= 0) return null;
                 return {
                     ...item,
+                    variant_id: variant?.id || null,
+                    variant_color: variant?.color || item.variant_color || null,
+                    variant_sku: variant?.sku || item.variant_sku || null,
+                    quantity: Math.min(Math.max(1, Number(item.quantity) || 1), stock),
                     name: product.name,
                     price: product.price,
                     oldPrice: product.oldPrice,
