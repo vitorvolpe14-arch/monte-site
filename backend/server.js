@@ -108,9 +108,9 @@ const INFINITEPAY_HANDLE =
     process.env.INFINITEPAY_HANDLE ||
     "monte-64839705-0z9";
 
-// Quando o pagamento não abre, a cliente precisa saber o que fazer (antes via só "A InfinitePay
-// recusou a criação do checkout" e desistia). O motivo técnico fica no log do servidor.
-const CHECKOUT_FAILED_MESSAGE = "Não conseguimos abrir o pagamento agora. Confira seu WhatsApp e e-mail e tente de novo. Se continuar, fale com a gente no WhatsApp (85) 99216-3305 que finalizamos sua compra.";
+// Quando o pagamento não abre: aviso curto, e "payment_unavailable" faz o site mostrar, junto do
+// botão de finalizar, o atalho para concluir a compra pelo WhatsApp. O motivo técnico fica no log.
+const CHECKOUT_FAILED_MESSAGE = "O pagamento não abriu. Tente novamente.";
 
 /* =====================================================
    OLIST ERP — integração somente de pedidos
@@ -5268,6 +5268,7 @@ app.post(
                     console.error("PIX — erro ao criar checkout InfinitePay:", pixResponse.status, pixData);
                     return res.status(pixResponse.ok ? 502 : pixResponse.status).json({
                         success: false,
+                        payment_unavailable: true,
                         message: CHECKOUT_FAILED_MESSAGE
                     });
                 }
@@ -5494,6 +5495,9 @@ app.post(
                     success:
                         false,
 
+                    payment_unavailable:
+                        true,
+
                     message:
                         CHECKOUT_FAILED_MESSAGE
 
@@ -5529,6 +5533,9 @@ app.post(
 
                     success:
                         false,
+
+                    payment_unavailable:
+                        true,
 
                     message:
                         CHECKOUT_FAILED_MESSAGE
@@ -5581,6 +5588,9 @@ app.post(
 
                 success:
                     false,
+
+                payment_unavailable:
+                    true,
 
                 message:
                     CHECKOUT_FAILED_MESSAGE,

@@ -7886,7 +7886,8 @@ html.intro-skipped .header { animation-delay: .5s; }
 #cartOverlay .checkout-button:disabled { opacity: .75; cursor: wait; }
 
 /* Avisos acima da sacola (antes ficavam atrás do fundo escuro) */
-.toast { z-index: 10000; max-width: calc(100vw - 32px); border-radius: 999px; box-sizing: border-box; text-align: center; }
+/* width: max-content: com left: 50%, o aviso só podia ocupar metade da tela e quebrava em várias linhas. */
+.toast { z-index: 10000; width: max-content; max-width: calc(100vw - 32px); border-radius: 999px; box-sizing: border-box; text-align: center; }
 body.cart-open .toast { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); }
 
 @media (min-width: 601px) {
@@ -8537,3 +8538,9 @@ html.catalog-pending .footer {
 
 /* Avisos longos (erro ao abrir o pagamento): caixa em vez de pílula. */
 .toast.is-long { border-radius: 14px; text-align: left; line-height: 1.5; }
+
+/* Pagamento não abriu: linha discreta acima do botão de finalizar, com o atalho do WhatsApp. */
+#cartOverlay .checkout-bar.has-help { flex-wrap: wrap; row-gap: 10px; }
+.payment-help { flex: 1 0 100%; margin: 0; font-size: 12.5px; color: var(--co-muted, #6b6b6b); }
+.payment-help[hidden] { display: none; }
+.payment-help a { margin-left: 4px; color: var(--wine); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }

@@ -1753,8 +1753,24 @@ async function lookupAddressByCep() {
    CHECKOUT — INFINITEPAY
 ===================================================== */
 
+// Quando o pagamento não abre, aparece junto do botão de finalizar uma linha discreta com o
+// atalho para concluir a compra pelo WhatsApp, com as peças da sacola já escritas na mensagem.
+function setPaymentHelp(visible, paymentMethod) {
+    const help = document.getElementById("paymentHelp");
+    if (!help) return;
+    help.hidden = !visible;
+    help.closest(".checkout-bar")?.classList.toggle("has-help", visible);
+    if (!visible) return;
+    const items = cart.map(item => Number(item.quantity || 1) + "x " + item.name +
+        (item.variant_color ? " (" + colorLabel(item.variant_color, item.name) + ")" : "")).join(", ");
+    const message = "Olá, MONTÊ! Tentei finalizar minha compra no site, mas o pagamento não abriu. " +
+        "Peças: " + items + ". Pagamento: " + (paymentMethod === "pix" ? "Pix" : "cartão") + ".";
+    document.getElementById("paymentHelpLink").href = "https://wa.me/5585992163305?text=" + encodeURIComponent(message);
+}
+
 async function checkout() {
     if (!Array.isArray(cart) || cart.length === 0) { showToast("Seu carrinho está vazio."); return; }
+    setPaymentHelp(false);
     const name=document.getElementById("customerName")?.value.trim();
     const email=document.getElementById("customerEmail")?.value.trim();
     const phone=document.getElementById("customerPhone")?.value.trim();
@@ -1811,7 +1827,9 @@ async function checkout() {
         try{data=JSON.parse(responseText);}catch{console.error("Resposta não é JSON:",responseText);}
         if(!response.ok){
             if(data?.stock_changed&&typeof loadProductsFromDatabase==="function")loadProductsFromDatabase().catch(()=>{});
-            throw new Error(data?.message||("Erro do servidor ("+response.status+")."));
+            const failure=new Error(data?.message||"O pagamento não abriu. Tente novamente.");
+            failure.paymentUnavailable=data?.payment_unavailable===true||response.status>=500;
+            throw failure;
         }
 
         if(paymentMethod==="pix"&&data?.pix_checkout&&data?.url){
@@ -1820,7 +1838,9 @@ async function checkout() {
             try{
                 pixCheckoutUrl=new URL(data.url);
             }catch{
-                throw new Error("O servidor retornou um link Pix inválido.");
+                const failure=new Error("O pagamento não abriu. Tente novamente.");
+                failure.paymentUnavailable=true;
+                throw failure;
             }
             try{
                 window.top.location.replace(pixCheckoutUrl.href);
@@ -1831,9 +1851,9 @@ async function checkout() {
         }
 
         const checkoutUrl=data?.url||data?.checkoutUrl||data?.paymentUrl||data?.redirectUrl;
-        if(!checkoutUrl)throw new Error(data?.message||"O servidor não retornou o link da InfinitePay.");
-        let validUrl;
-        try{validUrl=new URL(checkoutUrl);}catch{throw new Error("O servidor retornou um link de pagamento inválido.");}
+        let validUrl=null;
+        try{validUrl=new URL(checkoutUrl);}catch{}
+        if(!validUrl){const failure=new Error("O pagamento não abriu. Tente novamente.");failure.paymentUnavailable=true;throw failure;}
 
         closeCart();
         // Navega diretamente para o checkout da InfinitePay em qualquer dispositivo.
@@ -1857,7 +1877,10 @@ async function checkout() {
         },1200);
     }catch(error){
         console.error("ERRO COMPLETO NO CHECKOUT:",error);
-        showToast(error.message||"Não foi possível abrir o pagamento.");
+        // Sem internet o navegador dá "Failed to fetch" / "Load failed": a cliente vê a explicação.
+        const offline=error instanceof TypeError;
+        showToast(offline?"Sem conexão. Confira sua internet e tente novamente.":(error.message||"O pagamento não abriu. Tente novamente."));
+        if(offline||error.paymentUnavailable)setPaymentHelp(true,paymentMethod);
         if(checkoutButton){checkoutButton.disabled=false;checkoutButton.textContent="FINALIZAR COMPRA";}
     }
 }
