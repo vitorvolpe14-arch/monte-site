@@ -1722,6 +1722,13 @@ function isValidCpf(value){
     digit=(sum*10)%11; if(digit===10) digit=0;
     return digit===Number(cpf[10]);
 }
+// Celular com DDD e 9 dígitos (aceita o +55 na frente). Devolve só os 11 dígitos, ou "" se não for celular.
+// A InfinitePay não abre o pagamento com telefone incompleto: nenhum pedido com 9 ou 10 dígitos foi pago.
+function brazilMobileDigits(value){
+    let digits=String(value??"").replace(/\D/g,"");
+    if(digits.length>11&&digits.startsWith("55")) digits=digits.slice(2);
+    return /^[1-9]{2}9\d{8}$/.test(digits)?digits:"";
+}
 function passwordMatches(password){try{const [salt,storedHex]=ADMIN_PASSWORD_HASH.split(":");if(!salt||!storedHex)return false;const stored=Buffer.from(storedHex,"hex");const derived=crypto.scryptSync(String(password||""),salt,stored.length);return crypto.timingSafeEqual(stored,derived)}catch{return false}}
 function loginKey(req,email){return `${clientIp(req)}:${safeString(email).toLowerCase()}`}
 // Bloqueio após 5 senhas erradas seguidas (mesmo IP e e-mail) por 15 minutos. Fica no
@@ -4628,6 +4635,16 @@ app.post(
                 });
             }
 
+            const phoneDigits = brazilMobileDigits(customer.phone);
+            if (!phoneDigits) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Informe seu WhatsApp com DDD e 9 dígitos. Ex.: (85) 99999-9999."
+                });
+            }
+            // Mesmo formato dos pedidos que a InfinitePay aceitou: (85) 99999-9999.
+            const formattedPhone = `(${phoneDigits.slice(0, 2)}) ${phoneDigits.slice(2, 7)}-${phoneDigits.slice(7)}`;
+
             if (!isValidCpf(customerCpf)) {
                 return res.status(400).json({
                     success: false,
@@ -5035,7 +5052,7 @@ app.post(
                         customerEmail,
 
                     phone:
-                        customerPhone,
+                        formattedPhone,
 
                     whatsapp_phone:
                         customerWhatsapp,
@@ -5200,7 +5217,7 @@ app.post(
                     customer: {
                         name: String(customer.name),
                         email: String(customer.email),
-                        phone_number: String(customer.phone)
+                        phone_number: formattedPhone
                     },
                     address: {
                         cep: customer.address.cep || "",
@@ -5311,9 +5328,7 @@ app.post(
                         ),
 
                     phone_number:
-                        String(
-                            customer.phone
-                        )
+                        formattedPhone
 
                 }
 

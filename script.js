@@ -1767,7 +1767,9 @@ async function checkout() {
         flagCheckoutFields(); showToast("Preencha todos os dados do cliente e da entrega."); return;
     }
     const cpfDigits=cpf.replace(/\D/g,"");
-    const whatsappNumber=phone.replace(/\D/g,"");
+    const whatsappNumber=phoneDigits(phone);
+    // A InfinitePay não abre o pagamento com telefone incompleto.
+    if(!CHECKOUT_RULES.customerPhone(phone)){flagCheckoutFields(["customerPhone"]);showToast("Informe seu WhatsApp com DDD e 9 dígitos. Ex.: (85) 99999-9999.");return;}
     if(cpfDigits.length!==11){flagCheckoutFields(["customerCpf"]);showToast("Informe um CPF válido com 11 dígitos.");return;}
 
     const items=cart.map(item=>{
@@ -2723,10 +2725,16 @@ function renderCheckoutNote(summary) {
    botão de finalizar sempre à vista.
 ===================================================== */
 
+// Celular com DDD e 9 dígitos. O preenchimento automático pode trazer o +55 na frente.
+function phoneDigits(value) {
+    const digits = String(value || "").replace(/\D/g, "");
+    return digits.length > 11 && digits.startsWith("55") ? digits.slice(2) : digits;
+}
+
 const CHECKOUT_RULES = {
     customerName: v => v.trim().split(/\s+/).filter(Boolean).length >= 2,
     customerEmail: v => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim()),
-    customerPhone: v => v.replace(/\D/g, "").length >= 10,
+    customerPhone: v => /^[1-9]{2}9\d{8}$/.test(phoneDigits(v)),
     customerCpf: v => v.replace(/\D/g, "").length === 11,
     customerCep: v => v.replace(/\D/g, "").length === 8,
     customerStreet: v => v.trim().length > 1,
@@ -2854,7 +2862,7 @@ function renderCheckoutExtras({ subtotal, shipping, pixDiscount, paymentMethod }
         const phone = document.getElementById("customerPhone");
         if (phone) {
             phone.addEventListener("input", () => {
-                const d = phone.value.replace(/\D/g, "").slice(0, 11);
+                const d = phoneDigits(phone.value).slice(0, 11);
                 phone.value = d.length > 10 ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
                     : d.length > 6 ? `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
                     : d.length > 2 ? `(${d.slice(0, 2)}) ${d.slice(2)}`
