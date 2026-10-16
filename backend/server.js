@@ -1912,7 +1912,7 @@ function cartSnapshotItems(items) {
 
 app.post("/api/analytics/event",analyticsRateLimit,async(req,res)=>{
   try{
-    const b=req.body||{}, allowed=["page_view","view_product","add_to_cart","remove_from_cart","begin_checkout","checkout_started","checkout_completed","purchase"];
+    const b=req.body||{}, allowed=["page_view","view_product","add_to_cart","remove_from_cart","begin_checkout","checkout_started","checkout_completed","purchase","consent_granted"];
     const event_name=safeString(b.event_name);
     const visitor_id=safeString(b.visitor_id).slice(0,120), session_key=safeString(b.session_id).slice(0,120);
     if(!allowed.includes(event_name)||!visitor_id||!session_key) return res.status(400).json({success:false,message:"Evento inválido."});
@@ -4267,7 +4267,7 @@ app.post("/api/newsletter", newsletterRateLimit, async (req, res) => {
                 "<p style=\"margin:0;color:#555;font-size:15px;line-height:1.8\">Seu cadastro foi realizado com sucesso. A partir de agora, você receberá novidades, lançamentos e conteúdos selecionados da MONTÊ.</p>" +
                 "<div style=\"margin:30px 0;border-top:1px solid #e8e5e1;border-bottom:1px solid #e8e5e1;padding:22px 0\"><p style=\"margin:0;color:#777;font-size:13px;line-height:1.7\">Prepare-se para conhecer novas coleções, peças e histórias da marca antes de todo mundo.</p></div>" +
                 "<div style=\"text-align:center;margin:30px 0 8px\"><a href=\"https://oficialmontee.com.br\" style=\"display:inline-block;background:#111;color:#fff;text-decoration:none;padding:15px 28px;font-size:11px;letter-spacing:2px\">VISITAR A MONTÊ</a></div>" +
-                "</div><div style=\"padding:22px;text-align:center;color:#999;font-size:10px;line-height:1.6\">MONTÊ — Bolsas & acessórios<br>Você recebeu este e-mail porque se cadastrou para receber novidades da marca.</div>" +
+                "</div><div style=\"padding:22px;text-align:center;color:#999;font-size:10px;line-height:1.6\">MONTÊ — Bolsas & acessórios<br>Você recebeu este e-mail porque se cadastrou para receber novidades da marca.<br>Para sair da lista, use o link de descadastro dos nossos e-mails ou fale com a gente pelo WhatsApp (85) 99216-3305.</div>" +
                 "</div></body></html>";
 
             const welcomeResponse = await fetch("https://api.resend.com/emails", {
@@ -6371,6 +6371,16 @@ async function refreshOlistAccess() {
 // do wrangler.jsonc ("* * * * *" = um pedido pago pendente e um lote da conferência
 // Olist → site (estoque, preço e cores); a cada 3 horas = acesso Olist). Cada execução tem 50 chamadas externas:
 // o pedido vai primeiro e o lote de estoque usa o que sobrar.
+// Prazo de guarda (Política de Privacidade): estatísticas da loja por 13 meses e sacolas salvas
+// (com o contato digitado no checkout) por 6 meses. Os eventos saem junto com a sessão (cascata).
+const ANALYTICS_RETENTION_MS = 395 * 24 * 60 * 60 * 1000;
+const CART_SNAPSHOT_RETENTION_MS = 183 * 24 * 60 * 60 * 1000;
+async function purgeExpiredAnalytics() {
+    const minimal = { method: "DELETE", headers: { Prefer: "return=minimal" } };
+    await supabaseRequest("cart_snapshots?updated_at=lt." + isoAgo(CART_SNAPSHOT_RETENTION_MS), minimal);
+    await supabaseRequest("site_sessions?last_seen_at=lt." + isoAgo(ANALYTICS_RETENTION_MS), minimal);
+}
+
 async function runScheduledTask(cron) {
     if (cron === "* * * * *") {
         const orders = await runPendingOlistSync().catch(() => ({ calls: 25 }));
@@ -6383,6 +6393,7 @@ async function runScheduledTask(cron) {
         return syncOlistStockBatch({ calls: WORKER_CALL_LIMIT - 4 - used })
             .catch(error => console.error("Estoque Olist:", error.message));
     }
+    await purgeExpiredAnalytics().catch(error => console.error("Limpeza de estatísticas antigas:", error.message));
     return refreshOlistAccess();
 }
 
