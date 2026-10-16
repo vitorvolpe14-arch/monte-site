@@ -37,7 +37,7 @@
     <meta name="twitter:description" content="Conheça a coleção MONTÊ e compre online.">
     <meta name="twitter:image" content="https://oficialmontee.com.br/og-image.jpg?v=1">
 
-    <link rel="stylesheet" href="style.css?v=20261016-balao">
+    <link rel="stylesheet" href="style.css?v=20261016-cookies">
     <!-- PRELOAD DO BANNER -->
 
     <link rel="preload" href="/fonts/dm-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
@@ -540,6 +540,10 @@
             exclusivos da MONTÊ.
         </p>
 
+        <p class="newsletter-privacy">
+            Você pode sair da lista quando quiser. Veja a <a href="politica-privacidade.html">Política de privacidade</a>.
+        </p>
+
     </div>
 
 
@@ -671,6 +675,10 @@
 
         <a href="politica-privacidade.html">
             Política de privacidade
+        </a>
+
+        <a href="/?cookies=preferencias" data-click="openCookiePreferences" data-event>
+            Preferências de cookies
         </a>
 
         <a href="entrega-frete.html">
@@ -1119,13 +1127,30 @@
 
 </div>
 
+<!-- Privacidade: permissão de cookies na entrada (LGPD). Estatísticas e lembrete só com o "Aceitar". -->
+<div id="cookieConsent" class="cookie-consent" role="dialog" aria-labelledby="cookieConsentTitle" hidden>
+    <p class="cookie-consent-title" id="cookieConsentTitle">Sua privacidade</p>
+    <p class="cookie-consent-text">Usamos cookies para manter sua sacola, entender como o site é usado e, se você começar uma compra e não finalizar, enviar um lembrete por e-mail. As estatísticas e o lembrete só funcionam com a sua permissão. <a href="politica-privacidade.html#cookies">Saiba mais</a></p>
+    <div class="cookie-consent-options" id="cookieOptions" hidden>
+        <label><input type="checkbox" checked disabled> <span><strong>Necessários</strong> Sacola e segurança do site. Sempre ativos.</span></label>
+        <label><input type="checkbox" id="consentAnalytics"> <span><strong>Estatísticas</strong> Google Analytics e estatísticas da loja: páginas e produtos vistos, origem da visita, aparelho.</span></label>
+        <label><input type="checkbox" id="consentReminders"> <span><strong>Lembrete da sacola</strong> Guardar a sacola e o contato digitado para enviar um e-mail se a compra não for finalizada.</span></label>
+    </div>
+    <div class="cookie-consent-actions">
+        <button type="button" class="cookie-button" data-click="rejectCookies">RECUSAR</button>
+        <button type="button" class="cookie-button cookie-button-text" id="cookieCustomize" data-click="customizeCookies">PERSONALIZAR</button>
+        <button type="button" class="cookie-button cookie-button-text" id="cookieSave" data-click="saveCookieChoices" hidden>SALVAR ESCOLHAS</button>
+        <button type="button" class="cookie-button cookie-button-dark" data-click="acceptCookies">ACEITAR</button>
+    </div>
+</div>
+
 <!-- Pagamento não abriu: balão preto que abre o WhatsApp da loja ao tocar. -->
 <a id="paymentHelp" class="toast payment-balloon" href="https://wa.me/5585992163305" target="_blank" rel="noopener" hidden>O pagamento não abriu. Nos chame no <u>WhatsApp</u> para finalizar.</a>
 
 
 <!-- CATÁLOGO -->
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="script.js?v=20261016-balao"></script>
+<script src="script.js?v=20261016-cookies"></script>
 
 </body>
 </html>

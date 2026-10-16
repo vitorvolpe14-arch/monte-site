@@ -2403,21 +2403,174 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 });
 
-(function(){
- const VK="monte_analytics_visitor",SK="monte_analytics_session",TK="monte_analytics_session_started";
- const uid=()=>window.crypto?.randomUUID?window.crypto.randomUUID():Date.now().toString(36)+"-"+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
- const read=(store,key)=>{try{return window[store].getItem(key)}catch{return null}};
- const write=(store,key,value)=>{try{window[store].setItem(key,value)}catch{}};
- const visitor_id=read("localStorage",VK)||uid();write("localStorage",VK,visitor_id);
- let session_id=read("sessionStorage",SK),started=Number(read("sessionStorage",TK)||0);
- if(!session_id||!started||Date.now()-started>1800000){session_id=uid();write("sessionStorage",SK,session_id);write("sessionStorage",TK,String(Date.now()));}
- async function post(path,data){try{await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},keepalive:true,body:JSON.stringify(data)})}catch{}}
- function track(name,extra){post("/api/analytics/event",{visitor_id,session_id,event_name:name,path:location.pathname+location.search,referrer:document.referrer,...extra})}
- function saveCart(){const items=Array.isArray(cart)?cart:[];const shippingPrice=Number(selectedShippingOption?.price||0);if(!items.length)return;const subtotal=items.reduce((s,i)=>s+Number(i.price||0)*Number(i.quantity||1),0);post("/api/analytics/cart",{visitor_id,session_id,items:items.map(i=>({id:i.id,product_id:i.id,product_name:i.name,sku:i.sku,variant_id:i.variant_id||null,variant_color:i.variant_color||i.color||null,quantity:i.quantity,unit_price:i.price,total_price:Number(i.price||0)*Number(i.quantity||1)})),subtotal,shipping:shippingPrice,total:subtotal+shippingPrice,customer_name:document.getElementById("customerName")?.value||"",customer_email:document.getElementById("customerEmail")?.value||"",customer_phone:document.getElementById("customerPhone")?.value||""})}
- window.monteAnalytics={track,saveCart};
- window.addEventListener("load",()=>track("page_view"));
- setInterval(saveCart,30000);
- document.addEventListener("click",e=>{const el=e.target.closest?.("[data-product-id]");if(el)track("view_product",{product_id:el.dataset.productId,product_name:el.dataset.productName||null})});
+/* =====================================================
+   PRIVACIDADE — PERMISSÃO DE COOKIES (LGPD)
+   Necessários (sacola e a própria escolha) ficam sempre ativos.
+   Estatísticas (Google Analytics e estatísticas da loja) e o lembrete
+   da sacola por e-mail só funcionam depois que a cliente permite.
+   A escolha vale 12 meses e muda pelo link "Preferências de cookies".
+===================================================== */
+
+const CONSENT_KEY = "monte_consent";
+const CONSENT_MAX_AGE = 365 * 24 * 60 * 60 * 1000;
+let privacyConsent = readPrivacyConsent();
+
+// Antes da permissão as chamadas de estatística não fazem nada.
+window.monteAnalytics = { track() {}, saveCart() {} };
+
+function readPrivacyConsent() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(CONSENT_KEY) || "null");
+        if (saved && saved.v === 1 && Date.now() - Number(saved.at) < CONSENT_MAX_AGE) return saved;
+    } catch {}
+    return null;
+}
+
+function savePrivacyConsent(choice) {
+    const before = privacyConsent;
+    privacyConsent = { v: 1, analytics: !!choice.analytics, reminders: !!choice.reminders, at: Date.now() };
+    try { localStorage.setItem(CONSENT_KEY, JSON.stringify(privacyConsent)); } catch {}
+    hideCookieConsent();
+    // Permissão retirada: apaga o que já estava guardado e recarrega para parar o que estava rodando.
+    if ((before?.analytics && !privacyConsent.analytics) || (before?.reminders && !privacyConsent.reminders)) {
+        forgetTrackingData();
+        location.reload();
+        return;
+    }
+    applyPrivacyConsent();
+    if (privacyConsent.analytics || privacyConsent.reminders) {
+        window.monteAnalytics.record?.("consent_granted", { metadata: { analytics: privacyConsent.analytics, reminders: privacyConsent.reminders } });
+    }
+}
+
+function forgetTrackingData() {
+    for (const [store, keys] of [["localStorage", ["monte_analytics_visitor"]], ["sessionStorage", ["monte_analytics_session", "monte_analytics_session_started"]]]) {
+        try { keys.forEach(key => window[store].removeItem(key)); } catch {}
+    }
+    // Cookies do Google Analytics (_ga, _ga_XXXX), no domínio da loja e no principal.
+    const host = location.hostname;
+    const domains = ["", host, "." + host, "." + host.replace(/^www\./, "")];
+    document.cookie.split(";").map(c => c.split("=")[0].trim()).filter(name => /^_ga/.test(name)).forEach(name => {
+        domains.forEach(domain => {
+            document.cookie = name + "=; Max-Age=0; path=/" + (domain ? "; domain=" + domain : "");
+        });
+    });
+}
+
+function applyPrivacyConsent() {
+    if (privacyConsent?.analytics || privacyConsent?.reminders) startStoreAnalytics();
+    if (privacyConsent?.analytics) loadGoogleAnalytics();
+}
+
+let storeAnalyticsStarted = false;
+function startStoreAnalytics() {
+    if (storeAnalyticsStarted) return;
+    storeAnalyticsStarted = true;
+    const VK = "monte_analytics_visitor", SK = "monte_analytics_session", TK = "monte_analytics_session_started";
+    const uid = () => window.crypto?.randomUUID ? window.crypto.randomUUID() : Date.now().toString(36) + "-" + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    const read = (store, key) => { try { return window[store].getItem(key); } catch { return null; } };
+    const write = (store, key, value) => { try { window[store].setItem(key, value); } catch {} };
+    const visitor_id = read("localStorage", VK) || uid();
+    write("localStorage", VK, visitor_id);
+    let session_id = read("sessionStorage", SK), started = Number(read("sessionStorage", TK) || 0);
+    if (!session_id || !started || Date.now() - started > 1800000) {
+        session_id = uid();
+        write("sessionStorage", SK, session_id);
+        write("sessionStorage", TK, String(Date.now()));
+    }
+    const post = async (path, data) => { try { await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true, body: JSON.stringify(data) }); } catch {} };
+    const record = (name, extra) => post("/api/analytics/event", { visitor_id, session_id, event_name: name, path: location.pathname + location.search, referrer: document.referrer, ...extra });
+    // Páginas, produtos vistos e sacola: só com a permissão de estatísticas.
+    const track = (name, extra) => { if (privacyConsent?.analytics) record(name, extra); };
+    // A sacola é salva com estatísticas ou lembrete; nome, e-mail e telefone só com o lembrete.
+    function saveCart() {
+        const items = Array.isArray(cart) ? cart : [];
+        if (!items.length) return;
+        const reminders = privacyConsent?.reminders === true;
+        const shippingPrice = Number(selectedShippingOption?.price || 0);
+        const subtotal = items.reduce((s, i) => s + Number(i.price || 0) * Number(i.quantity || 1), 0);
+        post("/api/analytics/cart", {
+            visitor_id, session_id,
+            items: items.map(i => ({ id: i.id, product_id: i.id, product_name: i.name, sku: i.sku, variant_id: i.variant_id || null, variant_color: i.variant_color || i.color || null, quantity: i.quantity, unit_price: i.price, total_price: Number(i.price || 0) * Number(i.quantity || 1) })),
+            subtotal, shipping: shippingPrice, total: subtotal + shippingPrice,
+            customer_name: reminders ? document.getElementById("customerName")?.value || "" : "",
+            customer_email: reminders ? document.getElementById("customerEmail")?.value || "" : "",
+            customer_phone: reminders ? document.getElementById("customerPhone")?.value || "" : ""
+        });
+    }
+    window.monteAnalytics = { track, saveCart, record };
+    if (document.readyState === "complete") track("page_view");
+    else window.addEventListener("load", () => track("page_view"), { once: true });
+    setInterval(saveCart, 30000);
+    document.addEventListener("click", e => {
+        const el = e.target.closest?.("[data-product-id]");
+        if (el) track("view_product", { product_id: el.dataset.productId, product_name: el.dataset.productName || null });
+    });
+}
+
+let googleAnalyticsLoaded = false;
+function loadGoogleAnalytics() {
+    if (googleAnalyticsLoaded) return;
+    googleAnalyticsLoaded = true;
+    const id = "G-RCG5BX64FG";
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
+    window.gtag("js", new Date());
+    window.gtag("config", id, { anonymize_ip: true });
+    // Carrega quando o navegador está livre: a loja abre sem esperar o script do Google.
+    const inject = () => {
+        const script = document.createElement("script");
+        script.async = true;
+        script.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(id);
+        document.head.appendChild(script);
+    };
+    const schedule = () => (window.requestIdleCallback ? requestIdleCallback(inject, { timeout: 4000 }) : setTimeout(inject, 2000));
+    if (document.readyState === "complete") schedule();
+    else window.addEventListener("load", schedule, { once: true });
+}
+
+function showCookieConsent(customize = false) {
+    const box = document.getElementById("cookieConsent");
+    if (!box) return;
+    document.getElementById("consentAnalytics").checked = privacyConsent ? privacyConsent.analytics : false;
+    document.getElementById("consentReminders").checked = privacyConsent ? privacyConsent.reminders : false;
+    document.getElementById("cookieOptions").hidden = !customize;
+    document.getElementById("cookieCustomize").hidden = customize;
+    document.getElementById("cookieSave").hidden = !customize;
+    box.hidden = false;
+}
+
+function hideCookieConsent() {
+    const box = document.getElementById("cookieConsent");
+    if (box) box.hidden = true;
+}
+
+function acceptCookies() { savePrivacyConsent({ analytics: true, reminders: true }); }
+function rejectCookies() { savePrivacyConsent({ analytics: false, reminders: false }); }
+function customizeCookies() { showCookieConsent(true); }
+function saveCookieChoices() {
+    savePrivacyConsent({
+        analytics: document.getElementById("consentAnalytics").checked,
+        reminders: document.getElementById("consentReminders").checked
+    });
+}
+function openCookiePreferences(event) {
+    event?.preventDefault?.();
+    showCookieConsent(true);
+}
+
+applyPrivacyConsent();
+(function askCookieConsent() {
+    const wantsPreferences = new URLSearchParams(location.search).get("cookies") === "preferencias";
+    if (privacyConsent && !wantsPreferences) return;
+    // Aparece depois da abertura animada da loja.
+    const root = document.documentElement;
+    let shown = false;
+    const show = () => { if (shown) return; shown = true; observer.disconnect(); showCookieConsent(wantsPreferences); };
+    const observer = new MutationObserver(() => { if (!root.classList.contains("intro-playing")) show(); });
+    if (!root.classList.contains("intro-playing")) return show();
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+    setTimeout(show, 9000);
 })();
 
 
@@ -3053,7 +3206,8 @@ registerClickActions({
     closeProductImageLightbox, closeProductModal, closeSearch, goToNovidades, navigateProductLightbox,
     nextCategoryPage, nextCollectionPage, nextNewPage, nextSalePage, nextSlide, openCart, openSearch,
     openWhatsAppReservation, previousCategoryPage, previousCollectionPage, previousNewPage,
-    previousSalePage, previousSlide, removeFromCart, toggleMobileMenu, updateItemQuantity
+    previousSalePage, previousSlide, removeFromCart, toggleMobileMenu, updateItemQuantity,
+    acceptCookies, rejectCookies, customizeCookies, saveCookieChoices, openCookiePreferences
 });
 
 document.getElementById("searchInput")?.addEventListener("input", () => searchProducts());
@@ -3078,26 +3232,3 @@ document.getElementById("carouselSlides")?.addEventListener("keydown", event => 
 });
 
 
-/* =====================================================
-   GOOGLE ANALYTICS
-   Carrega depois que a página termina de abrir, quando o navegador
-   está livre: os visitantes continuam sendo contados e a loja abre
-   sem esperar o script do Google.
-===================================================== */
-
-(function loadAnalytics() {
-    const id = "G-RCG5BX64FG";
-    window.dataLayer = window.dataLayer || [];
-    window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
-    window.gtag("js", new Date());
-    window.gtag("config", id, { anonymize_ip: true });
-    const inject = () => {
-        const script = document.createElement("script");
-        script.async = true;
-        script.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(id);
-        document.head.appendChild(script);
-    };
-    const schedule = () => (window.requestIdleCallback ? requestIdleCallback(inject, { timeout: 4000 }) : setTimeout(inject, 2000));
-    if (document.readyState === "complete") schedule();
-    else window.addEventListener("load", schedule, { once: true });
-})();
