@@ -904,31 +904,6 @@ const RESEND_FROM_EMAIL = safeString(process.env.RESEND_FROM_EMAIL || "contato@o
 const RESEND_MARKETING_FROM_EMAIL = safeString(process.env.RESEND_MARKETING_FROM_EMAIL || "mkt@oficialmontee.com.br");
 const RESEND_FROM_NAME = safeString(process.env.RESEND_FROM_NAME || "MONTÊ");
 const ORDER_NOTIFICATION_EMAILS = safeString(process.env.ORDER_NOTIFICATION_EMAILS);
-const PIX_KEY = safeString(process.env.PIX_KEY).replace(/[^0-9A-Za-z@._+\-]/g, "");
-const PIX_MERCHANT_NAME = safeString(process.env.PIX_MERCHANT_NAME || "MONTE").slice(0, 25);
-const PIX_MERCHANT_CITY = safeString(process.env.PIX_MERCHANT_CITY || "FORTALEZA").slice(0, 15);
-function pixField(id, value) { const str = String(value ?? ""); return String(id).padStart(2, "0") + String(str.length).padStart(2, "0") + str; }
-function crc16Pix(payload) {
-    let crc = 0xFFFF;
-    for (let i = 0; i < payload.length; i++) {
-        crc ^= payload.charCodeAt(i) << 8;
-        for (let bit = 0; bit < 8; bit++) crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xFFFF : (crc << 1) & 0xFFFF;
-    }
-    return crc.toString(16).toUpperCase().padStart(4, "0");
-}
-function buildPixPayload(amount, txid = "***") {
-    if (!PIX_KEY) throw new Error("PIX_KEY não configurada no servidor.");
-    const merchantAccount = pixField(0, "BR.GOV.BCB.PIX") + pixField(1, PIX_KEY);
-    const additionalData = pixField(5, String(txid).replace(/[^A-Za-z0-9*]/g, "").slice(0, 25) || "***");
-    const body = [
-        pixField(0, "01"), pixField(26, merchantAccount), pixField(52, "0000"),
-        pixField(53, "986"), pixField(54, Number(amount).toFixed(2)), pixField(58, "BR"),
-        pixField(59, PIX_MERCHANT_NAME), pixField(60, PIX_MERCHANT_CITY), pixField(62, additionalData)
-    ].join("") + "6304";
-    return body + crc16Pix(body);
-}
-
-
 async function sendWhatsAppTrackingNotification(order) {
     if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
         return { sent: false, status: "not_configured", message_id: null };
@@ -1844,7 +1819,6 @@ async function readCarouselConfig(){
   const sizes=value?.sizes&&typeof value.sizes==="object"?value.sizes:{};
   return {images:images.length?images:DEFAULT_CAROUSEL_IMAGES,sizes,stored:value||null};
 }
-async function readCarouselImages(){return (await readCarouselConfig()).images}
 function normalizeCarouselImages(images){
   return Array.isArray(images)?images.map(v=>safeString(v)).filter(Boolean).slice(0,20):[];
 }
@@ -4118,105 +4092,6 @@ app.post("/api/admin/stock/adjust",requireAdmin,async(req,res)=>{
 
 
 /* =====================================================
-   INSTAGRAM — FEED PROXY
-   O frontend consulta este endpoint do próprio domínio.
-   A credencial do Instagram permanece somente no Render.
-===================================================== */
-const INSTAGRAM_GRAPH_API_VERSION = safeString(process.env.INSTAGRAM_GRAPH_API_VERSION || "v23.0");
-const INSTAGRAM_ACCESS_TOKEN = safeString(process.env.INSTAGRAM_ACCESS_TOKEN);
-const INSTAGRAM_USER_ID = safeString(process.env.INSTAGRAM_USER_ID);
-const INSTAGRAM_CACHE_TTL_MS = 10 * 60 * 1000;
-let instagramFeedCache = { expiresAt: 0, data: null };
-
-app.get("/api/instagram/feed", async (req, res) => {
-    res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=600");
-    try {
-        const now = Date.now();
-        if (instagramFeedCache.data && instagramFeedCache.expiresAt > now) {
-            return res.json(instagramFeedCache.data);
-        }
-
-        if (!INSTAGRAM_ACCESS_TOKEN || !INSTAGRAM_USER_ID) {
-            return res.status(503).json({
-                success: false,
-                configured: false,
-                message: "Instagram não configurado no Render."
-            });
-        }
-
-        const fields = [
-            "id",
-            "caption",
-            "media_type",
-            "media_url",
-            "thumbnail_url",
-            "permalink",
-            "timestamp"
-        ].join(",");
-
-        const graphUrl = new URL(
-            `https://graph.facebook.com/${INSTAGRAM_GRAPH_API_VERSION}/${encodeURIComponent(INSTAGRAM_USER_ID)}/media`
-        );
-        graphUrl.searchParams.set("fields", fields);
-        graphUrl.searchParams.set("limit", "12");
-        graphUrl.searchParams.set("access_token", INSTAGRAM_ACCESS_TOKEN);
-
-        const response = await fetch(graphUrl, {
-            headers: { "Accept": "application/json" }
-        });
-
-        const responseText = await response.text();
-        let data = {};
-        try { data = responseText ? JSON.parse(responseText) : {}; }
-        catch { data = { raw: responseText }; }
-
-        if (!response.ok) {
-            console.error("Instagram Graph API:", response.status, data);
-            return res.status(502).json({
-                success: false,
-                configured: true,
-                message: "Não foi possível consultar o Instagram agora."
-            });
-        }
-
-        const items = Array.isArray(data?.data)
-            ? data.data
-                .filter(item => item && (item.media_url || item.thumbnail_url))
-                .map(item => ({
-                    id: String(item.id || ""),
-                    media_type: String(item.media_type || ""),
-                    // Em vídeos, media_url aponta para o .mp4; a capa fica em thumbnail_url.
-                    image_url: String((item.media_type === "VIDEO" ? item.thumbnail_url : item.media_url) || item.thumbnail_url || item.media_url || ""),
-                    permalink: String(item.permalink || "https://www.instagram.com/oficialmonte_/"),
-                    caption: String(item.caption || ""),
-                    timestamp: item.timestamp || null
-                }))
-            : [];
-
-        const payload = {
-            success: true,
-            configured: true,
-            items
-        };
-
-        instagramFeedCache = {
-            expiresAt: now + INSTAGRAM_CACHE_TTL_MS,
-            data: payload
-        };
-
-        return res.json(payload);
-    } catch (error) {
-        console.error("Instagram feed:", error);
-        return res.status(500).json({
-            success: false,
-            configured: Boolean(INSTAGRAM_ACCESS_TOKEN && INSTAGRAM_USER_ID),
-            message: "Erro ao carregar o Instagram."
-        });
-    }
-});
-
-
-/* =====================================================
    ÁREA GERENCIAL
    Rota explícita para o painel. O Render executa o backend em /backend,
    enquanto admin.html permanece na raiz do repositório.
@@ -4308,28 +4183,6 @@ app.get("/", async (req, res) => {
 
 
 /* =====================================================
-   MONTÊ → InfinitePay
-   MEMÓRIA DOS PEDIDOS AGUARDANDO PAGAMENTO
-===================================================== */
-
-const pendingOrders = new Map();
-const processedPayments = new Set();
-
-/* =====================================================
-   NORMALIZAR VALOR
-===================================================== */
-
-function normalizeMoney(value) {
-    const number = Number(value);
-
-    if (!Number.isFinite(number)) {
-        return 0;
-    }
-
-    return Number(number.toFixed(2));
-}
-
-/* =====================================================
    NORMALIZAR TEXTO
 ===================================================== */
 
@@ -4340,82 +4193,6 @@ function safeString(value) {
 
     return String(value).trim();
 }
-
-/* =====================================================
-   GUARDAR PEDIDO ANTES DO PAGAMENTO
-===================================================== */
-
-function savePendingOrder(order) {
-
-    if (!order || !order.order_nsu) {
-        throw new Error("Pedido sem order_nsu.");
-    }
-
-    pendingOrders.set(
-        order.order_nsu,
-        {
-            ...order,
-            created_at: Date.now(),
-            payment_confirmed: false,}
-    );
-
-    console.log(
-        "💾 Pedido salvo aguardando pagamento:",
-        order.order_nsu
-    );
-}
-
-/* =====================================================
-   RECUPERAR PEDIDO
-===================================================== */
-
-function getPendingOrder(orderNsu) {
-
-    if (!orderNsu) {
-        return null;
-    }
-
-    return pendingOrders.get(orderNsu) || null;
-}
-
-/* =====================================================
-   LIMPEZA DE PEDIDOS ANTIGOS
-===================================================== */
-
-function cleanupPendingOrders() {
-
-    const expiration =
-        1000 *
-        60 *
-        60 *
-        24;
-
-    const now = Date.now();
-
-    for (
-        const [orderNsu, order]
-        of pendingOrders.entries()
-    ) {
-
-        if (
-            order.created_at &&
-            now - order.created_at > expiration
-        ) {
-
-            pendingOrders.delete(orderNsu);
-
-            console.log(
-                "🧹 Pedido pendente removido:",
-                orderNsu
-            );
-        }
-    }
-}
-
-if (!IS_WORKERS) setInterval(
-    cleanupPendingOrders,
-    1000 * 60 * 60
-);
 
 /* =====================================================
    CRIAR CHECKOUT
@@ -5118,13 +4895,8 @@ app.post(
                     service_id: shippingOption.id,
                     service_name: shippingOption.name,
                     delivery_days: deliveryDays
-                },
-
-                created_at:
-                    Date.now(),
-
-                payment_confirmed:
-                    false,};
+                }
+            };
 
 
             const subtotal = Number(productItems.reduce(
@@ -5190,10 +4962,6 @@ app.post(
                     total_price: Number((item.price * item.quantity).toFixed(2))
                 })))
             });
-
-            savePendingOrder(
-                pendingOrder
-            );
 
             /* =================================================
                PIX — CHECKOUT INDEPENDENTE DA INFINITEPAY
@@ -5463,16 +5231,6 @@ app.post(
                 !response.ok
             ) {
 
-                /*
-                   Se o checkout falhar, removemos o pedido
-                   temporário para não deixar lixo na memória.
-                */
-
-                pendingOrders.delete(
-                    orderNsu
-                );
-
-
                 console.error(
                     "❌ InfinitePay respondeu com erro."
                 );
@@ -5514,11 +5272,6 @@ app.post(
                 !data ||
                 !data.url
             ) {
-
-                pendingOrders.delete(
-                    orderNsu
-                );
-
 
                 console.error(
                     "❌ InfinitePay não retornou URL."
@@ -5708,7 +5461,6 @@ app.post(
                 // repetição do aviso não dispara outro envio, que poderia duplicar o pedido lá.
                 const olistRetry = {status: order.olist_sync_status === "completed" ? "completed" : "queued"};
 
-                processedPayments.add(orderNsu);
                 const confirmationEmail = await ensureOrderConfirmationEmail(order);
                 const adminSaleEmail = await ensureAdminSaleNotificationEmail(order);
                 const adminWhatsApp = await ensureWhatsAppAdminNewOrderNotification(order);
@@ -5900,8 +5652,6 @@ app.post(
                 customer_whatsapp: order.customer_whatsapp
             }));
 
-            processedPayments.add(orderNsu);
-
             console.log(
                 "✅ Pagamento confirmado, estoque local baixado e notificações processadas:",
                 orderNsu,
@@ -6069,62 +5819,6 @@ app.get("/api/pedido-confirmacao", orderStatusRateLimit, async (req, res) => {
     }
 });
 
-app.get("/api/pedido-status", orderStatusRateLimit, async (req, res) => {
-    try {
-        const orderNsu = safeString(req.query.order_nsu);
-        const transactionNsu = safeString(req.query.transaction_nsu);
-
-        if (!orderNsu || !transactionNsu) {
-            return res.status(400).json({
-                success: false,
-                message: "Identificadores do pedido não informados."
-            });
-        }
-
-        const rows = await supabaseRequest(
-            `orders?order_nsu=eq.${encodeURIComponent(orderNsu)}&transaction_nsu=eq.${encodeURIComponent(transactionNsu)}&select=id,order_nsu,order_code,status,total,shipping,receipt_url,created_at,paid_at,order_items(product_name,variant_color,sku,quantity,unit_price,total_price)`,
-            { method: "GET" }
-        );
-
-        const order = Array.isArray(rows) ? rows[0] : null;
-
-        if (!order || order.status !== "paid") {
-            return res.status(404).json({
-                success: false,
-                message: "Pedido pago não encontrado."
-            });
-        }
-
-        return res.json({
-            success: true,
-            order: {
-                order_nsu: order.order_nsu,
-                order_code: formatOrderCode(order.order_code || order.order_nsu),
-                status: order.status,
-                total: Number(order.total || 0),
-                shipping: Number(order.shipping || 0),
-                receipt_url: order.receipt_url || null,
-                created_at: order.created_at,
-                paid_at: order.paid_at,
-                items: (order.order_items || []).map(item => ({
-                    product_name: item.product_name,
-                    variant_color: item.variant_color,
-                    sku: item.sku,
-                    quantity: Number(item.quantity || 0),
-                    unit_price: Number(item.unit_price || 0),
-                    total_price: Number(item.total_price || 0)
-                }))
-            }
-        });
-    } catch (error) {
-        console.error("❌ Erro ao consultar pedido:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Não foi possível consultar o pedido."
-        });
-    }
-});
-
 /* =====================================================
    SEO — SITEMAP, ROBOTS E PÁGINAS DE PRODUTO
 ===================================================== */
@@ -6204,28 +5898,6 @@ function productSchema(product) {
     };
 }
 
-function sendNotFoundPage(res, title, message) {
-    return res.status(404).type("html").send(`<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="robots" content="noindex">
-<link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml">
-<title>${xmlEscape(title)} | MONTÊ</title>
-<link rel="stylesheet" href="/produto-seo.css?v=20261016-comprar">
-</head>
-<body>
-<main class="seo-product seo-not-found">
-<p class="seo-brand">MONTÊ</p>
-<h1>${xmlEscape(title)}</h1>
-<p>${xmlEscape(message)}</p>
-<p><a class="seo-buy" href="/">IR PARA A LOJA</a></p>
-</main>
-</body>
-</html>`);
-}
-
 app.get("/produto/:id/:slug", async (req, res) => {
     try {
         const id = safeString(req.params.id);
@@ -6235,7 +5907,8 @@ app.get("/produto/:id/:slug", async (req, res) => {
         );
         const product = Array.isArray(rows) ? rows[0] : null;
 
-        if (!product) return sendNotFoundPage(res, "Esta peça não está mais na loja", "Ela esgotou ou saiu da coleção. Veja as outras peças da MONTÊ.");
+        // Peça que saiu da loja: o link antigo (Google, Instagram) leva para a loja.
+        if (!product) return res.redirect(302, "/");
 
         const stockTotal = Array.isArray(product.product_variants)
             ? product.product_variants.filter(v => v.active !== false).reduce((sum, v) => sum + Number(v.stock || 0), 0)
@@ -6746,8 +6419,8 @@ function startNodeServer() {
 
 // Último tratamento de erro: sem ele o Express devolve a pilha (stack) com caminhos do servidor.
 // JSON inválido ou grande demais vira uma resposta simples; o resto, erro genérico.
-// Páginas digitadas sem ".html" (/minhas-compras) levam à página certa; o resto mostra uma
-// página com o caminho de volta para a loja, em vez do "Cannot GET" do Express.
+// Páginas digitadas sem ".html" (/minhas-compras) levam à página certa; qualquer outro endereço
+// que não existe leva para a loja, em vez do "Cannot GET" do Express.
 const PAGES_WITHOUT_EXTENSION = new Set(["minhas-compras", "trocas-devolucoes", "termos-de-compra", "politica-privacidade", "entrega-frete"]);
 app.use((req, res) => {
     const page = req.path.replace(/^\/+|\/+$/g, "").toLowerCase();
@@ -6755,8 +6428,8 @@ app.use((req, res) => {
         const query = req.originalUrl.includes("?") ? req.originalUrl.slice(req.originalUrl.indexOf("?")) : "";
         return res.redirect(301, "/" + page + ".html" + query);
     }
-    if (req.path.startsWith("/api/") || req.method !== "GET") return res.status(404).json({ success: false, message: "Não encontrado." });
-    return sendNotFoundPage(res, "Página não encontrada", "O endereço pode ter mudado. As peças da MONTÊ estão na loja.");
+    if (req.path.startsWith("/api/") || (req.method !== "GET" && req.method !== "HEAD")) return res.status(404).json({ success: false, message: "Não encontrado." });
+    return res.redirect(302, "/");
 });
 
 app.use((error, req, res, next) => {

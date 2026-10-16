@@ -104,11 +104,6 @@ a {
 }
 
 
-.shipping-separator {
-    opacity: .6;
-}
-
-
 /* =====================================================
    HEADER
 ===================================================== */
@@ -467,66 +462,6 @@ a {
 }
 
 
-.slide-content {
-
-    position: absolute;
-
-    z-index: 2;
-
-    left: 8%;
-
-    top: 50%;
-
-    transform: translateY(-50%);
-
-    color: white;
-
-}
-
-
-.slide-content p {
-
-    font-size: 11px;
-
-    letter-spacing: 5px;
-
-    margin-bottom: 20px;
-
-}
-
-
-.slide-content h1 {
-
-    font-family: "Playfair Display", serif;
-
-    font-size: clamp(50px, 7vw, 100px);
-
-    font-weight: 400;
-
-    line-height: .95;
-
-    margin-bottom: 35px;
-
-}
-
-
-.hero-button {
-
-    display: inline-block;
-
-    background: white;
-
-    color: #111;
-
-    padding: 16px 28px;
-
-    font-size: 10px;
-
-    letter-spacing: 2px;
-
-}
-
-
 .carousel-prev,
 .carousel-next {
 
@@ -686,7 +621,6 @@ a {
     color: white;
 
 }
-
 
 
 .section-heading > a {
@@ -918,45 +852,6 @@ a {
 .collection-section {
 
     background: #ffffff;
-
-}
-
-
-.collection-toolbar {
-
-    display: flex;
-
-    gap: 10px;
-
-    margin-bottom: 35px;
-
-    flex-wrap: wrap;
-
-}
-
-
-.filter-button {
-
-    border: 1px solid #bbb;
-
-    background: transparent;
-
-    padding: 10px 18px;
-
-    font-size: 9px;
-
-    letter-spacing: 1.5px;
-
-}
-
-
-.filter-button.active {
-
-    background: var(--black);
-
-    color: white;
-
-    border-color: var(--black);
 
 }
 
@@ -2091,19 +1986,6 @@ a {
 }
 
 
-.cart-shipping-info {
-
-    font-size: 10px;
-
-    color: #777;
-
-    line-height: 1.6;
-
-    margin-bottom: 20px;
-
-}
-
-
 .checkout-button {
 
     width: 100%;
@@ -2385,20 +2267,6 @@ a {
     }
 
 
-    .slide-content {
-
-        left: 7%;
-
-    }
-
-
-    .slide-content h1 {
-
-        font-size: 55px;
-
-    }
-
-
     .carousel-prev,
     .carousel-next {
 
@@ -2669,12 +2537,6 @@ a {
     border-color: #222;
 }
 
-.checkout-row {
-    display: grid;
-    grid-template-columns: 1fr 1.5fr;
-    gap: 10px;
-}
-
 .shipping-result {
     display: flex;
     justify-content: space-between;
@@ -2769,43 +2631,17 @@ a {
    ========================================= */
 
 /* Fundo do carrinho */
-.cart-overlay,
-.cart-modal,
-.cart-drawer,
-#cartDrawer {
+.cart-overlay {
     position: fixed;
     inset: 0;
     z-index: 9999;
 }
 
 /* Painel lateral do carrinho */
-.cart-content,
-.cart-panel,
-.cart-drawer-content,
-#cartDrawer .cart-content,
-#cartDrawer .cart-panel {
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: min(520px, 100%);
-    height: 100dvh;
-    max-height: 100dvh;
-    background: #fff;
 
-    display: flex;
-    flex-direction: column;
-
-    overflow: hidden;
-    box-sizing: border-box;
-}
 
 /* Área interna que contém produtos + formulário */
-.cart-body,
-.cart-items,
-.cart-scroll,
-.cart-drawer-body,
-#cartDrawer .cart-body,
-#cartDrawer .cart-items {
+.cart-items {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
@@ -2818,9 +2654,7 @@ a {
 }
 
 /* Impede o conteúdo de ficar escondido atrás do rodapé */
-.cart-footer,
-.cart-actions,
-.checkout-section {
+.cart-footer {
     flex-shrink: 0;
 }
 
@@ -2830,17 +2664,11 @@ a {
 }
 
 /* Barra de rolagem */
-.cart-body::-webkit-scrollbar,
-.cart-items::-webkit-scrollbar,
-.cart-scroll::-webkit-scrollbar,
-.cart-drawer-body::-webkit-scrollbar {
+.cart-items::-webkit-scrollbar {
     width: 6px;
 }
 
-.cart-body::-webkit-scrollbar-thumb,
-.cart-items::-webkit-scrollbar-thumb,
-.cart-scroll::-webkit-scrollbar-thumb,
-.cart-drawer-body::-webkit-scrollbar-thumb {
+.cart-items::-webkit-scrollbar-thumb {
     background: #bbb;
     border-radius: 10px;
 }
@@ -2875,8 +2703,7 @@ a {
    DO CARRINHO
    ========================================= */
 
-body.cart-open,
-body.modal-open {
+body.cart-open {
     overflow: hidden;
 }
 
@@ -3058,29 +2885,6 @@ body.page-locked {
     white-space:normal;
     overflow-wrap:anywhere;
 }
-.payment-option-price{
-    grid-column:3;
-    grid-row:1;
-    min-width:0;
-    max-width:100%;
-    font-size:12px;
-    font-weight:600;
-    white-space:nowrap;
-    text-align:right;
-    margin:0;
-}
-.checkout-total{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    gap:15px;
-    margin-top:14px;
-    padding-top:14px;
-    border-top:1px solid var(--border);
-    font-size:12px;
-    letter-spacing:.7px
-}
-.checkout-total strong{font-size:16px;white-space:nowrap}
 
 @media (max-width: 600px) {
     #cartOverlay .payment-methods{
@@ -3113,17 +2917,6 @@ body.page-locked {
         min-width:0 !important;
         max-width:100% !important;
         overflow:hidden !important;
-    }
-
-    #cartOverlay .payment-option-price{
-        grid-column:2 !important;
-        grid-row:2 !important;
-        justify-self:start;
-        align-self:start;
-        margin-top:2px;
-        font-size:11px;
-        line-height:1.3;
-        white-space:nowrap;
     }
 
     #cartOverlay .payment-option-content strong{font-size:11px}
@@ -3207,22 +3000,6 @@ body.page-locked {
     font-size: 9px;
     letter-spacing: 1.4px;
     white-space: nowrap;
-}
-
-.whatsapp-optin {
-    display: flex;
-    gap: 9px;
-    align-items: flex-start;
-    margin: -3px 0 18px;
-    font-size: 11px;
-    line-height: 1.45;
-    color: #555;
-}
-
-.whatsapp-optin input {
-    width: auto;
-    margin-top: 2px;
-    flex: 0 0 auto;
 }
 
 .purchases-page {
@@ -3577,30 +3354,6 @@ img {
         object-fit: cover;
     }
 
-    .slide-content {
-        left: 22px;
-        right: 22px;
-        max-width: calc(100% - 44px);
-    }
-
-    .slide-content p {
-        font-size: 8px;
-        letter-spacing: 3px;
-        margin-bottom: 12px;
-    }
-
-    .slide-content h1 {
-        font-size: clamp(38px, 12vw, 58px);
-        line-height: .98;
-        margin-bottom: 22px;
-    }
-
-    .hero-button {
-        padding: 13px 20px;
-        font-size: 8px;
-        letter-spacing: 1.5px;
-    }
-
     .carousel-dots {
         bottom: 17px;
         gap: 5px;
@@ -3662,25 +3415,6 @@ img {
         left: 8px;
         padding: 5px 7px;
         font-size: 7px;
-    }
-
-    .collection-toolbar {
-        gap: 7px;
-        margin-bottom: 25px;
-        overflow-x: auto;
-        flex-wrap: nowrap;
-        padding-bottom: 3px;
-        scrollbar-width: none;
-    }
-
-    .collection-toolbar::-webkit-scrollbar {
-        display: none;
-    }
-
-    .filter-button {
-        flex: 0 0 auto;
-        padding: 9px 13px;
-        font-size: 8px;
     }
 
     .collection-products-carousel,
@@ -3881,11 +3615,6 @@ img {
 
     .cart-footer {
         padding: 18px 16px;
-    }
-
-    .checkout-row {
-        grid-template-columns: 1fr;
-        gap: 0;
     }
 
     .checkout-form input {
@@ -5079,7 +4808,6 @@ img {
 }
 
 
-
 /* =====================================================
    PADRÃO DEFINITIVO — CARDS RETANGULARES
    MONTÊ: frame vertical 3:4 em todos os cards.
@@ -5112,7 +4840,6 @@ img {
     object-fit: contain !important;
     object-position: center center !important;
 }
-
 
 
 /* =====================================================
@@ -5163,7 +4890,6 @@ img {
 .sale-products-grid .product-badge {
     z-index: 3;
 }
-
 
 
 /* =====================================================
@@ -5281,136 +5007,8 @@ img {
    INSTAGRAM — ANTES DO RODAPÉ
 ===================================================== */
 
-.instagram-section {
-    padding: 90px 5% 70px;
-    background: #fff;
-    text-align: center;
-}
-
-.instagram-heading {
-    margin-bottom: 32px;
-}
-
-.instagram-heading .section-label {
-    margin-bottom: 9px;
-}
-
-.instagram-heading h2 {
-    font-family: "Playfair Display", serif;
-    font-size: 42px;
-    font-weight: 400;
-    margin-bottom: 9px;
-}
-
-.instagram-heading a {
-    font-size: 11px;
-    letter-spacing: 1.2px;
-    color: var(--wine);
-}
-
-.instagram-carousel {
-    position: relative;
-    width: min(100%, 1200px);
-    height: 420px;
-    margin: 0 auto;
-    overflow: hidden;
-    background: #f5f5f3;
-}
-
-.instagram-slide {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    transition: opacity .8s ease;
-    display: block;
-}
-
-.instagram-slide.active {
-    opacity: 1;
-}
-
-.instagram-slide img {
-    width: 100%;
-    height: 100%;
-    display: block;
-    object-fit: cover;
-    object-position: center;
-}
-
-.instagram-prev,
-.instagram-next {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 5;
-    width: 42px;
-    height: 42px;
-    border: 1px solid rgba(255,255,255,.8);
-    background: rgba(0,0,0,.25);
-    color: #fff;
-    font-size: 27px;
-    line-height: 1;
-}
-
-.instagram-prev { left: 20px; }
-.instagram-next { right: 20px; }
-
-.instagram-dots {
-    position: absolute;
-    bottom: 18px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 7px;
-    z-index: 5;
-}
-
-.instagram-dot {
-    width: 28px;
-    height: 2px;
-    border: none;
-    background: rgba(255,255,255,.5);
-    padding: 0;
-}
-
-.instagram-dot.active {
-    background: #fff;
-}
-
-@media (max-width: 650px) {
-    .instagram-section {
-        padding: 60px 16px 48px;
-    }
-
-    .instagram-heading {
-        margin-bottom: 24px;
-    }
-
-    .instagram-heading h2 {
-        font-size: 31px;
-    }
-
-    .instagram-carousel {
-        height: 62vw;
-        min-height: 240px;
-        max-height: 420px;
-    }
-
-    .instagram-prev,
-    .instagram-next {
-        width: 34px;
-        height: 34px;
-        font-size: 23px;
-    }
-
-    .instagram-prev { left: 10px; }
-    .instagram-next { right: 10px; }
-}
 
 /* Instagram real feed refinements */
-.instagram-slides{position:absolute;inset:0;}
-.instagram-loading,.instagram-error{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:12px;letter-spacing:1px;color:#777;background:#f5f5f3;}
-.instagram-slide img{width:100%;height:100%;display:block;object-fit:cover;object-position:center;}
 
 
 /* SALE — preços e nomes em cinza */
@@ -5434,7 +5032,6 @@ img {
 .sale-section .sale-price {
     color: #fff;
 }
-
 
 
 /* =====================================================
@@ -5789,25 +5386,6 @@ body.product-lightbox-open {
 /* =====================================================
    PIX DIRETO — MONTÊ
 ===================================================== */
-.direct-pix-payment{margin:18px 0 4px;padding:20px;border:1px solid #111;background:#fff;text-align:center}
-.direct-pix-header{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
-.direct-pix-header span{font-size:9px;letter-spacing:2px;color:#666}
-.direct-pix-header strong{font-size:14px;letter-spacing:1px}
-.direct-pix-order{font-size:11px;color:#666;margin:0 0 14px}
-.direct-pix-qr-wrap{width:100%;display:flex;justify-content:center;align-items:center;box-sizing:border-box;margin:8px auto 14px;overflow:hidden}
-.direct-pix-qr-wrap canvas,.direct-pix-qr-wrap .direct-pix-qr-image{display:block;width:min(280px,70vw);height:auto;aspect-ratio:1/1;max-width:100%;object-fit:contain;flex:0 0 auto}
-.direct-pix-qr-wrap [hidden]{display:none!important}
-.direct-pix-amount{display:block;font-size:20px;margin-bottom:10px}
-.direct-pix-instruction{font-size:11px;line-height:1.5;color:#555;margin:0 auto 12px;max-width:330px}
-.direct-pix-copy{width:100%;min-height:90px;box-sizing:border-box;border:1px solid #ccc;padding:10px;font-size:10px;line-height:1.35;resize:none;word-break:break-all;background:#fafafa}
-.direct-pix-copy-button{width:100%;margin-top:9px;padding:13px 14px;border:0;background:#111;color:#fff;font-size:9px;letter-spacing:1.4px;cursor:pointer}
-.direct-pix-note{font-size:9px;line-height:1.45;color:#777;margin:12px 0 0}
-
-@media (max-width:650px){
-  .direct-pix-payment{width:100%;box-sizing:border-box;padding:18px 14px}
-  .direct-pix-qr-wrap canvas,.direct-pix-qr-wrap .direct-pix-qr-image{width:min(230px,68vw);max-width:100%}
-  .direct-pix-copy{font-size:9px}
-}
 
 
 /* =====================================================
@@ -6648,10 +6226,6 @@ canvas {
     inset: 0;
     z-index: 10000;
     animation: introGone 0s linear 4.45s forwards;
-}
-
-.intro-seen .monte-intro {
-    display: none;
 }
 
 html.intro-playing,

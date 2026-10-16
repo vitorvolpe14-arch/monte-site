@@ -720,46 +720,6 @@ window.addEventListener("resize", () => {
     renderSalePage();
 });
 
-function filterProducts(category) {
-
-    document
-        .querySelectorAll(".filter-button")
-        .forEach(button => {
-
-            button.classList.remove("active");
-
-        });
-
-
-    const activeButton =
-        document.querySelector(
-            `[data-filter="${category}"]`
-        );
-
-    if (activeButton) {
-        activeButton.classList.add("active");
-    }
-
-
-    const filteredProducts =
-        products.filter(product => {
-
-            if (category === "all") {
-
-                return true;
-
-            }
-
-            return product.category === category;
-
-        }).filter(product => !product.presale);
-
-
-    renderCollectionProducts(filteredProducts);
-
-}
-
-
 /* =====================================================
    MODAL PRODUTO
 ===================================================== */
@@ -1877,10 +1837,10 @@ async function checkout() {
         },1200);
     }catch(error){
         console.error("ERRO COMPLETO NO CHECKOUT:",error);
+        // Pagamento que não abriu: só o atalho para chamar no WhatsApp, junto do botão de finalizar.
         // Sem internet o navegador dá "Failed to fetch" / "Load failed": a cliente vê a explicação.
-        const offline=error instanceof TypeError;
-        showToast(offline?"Sem conexão. Confira sua internet e tente novamente.":(error.message||"O pagamento não abriu. Tente novamente."));
-        if(offline||error.paymentUnavailable)setPaymentHelp(true,paymentMethod);
+        if(error.paymentUnavailable){hideToast();setPaymentHelp(true,paymentMethod);}
+        else showToast(error instanceof TypeError?"Sem conexão. Confira sua internet e tente novamente.":(error.message||"Não foi possível concluir. Tente novamente."));
         if(checkoutButton){checkoutButton.disabled=false;checkoutButton.textContent="FINALIZAR COMPRA";}
     }
 }
@@ -2154,6 +2114,11 @@ function closeMobileMenu() {
 ===================================================== */
 
 let toastTimer = null;
+
+function hideToast() {
+    clearTimeout(toastTimer);
+    document.getElementById("toast")?.classList.remove("show");
+}
 
 function showToast(message) {
 
