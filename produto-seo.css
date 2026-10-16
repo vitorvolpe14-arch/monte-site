@@ -5,6 +5,3 @@
 /* Botão para comprar a peça na loja (abre a janela do produto em /?produto=...). */
 .seo-buy { display: inline-block; padding: 14px 28px; background: #571B29; color: #fff; text-decoration: none; letter-spacing: 2px; font-size: 13px; }
 .seo-buy:hover, .seo-buy:focus-visible { background: #46131c; }
-/* Página não encontrada / peça que saiu da loja. */
-.seo-not-found { text-align: center; margin-top: 18vh; }
-.seo-brand { letter-spacing: 6px; color: #571B29; font-size: 13px; }
