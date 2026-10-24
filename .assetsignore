@@ -16,6 +16,8 @@ backend/.env*
 wrangler.jsonc
 # Ferramentas de manutenção (varredura da loja) não fazem parte do site.
 scripts
+# Worker que acorda o guardião (é outro Worker, com publicação própria).
+guardian-trigger
 # Variáveis de ambiente, bancos/backup e documentos internos nunca são publicados.
 .env*
 **/.env*
