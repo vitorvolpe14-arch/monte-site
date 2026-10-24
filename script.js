@@ -383,6 +383,32 @@ function preloadNextPage(container, list, start, count) {
     preloadObserver.observe(container);
 }
 
+// Troca de página das vitrines: a página atual desliza para fora, a próxima entra do lado
+// oposto (3 produtos por vez). Sem animação se a cliente prefere movimento reduzido.
+const pageSlideBusy = new WeakSet();
+function slidePage(container, direction, render) {
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!container || reduce || !container.animate) return render();
+    if (pageSlideBusy.has(container)) return;
+    pageSlideBusy.add(container);
+    const distance = Math.min(80, container.offsetWidth * 0.15);
+    const easing = "cubic-bezier(0.22, 0.61, 0.36, 1)";
+    const out = container.animate(
+        [{ transform: "translateX(0)", opacity: 1 }, { transform: `translateX(${-direction * distance}px)`, opacity: 0 }],
+        { duration: 200, easing: "ease-in", fill: "forwards" }
+    );
+    out.onfinish = () => {
+        render();
+        out.cancel();
+        const incoming = container.animate(
+            [{ transform: `translateX(${direction * distance}px)`, opacity: 0 }, { transform: "translateX(0)", opacity: 1 }],
+            { duration: 320, easing }
+        );
+        incoming.onfinish = () => pageSlideBusy.delete(container);
+        incoming.oncancel = () => pageSlideBusy.delete(container);
+    };
+}
+
 function renderNewPage() {
 
     const container =
@@ -450,10 +476,11 @@ function nextNewPage() {
 
     if (newProducts.length <= getCarouselVisibleCount()) return;
 
-    currentNewIndex =
-        (currentNewIndex + NEW_STEP) % newProducts.length;
-
-    renderNewPage();
+    slidePage(document.getElementById("newProducts"), 1, () => {
+        currentNewIndex =
+            (currentNewIndex + NEW_STEP) % newProducts.length;
+        renderNewPage();
+    });
 
 }
 
@@ -462,11 +489,12 @@ function previousNewPage() {
 
     if (newProducts.length <= getCarouselVisibleCount()) return;
 
-    currentNewIndex =
-        (currentNewIndex - NEW_STEP + newProducts.length) %
-        newProducts.length;
-
-    renderNewPage();
+    slidePage(document.getElementById("newProducts"), -1, () => {
+        currentNewIndex =
+            (currentNewIndex - NEW_STEP + newProducts.length) %
+            newProducts.length;
+        renderNewPage();
+    });
 
 }
 
@@ -553,10 +581,11 @@ function nextSalePage() {
         return;
     }
 
-    currentSaleIndex =
-        (currentSaleIndex + SALE_STEP) % saleProducts.length;
-
-    renderSalePage();
+    slidePage(document.getElementById("saleProducts"), 1, () => {
+        currentSaleIndex =
+            (currentSaleIndex + SALE_STEP) % saleProducts.length;
+        renderSalePage();
+    });
 
 }
 
@@ -567,10 +596,11 @@ function previousSalePage() {
         return;
     }
 
-    currentSaleIndex =
-        (currentSaleIndex - SALE_STEP + saleProducts.length) % saleProducts.length;
-
-    renderSalePage();
+    slidePage(document.getElementById("saleProducts"), -1, () => {
+        currentSaleIndex =
+            (currentSaleIndex - SALE_STEP + saleProducts.length) % saleProducts.length;
+        renderSalePage();
+    });
 
 }
 
@@ -657,11 +687,12 @@ function nextCollectionPage() {
     }
 
 
-    currentCollectionIndex =
-        (currentCollectionIndex + COLLECTION_STEP) %
-        collectionProducts.length;
-
-    renderCollectionPage();
+    slidePage(document.getElementById("allProducts"), 1, () => {
+        currentCollectionIndex =
+            (currentCollectionIndex + COLLECTION_STEP) %
+            collectionProducts.length;
+        renderCollectionPage();
+    });
 
 }
 
@@ -673,12 +704,13 @@ function previousCollectionPage() {
     }
 
 
-    currentCollectionIndex =
-        (currentCollectionIndex - COLLECTION_STEP +
-            collectionProducts.length) %
-        collectionProducts.length;
-
-    renderCollectionPage();
+    slidePage(document.getElementById("allProducts"), -1, () => {
+        currentCollectionIndex =
+            (currentCollectionIndex - COLLECTION_STEP +
+                collectionProducts.length) %
+            collectionProducts.length;
+        renderCollectionPage();
+    });
 
 }
 
@@ -692,8 +724,12 @@ function getCategoryVisibleCount() {
     return window.matchMedia("(max-width: 650px)").matches ? 2 : 3;
 }
 
+function categoryContainer(category) {
+    return document.getElementById(category === "cintos-acessorios" ? "cintosAcessoriosProducts" : category + "Products");
+}
+
 function renderCategorySection(category) {
-    const container = document.getElementById(category === "cintos-acessorios" ? "cintosAcessoriosProducts" : category + "Products");
+    const container = categoryContainer(category);
     if (!container) return;
 
     const list = categorySectionProducts[category] || [];
@@ -736,17 +772,21 @@ function renderCategorySectionProducts(category, list) {
 function nextCategoryPage(category) {
     const list = categorySectionProducts[category] || [];
     if (list.length <= getCategoryVisibleCount()) return;
-    categorySectionIndexes[category] =
-        (categorySectionIndexes[category] + getCategoryVisibleCount()) % list.length;
-    renderCategorySection(category);
+    slidePage(categoryContainer(category), 1, () => {
+        categorySectionIndexes[category] =
+            (categorySectionIndexes[category] + getCategoryVisibleCount()) % list.length;
+        renderCategorySection(category);
+    });
 }
 
 function previousCategoryPage(category) {
     const list = categorySectionProducts[category] || [];
     if (list.length <= getCategoryVisibleCount()) return;
-    categorySectionIndexes[category] =
-        (categorySectionIndexes[category] - getCategoryVisibleCount() + list.length) % list.length;
-    renderCategorySection(category);
+    slidePage(categoryContainer(category), -1, () => {
+        categorySectionIndexes[category] =
+            (categorySectionIndexes[category] - getCategoryVisibleCount() + list.length) % list.length;
+        renderCategorySection(category);
+    });
 }
 
 /* =====================================================
