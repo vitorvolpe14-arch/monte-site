@@ -377,36 +377,85 @@ function preloadNextPage(container, list, start, count) {
         const image = list[(start + offset) % list.length]?.images?.[0];
         if (image) urls.push(smallImage(image));
     }
+    // A página anterior também, para a seta de voltar deslizar com as fotos prontas.
+    for (let offset = -count; offset < 0; offset++) {
+        const image = list[(start + offset + list.length * 2) % list.length]?.images?.[0];
+        if (image) urls.push(smallImage(image));
+    }
     if (!preloadObserver) return urls.forEach(preloadImage);
     pendingPreloads.set(container, urls);
     preloadObserver.unobserve(container);
     preloadObserver.observe(container);
 }
 
-// Troca de página das vitrines: a página atual desliza para fora, a próxima entra do lado
-// oposto (3 produtos por vez). Sem animação se a cliente prefere movimento reduzido.
-const pageSlideBusy = new WeakSet();
-function slidePage(container, direction, render) {
+// Troca de página das vitrines como um carrossel: os produtos atuais e os próximos andam
+// juntos, lado a lado, como uma faixa só (3 por vez). Sem animação se a cliente prefere
+// movimento reduzido.
+const PAGE_SLIDE_DURATION = 750;
+const PAGE_SLIDE_EASING = "cubic-bezier(.65, 0, .35, 1)";
+const runningPageSlides = new WeakMap();
+
+function slidePage(container, direction, change) {
+    if (!container) return change();
+    // Clique durante o deslize: termina o anterior na hora e já começa o próximo.
+    runningPageSlides.get(container)?.();
+
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!container || reduce || !container.animate) return render();
-    if (pageSlideBusy.has(container)) return;
-    pageSlideBusy.add(container);
-    const distance = Math.min(80, container.offsetWidth * 0.15);
-    const easing = "cubic-bezier(0.22, 0.61, 0.36, 1)";
-    const out = container.animate(
-        [{ transform: "translateX(0)", opacity: 1 }, { transform: `translateX(${-direction * distance}px)`, opacity: 0 }],
-        { duration: 200, easing: "ease-in", fill: "forwards" }
-    );
-    out.onfinish = () => {
-        render();
-        out.cancel();
-        const incoming = container.animate(
-            [{ transform: `translateX(${direction * distance}px)`, opacity: 0 }, { transform: "translateX(0)", opacity: 1 }],
-            { duration: 320, easing }
-        );
-        incoming.onfinish = () => pageSlideBusy.delete(container);
-        incoming.oncancel = () => pageSlideBusy.delete(container);
+    if (reduce || !container.animate) return change();
+
+    const box = container.getBoundingClientRect();
+    const originX = box.left + container.clientLeft;
+    const originY = box.top + container.clientTop;
+    const oldCards = [...container.children].map(card => ({ card, rect: card.getBoundingClientRect() }));
+
+    change();
+
+    const newCards = [...container.children];
+    if (!oldCards.length || !newCards.length) return;
+
+    const style = getComputedStyle(container);
+    const contentWidth = container.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const shift = (contentWidth + (parseFloat(style.columnGap) || 0)) * direction;
+
+    const previous = { position: container.style.position, overflowX: container.style.overflowX };
+    if (style.position === "static") container.style.position = "relative";
+    container.style.overflowX = CSS.supports?.("overflow-x", "clip") ? "clip" : "hidden";
+
+    // Os cartões que estão saindo voltam por cima, no mesmo lugar, até a faixa terminar de andar.
+    oldCards.forEach(({ card, rect }) => {
+        const place = {
+            position: "absolute", margin: "0", "pointer-events": "none",
+            left: rect.left - originX + "px", top: rect.top - originY + "px",
+            width: rect.width + "px", height: rect.height + "px"
+        };
+        Object.entries(place).forEach(([property, value]) => card.style.setProperty(property, value, "important"));
+        container.appendChild(card);
+    });
+
+    const timing = { duration: PAGE_SLIDE_DURATION, easing: PAGE_SLIDE_EASING };
+    const animations = [
+        ...oldCards.map(({ card }) => card.animate(
+            [{ transform: "translateX(0)" }, { transform: `translateX(${-shift}px)` }],
+            { ...timing, fill: "forwards" }
+        )),
+        ...newCards.map(card => card.animate(
+            [{ transform: `translateX(${shift}px)` }, { transform: "translateX(0)" }],
+            timing
+        ))
+    ];
+
+    let done = false;
+    const finish = () => {
+        if (done) return;
+        done = true;
+        runningPageSlides.delete(container);
+        animations.forEach(animation => animation.cancel());
+        oldCards.forEach(({ card }) => card.remove());
+        container.style.position = previous.position;
+        container.style.overflowX = previous.overflowX;
     };
+    runningPageSlides.set(container, finish);
+    animations[0].finished.then(finish, () => {});
 }
 
 function renderNewPage() {
@@ -788,6 +837,40 @@ function previousCategoryPage(category) {
         renderCategorySection(category);
     });
 }
+
+// No celular, arrastar a vitrine para o lado também troca de página.
+function enableShowcaseSwipe(id, next, previous) {
+    const container = document.getElementById(id);
+    if (!container) return;
+    let startX = 0;
+    let startY = 0;
+    let swiped = false;
+    container.addEventListener("touchstart", event => {
+        startX = event.touches[0].clientX;
+        startY = event.touches[0].clientY;
+        swiped = false;
+    }, { passive: true });
+    container.addEventListener("touchend", event => {
+        const dx = event.changedTouches[0].clientX - startX;
+        const dy = event.changedTouches[0].clientY - startY;
+        if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+        swiped = true;
+        if (dx < 0) next();
+        else previous();
+    }, { passive: true });
+    // O arraste não pode abrir o produto em que o dedo começou.
+    container.addEventListener("click", event => {
+        if (!swiped) return;
+        swiped = false;
+        event.stopPropagation();
+    }, true);
+}
+
+enableShowcaseSwipe("newProducts", nextNewPage, previousNewPage);
+enableShowcaseSwipe("saleProducts", nextSalePage, previousSalePage);
+enableShowcaseSwipe("allProducts", nextCollectionPage, previousCollectionPage);
+enableShowcaseSwipe("cintosAcessoriosProducts", () => nextCategoryPage("cintos-acessorios"), () => previousCategoryPage("cintos-acessorios"));
+enableShowcaseSwipe("prevendaProducts", () => nextCategoryPage("prevenda"), () => previousCategoryPage("prevenda"));
 
 /* =====================================================
    FILTRO
