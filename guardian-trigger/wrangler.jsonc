@@ -1,0 +1,17 @@
+{
+  // Despertador do guardião da loja (ver worker.mjs). Worker separado da loja de propósito:
+  // quem vigia não pode cair junto com o que é vigiado.
+  "name": "monte-guardian-trigger",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-01",
+
+  // Não tem página nem endereço público: só o relógio o aciona.
+  "workers_dev": false,
+  "preview_urls": false,
+
+  // A cada 5 minutos. O segredo GITHUB_TOKEN é cadastrado no painel da Cloudflare (nunca neste arquivo).
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "keep_vars": true,
+
+  "observability": { "enabled": true }
+}
