@@ -1,0 +1,47 @@
+name: Audit fix (temporário)
+
+# Temporário: roda só neste branch, gera o lockfile corrigido (npm audit fix, sem --force)
+# e devolve o commit para o mesmo branch. O arquivo é removido antes de qualquer merge.
+on:
+  push:
+    branches: ["claude/audit-fix-tmp"]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: npm audit fix
+        run: npm audit fix --package-lock-only --ignore-scripts
+
+      - name: Auditoria precisa passar
+        run: npm audit --audit-level=high
+
+      - name: Só o lockfile pode mudar
+        working-directory: .
+        run: |
+          git diff --name-only
+          test "$(git diff --name-only)" = "backend/package-lock.json"
+
+      - name: Enviar o lockfile corrigido
+        working-directory: .
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/package-lock.json
+          git commit -m "Corrige body-parser (npm audit fix)"
+          git push origin HEAD:claude/audit-fix-tmp
