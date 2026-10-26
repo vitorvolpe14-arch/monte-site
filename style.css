@@ -7198,6 +7198,34 @@ html.intro-skipped .header { animation-delay: .5s; }
 
 .field-hint { margin: 12px 2px 0; font-size: 11.5px; line-height: 1.5; color: var(--co-muted); }
 
+/* Cupom de desconto (etapa de pagamento) */
+.coupon-box { margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--co-line); }
+.coupon-row { display: flex; gap: 10px; align-items: stretch; }
+.coupon-row .coupon-field { flex: 1; min-width: 0; }
+#cartOverlay .coupon-field input { text-transform: uppercase; letter-spacing: .06em; }
+#cartOverlay .coupon-field input[readonly] { background: var(--co-soft); }
+.coupon-apply {
+    flex: none;
+    min-width: 104px;
+    height: 54px;
+    padding: 0 18px;
+    border: 1px solid var(--co-ink);
+    border-radius: 12px;
+    background: var(--co-ink);
+    color: #fff;
+    font: 500 11.5px/1 "DM Sans", sans-serif;
+    letter-spacing: .14em;
+    cursor: pointer;
+    transition: background .2s ease, color .2s ease, opacity .2s ease;
+}
+.coupon-apply:hover { background: #fff; color: var(--co-ink); }
+.coupon-apply:disabled { opacity: .6; cursor: wait; }
+.coupon-apply[data-click="removeCoupon"] { background: #fff; color: var(--co-ink); }
+.coupon-apply[data-click="removeCoupon"]:hover { background: var(--co-soft); }
+.coupon-status { min-height: 0; margin: 8px 2px 0; font-size: 12px; line-height: 1.5; color: var(--co-ink); }
+.coupon-status:empty { display: none; }
+.coupon-status.is-error { color: var(--wine); }
+
 /* Frete */
 #cartOverlay .shipping-result { display: block; margin-top: 20px; padding: 0; border: 0; }
 

@@ -79,6 +79,8 @@ async function loadProductsFromDatabase() {
 
 let cart = [];
 let selectedPaymentMethod = "pix";
+// Cupom conferido pelo servidor ({ code, discount_type, discount_value }).
+let appliedCoupon = null;
 let shippingOptions = [];
 let selectedShippingOption = null;
 let shippingRequestId = 0;
@@ -1670,26 +1672,49 @@ function shippingPriceLabel(option) {
     return charge === 0 && Number(option?.price || 0) > 0 ? "Grátis" : formatPrice(charge);
 }
 
-function updatePaymentSummary(subtotal = getCartSubtotal()) {
+// Cada peça continua custando pelo menos R$ 1,00 (mesma regra do servidor).
+const COUPON_MIN_UNIT_CENTS = 100;
+
+// Totais do checkout. Mesmo cálculo do servidor: 5% do Pix por unidade, arredondado em
+// centavos; o cupom vale nas peças (depois do Pix) e o frete fica integral.
+function checkoutTotals(subtotal = getCartSubtotal()) {
     const shipping = getShippingValue();
     const paymentMethod =
         document.querySelector('input[name="paymentMethod"]:checked')?.value ||
         selectedPaymentMethod ||
         "pix";
+    const unitCents = item => Math.round(Number(item.price || 0) * 100);
+    const pixDiscountCents = paymentMethod === "pix"
+        ? cart.reduce((sum, item) => sum + (unitCents(item) - Math.round(unitCents(item) * 0.95)) * Number(item.quantity || 0), 0)
+        : 0;
+    const productCents = cart.reduce((sum, item) => sum + unitCents(item) * Number(item.quantity || 0), 0) - pixDiscountCents;
+    const units = cart.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    let couponCents = 0;
+    if (appliedCoupon && productCents > 0) {
+        const value = Number(appliedCoupon.discount_value) || 0;
+        const raw = appliedCoupon.discount_type === "percent"
+            ? Math.round(productCents * Math.min(value, 100) / 100)
+            : Math.round(value * 100);
+        couponCents = Math.max(0, Math.min(raw, productCents - units * COUPON_MIN_UNIT_CENTS));
+    }
+    const pixDiscount = pixDiscountCents / 100;
+    const couponDiscount = couponCents / 100;
+    return {
+        subtotal,
+        shipping,
+        pixDiscount,
+        couponDiscount,
+        total: Number((subtotal - pixDiscount - couponDiscount + shipping).toFixed(2)),
+        paymentMethod
+    };
+}
+
+function updatePaymentSummary(subtotal = getCartSubtotal()) {
+    const totals = checkoutTotals(subtotal);
+    const { shipping, pixDiscount, couponDiscount, paymentMethod } = totals;
+    const checkoutTotal = totals.total;
 
     selectedPaymentMethod = paymentMethod;
-
-    // Mesmo cálculo do servidor: 5% por unidade, arredondado em centavos.
-    const pixDiscount = paymentMethod === "pix"
-        ? cart.reduce((sum, item) => {
-            const unitCents = Math.round(Number(item.price || 0) * 100);
-            return sum + (unitCents - Math.round(unitCents * 0.95)) * Number(item.quantity || 0);
-        }, 0) / 100
-        : 0;
-
-    const checkoutTotal = Number(
-        (subtotal - pixDiscount + shipping).toFixed(2)
-    );
 
     const checkoutElement = document.getElementById("checkoutTotal");
     if (checkoutElement) checkoutElement.textContent = formatPrice(checkoutTotal);
@@ -1722,8 +1747,88 @@ function updatePaymentSummary(subtotal = getCartSubtotal()) {
         option.classList.toggle("selected", !!input?.checked);
     });
 
-    renderCheckoutNote({ subtotal, shipping, pixDiscount, total: checkoutTotal, paymentMethod });
-    renderCheckoutExtras({ subtotal, shipping, pixDiscount, paymentMethod });
+    renderCouponStatus(couponDiscount);
+    renderCheckoutNote(totals);
+    renderCheckoutExtras({ subtotal, shipping, pixDiscount, couponDiscount, paymentMethod });
+}
+
+function couponLabel(coupon) {
+    const value = Number(coupon?.discount_value || 0);
+    return coupon?.discount_type === "percent"
+        ? value.toLocaleString("pt-BR", { maximumFractionDigits: 2 }) + "% OFF nas peças"
+        : formatPrice(value) + " OFF nas peças";
+}
+
+function renderCouponStatus(couponDiscount = checkoutTotals().couponDiscount, message = "", isError = false) {
+    const input = document.getElementById("couponCode");
+    const button = document.getElementById("couponApply");
+    const status = document.getElementById("couponStatus");
+    if (!input || !button || !status) return;
+    input.readOnly = !!appliedCoupon;
+    input.closest(".field")?.classList.toggle("is-valid", !!appliedCoupon);
+    input.closest(".field")?.classList.toggle("is-invalid", isError);
+    button.textContent = appliedCoupon ? "REMOVER" : "APLICAR";
+    button.dataset.click = appliedCoupon ? "removeCoupon" : "applyCoupon";
+    status.classList.toggle("is-error", isError);
+    if (message) {
+        status.textContent = message;
+    } else if (appliedCoupon) {
+        setHTML(status, `<strong>${escapeHTML(appliedCoupon.code)}</strong> aplicado: ${escapeHTML(couponLabel(appliedCoupon))}` +
+            (couponDiscount > 0 ? ` · <strong>-${formatPrice(couponDiscount)}</strong>` : ""));
+    } else {
+        status.textContent = "";
+    }
+}
+
+// Confere o cupom no servidor. O desconto mostrado aqui é recalculado no checkout.
+async function applyCoupon() {
+    const input = document.getElementById("couponCode");
+    const button = document.getElementById("couponApply");
+    const code = String(input?.value || "").replace(/\s+/g, "").toUpperCase();
+    if (!input) return false;
+    if (!code) {
+        renderCouponStatus(0, "Digite o código do cupom.", true);
+        input.focus();
+        return false;
+    }
+    input.value = code;
+    if (button) { button.disabled = true; button.textContent = "..."; }
+    try {
+        const response = await fetch("/api/cupom", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify({
+                code,
+                cpf: document.getElementById("customerCpf")?.value || "",
+                email: document.getElementById("customerEmail")?.value || ""
+            })
+        });
+        let data = null;
+        try { data = await response.json(); } catch {}
+        if (!response.ok || !data?.coupon) {
+            appliedCoupon = null;
+            updatePaymentSummary();
+            renderCouponStatus(0, data?.message || "Não foi possível conferir o cupom.", true);
+            return false;
+        }
+        appliedCoupon = data.coupon;
+        updatePaymentSummary();
+        return true;
+    } catch {
+        renderCouponStatus(0, "Sem conexão. Confira sua internet e tente novamente.", true);
+        return false;
+    } finally {
+        if (button) button.disabled = false;
+        if (!appliedCoupon && button) button.textContent = "APLICAR";
+    }
+}
+
+function removeCoupon(message = "") {
+    appliedCoupon = null;
+    const input = document.getElementById("couponCode");
+    if (input && !message) input.value = "";
+    updatePaymentSummary();
+    if (message) renderCouponStatus(0, message, true);
 }
 
 function setupPaymentMethodSelector() {
@@ -1952,10 +2057,16 @@ async function checkout() {
     const paymentMethod=document.querySelector('input[name="paymentMethod"]:checked')?.value||selectedPaymentMethod||"pix";
     if(!["pix","credit_card"].includes(paymentMethod)){showToast("Selecione uma forma de pagamento válida.");return;}
 
+    // Cupom digitado sem tocar em APLICAR: confere antes de seguir.
+    const typedCoupon=String(document.getElementById("couponCode")?.value||"").trim();
+    if(typedCoupon&&!appliedCoupon){
+        if(!(await applyCoupon())){document.getElementById("couponBox")?.scrollIntoView({behavior:"smooth",block:"center"});return;}
+    }
+
     const checkoutButton=document.querySelector(".checkout-button");
     if(checkoutButton){checkoutButton.disabled=true;checkoutButton.textContent="PREPARANDO PAGAMENTO...";}
     showToast("Preparando seu pagamento...");
-    window.monteAnalytics?.track("begin_checkout",{value:getCartSubtotal(),metadata:{payment_method:paymentMethod}});
+    window.monteAnalytics?.track("begin_checkout",{value:getCartSubtotal(),metadata:{payment_method:paymentMethod,coupon:appliedCoupon?.code||null}});
     window.monteAnalytics?.saveCart();
 
     try{
@@ -1963,6 +2074,7 @@ async function checkout() {
             method:"POST",
             headers:{"Content-Type":"application/json","Accept":"application/json"},
             body:JSON.stringify({items,shipping_service_id:shippingServiceId,payment_method:paymentMethod,
+                coupon_code:appliedCoupon?.code||undefined,
                 customer:{name,email,phone,whatsapp_phone:whatsappNumber,whatsapp_updates:true,cpf:cpfDigits,
                     address:{cep,street,number,complement:complement||"",neighborhood,city,state}}})
         });
@@ -1971,6 +2083,12 @@ async function checkout() {
         try{data=JSON.parse(responseText);}catch{console.error("Resposta não é JSON:",responseText);}
         if(!response.ok){
             if(data?.stock_changed&&typeof loadProductsFromDatabase==="function")loadProductsFromDatabase().catch(()=>{});
+            // Cupom recusado no checkout: sai do pedido e a cliente confere o novo total.
+            if(data?.coupon_invalid){
+                removeCoupon(data.message||"Cupom inválido.");
+                document.getElementById("couponBox")?.scrollIntoView({behavior:"smooth",block:"center"});
+                throw new Error((data.message||"Cupom inválido.")+" O cupom foi removido: confira o total e finalize de novo.");
+            }
             const failure=new Error(data?.message||"O pagamento não abriu. Tente novamente.");
             failure.paymentUnavailable=data?.payment_unavailable===true||response.status>=500;
             throw failure;
@@ -2974,18 +3092,7 @@ function drawNoteBarcode(seed) {
 
 function renderCheckoutNote(summary) {
     if (!document.getElementById("orderNote")) return;
-    const totals = summary || (() => {
-        const subtotal = getCartSubtotal();
-        const shipping = getShippingValue();
-        const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked')?.value || selectedPaymentMethod || "pix";
-        const pixDiscount = paymentMethod === "pix"
-            ? cart.reduce((sum, item) => {
-                const unitCents = Math.round(Number(item.price || 0) * 100);
-                return sum + (unitCents - Math.round(unitCents * 0.95)) * Number(item.quantity || 0);
-            }, 0) / 100
-            : 0;
-        return { subtotal, shipping, pixDiscount, total: Number((subtotal - pixDiscount + shipping).toFixed(2)), paymentMethod };
-    })();
+    const totals = summary || checkoutTotals();
 
     const today = new Date();
     setNoteText("noteDate", [today.getDate(), today.getMonth() + 1].map(n => String(n).padStart(2, "0")).join(".") + "." + today.getFullYear());
@@ -3010,6 +3117,10 @@ function renderCheckoutNote(summary) {
     const discountRow = document.getElementById("noteDiscountRow");
     if (discountRow) discountRow.hidden = !(totals.pixDiscount > 0);
     setNoteText("noteDiscount", totals.pixDiscount > 0 ? "-" + formatPrice(totals.pixDiscount) : "");
+    const couponRow = document.getElementById("noteCouponRow");
+    if (couponRow) couponRow.hidden = !(totals.couponDiscount > 0);
+    setNoteText("noteCouponLabel", appliedCoupon ? "Cupom " + appliedCoupon.code : "Cupom");
+    setNoteText("noteCoupon", totals.couponDiscount > 0 ? "-" + formatPrice(totals.couponDiscount) : "");
     setNoteText("notePayment", totals.paymentMethod === "pix" ? "Pix · 5% off nas peças" : "Cartão de crédito");
     setNoteText("noteTotal", formatPrice(totals.total));
 
@@ -3117,7 +3228,8 @@ function checkoutFieldValid(id) {
 
 function refreshCheckoutField(input, { strict = false } = {}) {
     const field = input?.closest(".field");
-    if (!field) return;
+    // O cupom só fica marcado depois de conferido no servidor (renderCouponStatus).
+    if (!field || input.id === "couponCode") return;
     const rule = CHECKOUT_RULES[input.id];
     const value = input.value || "";
     const valid = rule ? rule(value) : value.trim().length > 0;
@@ -3158,7 +3270,7 @@ function updateCheckoutProgress() {
     });
 }
 
-function renderCheckoutExtras({ subtotal, shipping, pixDiscount, paymentMethod }) {
+function renderCheckoutExtras({ subtotal, shipping, pixDiscount, couponDiscount = 0, paymentMethod }) {
     const potential = cart.reduce((sum, item) => {
         const unitCents = Math.round(Number(item.price || 0) * 100);
         return sum + (unitCents - Math.round(unitCents * 0.95)) * Number(item.quantity || 0);
@@ -3196,6 +3308,7 @@ function renderCheckoutExtras({ subtotal, shipping, pixDiscount, paymentMethod }
     if (hint) {
         const parts = [];
         if (pixDiscount > 0) parts.push(`${formatPrice(pixDiscount)} de desconto no Pix`);
+        if (couponDiscount > 0) parts.push(`cupom -${formatPrice(couponDiscount)}`);
         parts.push(selectedShippingOption
             ? (shipping === 0 && Number(selectedShippingOption.price || 0) > 0 ? "frete grátis" : `frete ${formatPrice(shipping)}`)
             : "frete a calcular");
@@ -3380,15 +3493,24 @@ function browseNovidades() {
 }
 
 registerClickActions({
-    browseNovidades, changeQuantity, checkout, closeCart, closeCartOutside, closeMobileMenu,
+    applyCoupon, browseNovidades, changeQuantity, checkout, closeCart, closeCartOutside, closeMobileMenu,
     closeProductImageLightbox, closeProductModal, closeSearch, goToNovidades, navigateProductLightbox,
     nextCategoryPage, nextCollectionPage, nextNewPage, nextSalePage, nextSlide, openCart, openSearch,
     openWhatsAppReservation, previousCategoryPage, previousCollectionPage, previousNewPage,
-    previousSalePage, previousSlide, removeFromCart, toggleMobileMenu, updateItemQuantity,
+    previousSalePage, previousSlide, removeCoupon, removeFromCart, toggleMobileMenu, updateItemQuantity,
     acceptCookies, rejectCookies, customizeCookies, saveCookieChoices, openCookiePreferences
 });
 
 document.getElementById("searchInput")?.addEventListener("input", () => searchProducts());
+// Enter no campo do cupom aplica o cupom (sem enviar nada além disso).
+document.getElementById("couponCode")?.addEventListener("keydown", event => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    if (!appliedCoupon) applyCoupon();
+});
+document.getElementById("couponCode")?.addEventListener("input", () => {
+    if (!appliedCoupon) renderCouponStatus(0);
+});
 // Enter abre o primeiro resultado; Esc ou um toque fora da caixa fecham a busca.
 document.getElementById("searchInput")?.addEventListener("keydown", event => {
     if (event.key === "Enter") {

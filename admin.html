@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20261012-aprovacao">
+<link rel="stylesheet" href="admin.css?v=20261026-cupom">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -33,6 +33,7 @@
     <button class="nav-button" data-section="products"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1.2 11.2a1.5 1.5 0 0 1-1.5 1.3H7.7a1.5 1.5 0 0 1-1.5-1.3z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg><span>Produtos</span></button>
     <button class="nav-button" data-section="carousel"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg><span>Carrossel</span></button>
     <button class="nav-button" data-section="orders"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12v17l-3-1.8-3 1.8-3-1.8-3 1.8z"/><path d="M9 8.5h6M9 12h6M9 15.5h3.5"/></svg><span>Pedidos</span></button>
+    <button class="nav-button" data-section="coupons"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8.5V6A1.5 1.5 0 0 1 5 4.5h14A1.5 1.5 0 0 1 20.5 6v2.5a3.5 3.5 0 0 0 0 7V18a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18v-2.5a3.5 3.5 0 0 0 0-7z"/><path d="M9.5 14.5l5-5M9.75 9.75h.01M14.25 14.25h.01"/></svg><span>Cupons</span></button>
     <button class="nav-button" data-section="stock"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5 12 12l8.5-4.5M12 12v9"/></svg><span>Estoque</span></button>
     <button class="nav-button" data-section="analytics"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5h16"/><path d="M5.5 15l4-4.5 3.5 3 5.5-6.5"/><path d="M15 7h3.5v3.5"/></svg><span>Analytics</span></button>
     <div class="sidebar-bottom"><a href="/" target="_blank" rel="noopener"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 19V7.5A1.5 1.5 0 0 1 5.5 6H10"/></svg><span>Ver site</span></a><button id="logoutButton"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H15"/><path d="M10 16l-4-4 4-4M6 12h10"/></svg><span>Sair</span></button></div>
@@ -98,6 +99,31 @@
       <div class="section-actions"><div><p class="eyebrow">VENDAS</p><h2>Pedidos</h2></div><button id="refreshOrders" class="secondary">ATUALIZAR</button></div>
       <label id="ordersExpiredToggle" class="orders-expired-toggle" hidden></label>
       <div id="ordersTable" class="panel table-wrap"></div>
+    </section>
+
+    <section id="couponsSection" class="section hidden">
+      <div class="section-actions"><div><p class="eyebrow">VENDAS</p><h2>Cupons</h2></div><button id="refreshCoupons" class="secondary">ATUALIZAR</button></div>
+      <div class="panel coupon-form-panel">
+        <div class="panel-head"><div><h2 id="couponFormTitle">Novo cupom</h2><p class="field-help">O cupom vale nas peças (o frete fica integral) e, no Pix, soma com os 5%. Cada pessoa (CPF ou e-mail) usa o cupom uma vez só. Com 1 pessoa, é um cupom único: depois de usado, ninguém mais usa.</p></div></div>
+        <form id="couponForm" autocomplete="off">
+          <input id="couponId" type="hidden">
+          <div class="form-grid coupon-form-grid">
+            <label>Código do cupom<input id="couponCodeInput" required maxlength="30" placeholder="Ex.: MONTE10"></label>
+            <label>Tipo de desconto<select id="couponType"><option value="percent">Porcentagem (%)</option><option value="fixed">Valor em reais (R$)</option></select></label>
+            <label><span id="couponValueLabel">Desconto (%)</span><input id="couponValue" type="number" step="0.01" min="0.01" required placeholder="Ex.: 10"></label>
+            <label>Quantas pessoas podem usar<input id="couponMaxUses" type="number" min="1" step="1" value="1" required></label>
+            <label>Válido a partir de<input id="couponStartsAt" type="datetime-local"></label>
+            <label>Válido até<input id="couponExpiresAt" type="datetime-local"></label>
+            <label class="full-width">Observação (só aparece aqui no painel)<input id="couponNote" maxlength="200" placeholder="Ex.: cliente aniversariante, parceria com influenciadora…"></label>
+          </div>
+          <p class="field-help">Sem data de início, o cupom vale na hora. Sem data de fim, vale até você desativar.</p>
+          <div class="checks"><label><input id="couponActive" type="checkbox" checked> Cupom ativo</label></div>
+          <div id="couponFormError" class="error"></div>
+          <div class="modal-actions coupon-form-actions"><button type="button" id="cancelCouponEdit" class="secondary hidden">CANCELAR EDIÇÃO</button><button type="submit" id="saveCouponButton">CRIAR CUPOM</button></div>
+        </form>
+      </div>
+      <div id="couponsError" class="error"></div>
+      <div id="couponsList" class="coupons-list"></div>
     </section>
 
 <section id="analyticsSection" class="section hidden">
@@ -172,7 +198,7 @@
 </div></div>
 
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="admin.js?v=20261012-aprovacao"></script>
+<script src="admin.js?v=20261026-cupom"></script>
 <script src="admin-carousel.js?v=20261007-banner"></script>
 </body>
 </html>
