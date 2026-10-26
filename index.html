@@ -37,7 +37,7 @@
     <meta name="twitter:description" content="Conheça a coleção MONTÊ e compre online.">
     <meta name="twitter:image" content="https://oficialmontee.com.br/og-image.jpg?v=1">
 
-    <link rel="stylesheet" href="style.css?v=20261024-carrossel">
+    <link rel="stylesheet" href="style.css?v=20261026-cupom">
     <!-- PRELOAD DO BANNER -->
 
     <link rel="preload" href="/fonts/dm-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
@@ -1057,6 +1057,14 @@
                     </div>
                     <p class="field-hint">O desconto do Pix vale para as peças. Frete grátis em Fortaleza e região a partir de R$ 599.</p>
 
+                    <div class="coupon-box" id="couponBox">
+                        <div class="coupon-row">
+                            <label class="field coupon-field"><input type="text" id="couponCode" placeholder=" " maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false"><span>Cupom de desconto</span></label>
+                            <button type="button" class="coupon-apply" id="couponApply" data-click="applyCoupon">APLICAR</button>
+                        </div>
+                        <p class="coupon-status" id="couponStatus" role="status" aria-live="polite"></p>
+                    </div>
+
 
                 </section>
 
@@ -1081,6 +1089,7 @@
                 <dl class="order-note-sum" data-depth="0.5">
                     <div><dt>Frete</dt><dd id="noteShipping"></dd></div>
                     <div id="noteDiscountRow" hidden><dt>Desconto Pix</dt><dd id="noteDiscount"></dd></div>
+                    <div id="noteCouponRow" hidden><dt id="noteCouponLabel">Cupom</dt><dd id="noteCoupon"></dd></div>
                     <div><dt>Pagamento</dt><dd id="notePayment"></dd></div>
                 </dl>
                 <div class="order-note-total" data-depth="1.2"><span>TOTAL</span><strong id="noteTotal">R$ 0,00</strong></div>
@@ -1149,7 +1158,7 @@
 
 <!-- CATÁLOGO -->
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="script.js?v=20261024-carrossel"></script>
+<script src="script.js?v=20261026-cupom"></script>
 
 </body>
 </html>

@@ -457,15 +457,24 @@ async function createOrGetOlistOrder(order) {
             product = await findOlistProductBySku(sku);
             productCache.set(sku, product);
         }
-        orderItems.push({
-            produto: {id:Number(product.id), tipo:"P"},
-            quantidade: Math.max(1, Number(item.quantity || 1)),
-            // No Pix a cliente pagou 5% a menos nos produtos; a Olist recebe o valor real.
-            valorUnitario: isPix ? pixDiscountedUnitCents(item.price) / 100 : Number(item.price || 0),
-            infoAdicional: safeString(item.variant_color || item.color)
-                ? "Cor: " + safeString(item.variant_color || item.color)
-                : null
-        });
+        // No Pix a cliente pagou 5% a menos nos produtos; a Olist recebe o valor real.
+        // Com cupom, o item guarda o que foi cobrado (charged_units), já com o Pix.
+        const lines = Array.isArray(item.charged_units) && item.charged_units.length
+            ? item.charged_units.map(line => ({quantidade: Number(line.quantity), valorUnitario: Number(line.unit_cents) / 100}))
+            : [{
+                quantidade: Math.max(1, Number(item.quantity || 1)),
+                valorUnitario: isPix ? pixDiscountedUnitCents(item.price) / 100 : Number(item.price || 0)
+            }];
+        for (const line of lines) {
+            orderItems.push({
+                produto: {id:Number(product.id), tipo:"P"},
+                quantidade: line.quantidade,
+                valorUnitario: line.valorUnitario,
+                infoAdicional: safeString(item.variant_color || item.color)
+                    ? "Cor: " + safeString(item.variant_color || item.color)
+                    : null
+            });
+        }
     }
 
     if (!orderItems.length) throw new Error("OLIST_ORDER_WITHOUT_ITEMS");
@@ -485,6 +494,7 @@ async function createOrGetOlistOrder(order) {
         valorFrete: Number(order.shipping || 0),
         observacoesInternas: "Pedido " + monteCode +
             " | Pagamento: " + (isPix ? "Pix" : "Cartão de crédito") + " (pago na InfinitePay)" +
+            (order.coupon_code ? " | Cupom " + safeString(order.coupon_code) + " (-R$ " + Number(order.coupon_discount || 0).toFixed(2).replace(".", ",") + ")" : "") +
             (shippingName ? " | Frete: " + shippingName : "") +
             " | InfinitePay " + safeString(order.transaction_nsu) +
             " | Ref. " + ecommerceNumber,
@@ -1176,7 +1186,7 @@ async function sendAdminSaleNotificationEmail(order) {
         "<p style=\"line-height:1.7;font-size:14px;\">Nome: " + escapeEmailHtml(customerName) + "<br>E-mail: " + escapeEmailHtml(customerEmail) + "<br>Telefone: " + escapeEmailHtml(customerPhone) + "<br>Endereço: " + escapeEmailHtml(address) + "</p>" +
         "<h3 style=\"font-size:14px;letter-spacing:1px;\">PRODUTOS</h3>" +
         "<p style=\"line-height:1.8;font-size:14px;\">" + items + "</p>" +
-        "<p style=\"font-size:14px;line-height:1.7;\"><strong>Pagamento:</strong> " + escapeEmailHtml(paymentMethod) + "<br><strong>Frete:</strong> R$ " + Number(order.shipping || 0).toFixed(2).replace(".", ",") + "<br><strong>Total:</strong> R$ " + total.toFixed(2).replace(".", ",") + "</p>" +
+        "<p style=\"font-size:14px;line-height:1.7;\"><strong>Pagamento:</strong> " + escapeEmailHtml(paymentMethod) + (order.coupon_code ? "<br><strong>Cupom:</strong> " + escapeEmailHtml(order.coupon_code) + " (-R$ " + Number(order.coupon_discount || 0).toFixed(2).replace(".", ",") + ")" : "") + "<br><strong>Frete:</strong> R$ " + Number(order.shipping || 0).toFixed(2).replace(".", ",") + "<br><strong>Total:</strong> R$ " + total.toFixed(2).replace(".", ",") + "</p>" +
         "</div><p style=\"text-align:center;font-size:11px;color:#999;margin:18px 0;\">MONTÊ — Notificação interna de venda</p></div></body></html>";
     const text =
         "NOVA VENDA MONTÊ\n\nPedido: " + orderCode + "\nCliente: " + customerName +
@@ -4195,6 +4205,244 @@ function safeString(value) {
 }
 
 /* =====================================================
+   CUPONS DE DESCONTO
+   Cadastrados no painel: porcentagem ou valor em R$, com validade
+   e limite de pessoas (1 = cupom único). A mesma pessoa (CPF ou e-mail)
+   nunca usa o mesmo cupom duas vezes. As regras ficam no Supabase
+   (backend/sql/cupons.sql): check_coupon confere e claim_coupon
+   registra o uso no pedido com trava, para dois checkouts ao mesmo
+   tempo não usarem um cupom único.
+   O desconto vale só para as peças (o frete fica integral) e, no Pix,
+   incide depois dos 5%.
+===================================================== */
+
+// Cada peça continua custando pelo menos R$ 1,00 no checkout da InfinitePay.
+const COUPON_MIN_UNIT_CENTS = 100;
+const COUPON_MAX_FIXED_VALUE = 100000;
+const COUPON_REASON_MESSAGES = {
+    invalid: "Cupom inválido.",
+    not_started: "Este cupom ainda não está valendo.",
+    expired: "Este cupom expirou.",
+    already_used: "Você já usou este cupom.",
+    exhausted: "Este cupom já foi utilizado."
+};
+
+function normalizeCouponCode(value) {
+    return typeof value === "string" ? value.replace(/\s+/g, "").toUpperCase() : "";
+}
+
+function isValidCouponCode(code) {
+    return /^[A-Z0-9_-]{3,30}$/.test(code);
+}
+
+function couponMessage(reason) {
+    return COUPON_REASON_MESSAGES[reason] || COUPON_REASON_MESSAGES.invalid;
+}
+
+// Desconto do cupom, em centavos, sobre o valor das peças (já com o Pix, se for o caso).
+function couponDiscountCents(coupon, productCents, units) {
+    const value = Number(coupon?.discount_value);
+    if (!Number.isFinite(value) || value <= 0) return 0;
+    const raw = coupon.discount_type === "percent"
+        ? Math.round(productCents * Math.min(value, 100) / 100)
+        : Math.round(value * 100);
+    return Math.max(0, Math.min(raw, productCents - units * COUPON_MIN_UNIT_CENTS));
+}
+
+// Divide o desconto entre as linhas da sacola (proporcional ao valor de cada uma), em
+// centavos inteiros. A InfinitePay cobra quantidade × preço unitário: quando o desconto
+// de uma linha não divide igual entre as unidades, ela vira duas (parte com 1 centavo a
+// menos) e a soma fecha exatamente o total do pedido.
+// lines: [{ quantity, unitCents }] → para cada linha, [{ quantity, unit_cents }].
+function splitCouponDiscount(lines, discountCents) {
+    const totals = lines.map(line => line.unitCents * line.quantity);
+    const capacity = lines.map(line => Math.max(0, line.quantity * (line.unitCents - COUPON_MIN_UNIT_CENTS)));
+    const sum = totals.reduce((a, b) => a + b, 0);
+    const shares = lines.map((line, i) => sum > 0 ? Math.min(capacity[i], Math.floor(discountCents * totals[i] / sum)) : 0);
+    let left = discountCents - shares.reduce((a, b) => a + b, 0);
+    for (let i = 0; left > 0 && i < lines.length; i++) {
+        const extra = Math.min(left, capacity[i] - shares[i]);
+        shares[i] += extra;
+        left -= extra;
+    }
+    return lines.map((line, i) => {
+        const each = Math.floor(shares[i] / line.quantity);
+        const rest = shares[i] % line.quantity;
+        return [
+            { quantity: rest, unit_cents: line.unitCents - each - 1 },
+            { quantity: line.quantity - rest, unit_cents: line.unitCents - each }
+        ].filter(part => part.quantity > 0);
+    });
+}
+
+async function checkCoupon(code, cpf, email) {
+    return supabaseRequest("rpc/check_coupon", {
+        method: "POST",
+        body: JSON.stringify({ p_code: code, p_cpf: cpf || null, p_email: email || null })
+    });
+}
+
+const couponRateLimit = createRateLimiter({
+    windowMs: 60 * 1000,
+    max: 10
+});
+
+// A sacola confere o cupom antes do pagamento para mostrar o desconto.
+// O valor cobrado é sempre recalculado no /api/criar-checkout.
+app.post("/api/cupom", couponRateLimit, async (req, res) => {
+    try {
+        const code = normalizeCouponCode(req.body?.code);
+        if (!isValidCouponCode(code)) {
+            return res.status(400).json({ success: false, message: couponMessage("invalid") });
+        }
+        const cpf = typeof req.body?.cpf === "string" ? req.body.cpf.replace(/\D/g, "") : "";
+        const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+        const result = await checkCoupon(
+            code,
+            cpf.length === 11 ? cpf : null,
+            email.length <= 160 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null
+        );
+        if (!result?.ok) {
+            return res.status(400).json({ success: false, message: couponMessage(result?.reason) });
+        }
+        return res.json({
+            success: true,
+            coupon: {
+                code: result.coupon.code,
+                discount_type: result.coupon.discount_type,
+                discount_value: Number(result.coupon.discount_value)
+            }
+        });
+    } catch (error) {
+        console.error("Cupom:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível conferir o cupom agora." });
+    }
+});
+
+// Campos do cupom enviados pelo painel. Devolve { coupon } ou { error }.
+function sanitizeCouponPayload(body, { partial = false } = {}) {
+    const b = body || {};
+    const coupon = {};
+    const has = key => Object.prototype.hasOwnProperty.call(b, key);
+
+    if (!partial || has("code")) {
+        const code = normalizeCouponCode(b.code);
+        if (!isValidCouponCode(code)) return { error: "O código precisa ter de 3 a 30 letras, números, - ou _." };
+        coupon.code = code;
+    }
+    if (!partial || has("discount_type") || has("discount_value")) {
+        const type = safeString(b.discount_type);
+        const value = Number(b.discount_value);
+        if (!["percent", "fixed"].includes(type)) return { error: "Escolha desconto em % ou em R$." };
+        if (!Number.isFinite(value) || value <= 0) return { error: "Informe o valor do desconto." };
+        if (type === "percent" && value > 100) return { error: "A porcentagem vai até 100%." };
+        if (type === "fixed" && value > COUPON_MAX_FIXED_VALUE) return { error: "Valor de desconto muito alto." };
+        coupon.discount_type = type;
+        coupon.discount_value = Number(value.toFixed(2));
+    }
+    if (!partial || has("max_uses")) {
+        const maxUses = b.max_uses === undefined || b.max_uses === null || b.max_uses === "" ? 1 : Number(b.max_uses);
+        if (!Number.isInteger(maxUses) || maxUses < 1 || maxUses > 100000) return { error: "O limite de pessoas precisa ser um número inteiro a partir de 1." };
+        coupon.max_uses = maxUses;
+    }
+    for (const key of ["starts_at", "expires_at"]) {
+        if (partial && !has(key)) continue;
+        const raw = safeString(b[key]);
+        if (!raw) { coupon[key] = null; continue; }
+        const time = new Date(raw);
+        if (Number.isNaN(time.getTime())) return { error: "Data de validade inválida." };
+        coupon[key] = time.toISOString();
+    }
+    if (coupon.starts_at && coupon.expires_at && coupon.expires_at <= coupon.starts_at) {
+        return { error: "O fim da validade precisa ser depois do início." };
+    }
+    if (!partial || has("active")) coupon.active = b.active === undefined ? true : b.active === true;
+    if (!partial || has("note")) coupon.note = safeString(b.note).slice(0, 200) || null;
+    return { coupon };
+}
+
+function couponSaveError(error) {
+    const text = String(error?.message || "");
+    if (text.includes("23505") || text.includes("coupons_code_key")) return "Já existe um cupom com esse código.";
+    if (text.includes("coupons_valid_window")) return "O fim da validade precisa ser depois do início.";
+    return "Não foi possível salvar o cupom.";
+}
+
+app.get("/api/admin/coupons", requireAdmin, async (req, res) => {
+    try {
+        const data = await supabaseRequest(
+            "coupons?select=*,coupon_redemptions(id,customer_name,customer_email,customer_cpf,discount_amount,created_at,orders(id,order_code,order_nsu,status,total))" +
+            "&order=created_at.desc&coupon_redemptions.order=created_at.desc",
+            { method: "GET" }
+        );
+        return res.json({ success: true, coupons: data || [] });
+    } catch (error) {
+        console.error("Admin cupons GET:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível carregar os cupons." });
+    }
+});
+
+app.post("/api/admin/coupons", requireAdmin, async (req, res) => {
+    try {
+        const { coupon, error } = sanitizeCouponPayload(req.body);
+        if (error) return res.status(400).json({ success: false, message: error });
+        const saved = await supabaseRequest("coupons", { method: "POST", body: JSON.stringify(coupon) });
+        return res.status(201).json({ success: true, coupon: saved?.[0] || saved });
+    } catch (error) {
+        console.error("Admin cupons POST:", error);
+        return res.status(couponSaveError(error).startsWith("Já existe") ? 409 : 500).json({ success: false, message: couponSaveError(error) });
+    }
+});
+
+app.patch("/api/admin/coupons/:id", requireAdmin, async (req, res) => {
+    try {
+        const id = encodeURIComponent(req.params.id);
+        const { coupon, error } = sanitizeCouponPayload(req.body, { partial: true });
+        if (error) return res.status(400).json({ success: false, message: error });
+        const current = (await supabaseRequest(`coupons?id=eq.${id}&select=*,coupon_redemptions(id)`, { method: "GET" }))?.[0];
+        if (!current) return res.status(404).json({ success: false, message: "Cupom não encontrado." });
+        // Depois do primeiro uso, o código e o desconto ficam como estavam: o histórico
+        // mostra o que cada cliente usou. Para mudar, crie outro cupom.
+        const used = (current.coupon_redemptions || []).length > 0;
+        const changesTerms = ["code", "discount_type", "discount_value"].some(key =>
+            key in coupon && String(coupon[key]) !== String(key === "discount_value" ? Number(current[key]) : current[key])
+        );
+        if (used && changesTerms) {
+            return res.status(409).json({ success: false, message: "Este cupom já foi usado: o código e o desconto não mudam mais. Crie um novo cupom." });
+        }
+        const startsAt = "starts_at" in coupon ? coupon.starts_at : current.starts_at;
+        const expiresAt = "expires_at" in coupon ? coupon.expires_at : current.expires_at;
+        if (startsAt && expiresAt && new Date(expiresAt) <= new Date(startsAt)) {
+            return res.status(400).json({ success: false, message: "O fim da validade precisa ser depois do início." });
+        }
+        const saved = await supabaseRequest(`coupons?id=eq.${id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ ...coupon, updated_at: new Date().toISOString() })
+        });
+        return res.json({ success: true, coupon: saved?.[0] || saved });
+    } catch (error) {
+        console.error("Admin cupons PATCH:", error);
+        return res.status(couponSaveError(error).startsWith("Já existe") ? 409 : 500).json({ success: false, message: couponSaveError(error) });
+    }
+});
+
+app.delete("/api/admin/coupons/:id", requireAdmin, async (req, res) => {
+    try {
+        const id = encodeURIComponent(req.params.id);
+        const current = (await supabaseRequest(`coupons?id=eq.${id}&select=id,coupon_redemptions(id)`, { method: "GET" }))?.[0];
+        if (!current) return res.status(404).json({ success: false, message: "Cupom não encontrado." });
+        if ((current.coupon_redemptions || []).length) {
+            return res.status(409).json({ success: false, message: "Este cupom já foi usado e fica no histórico. Desative-o para ninguém mais usar." });
+        }
+        await supabaseRequest(`coupons?id=eq.${id}`, { method: "DELETE" });
+        return res.json({ success: true });
+    } catch (error) {
+        console.error("Admin cupons DELETE:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível excluir o cupom." });
+    }
+});
+
+/* =====================================================
    CRIAR CHECKOUT
    COM PEDIDO SALVO ANTES DO PAGAMENTO
 ===================================================== */
@@ -4310,6 +4558,9 @@ app.post(
     checkoutRateLimit,
     async (req, res) => {
 
+        // Pedido com cupom que não chegou ao pagamento: o cupom volta a valer.
+        let releaseCoupon = async () => {};
+
         try {
 
             console.log(
@@ -4320,7 +4571,8 @@ app.post(
                 items,
                 customer,
                 shipping_service_id: requestedShippingServiceId,
-                payment_method: requestedPaymentMethod
+                payment_method: requestedPaymentMethod,
+                coupon_code: requestedCouponCode
             } = req.body || {};
 
             const paymentMethod = safeString(requestedPaymentMethod || "pix").toLowerCase();
@@ -4436,6 +4688,15 @@ app.post(
                 return res.status(400).json({
                     success: false,
                     message: "CPF inválido. Informe os 11 dígitos."
+                });
+            }
+
+            const couponCode = normalizeCouponCode(requestedCouponCode);
+            if (requestedCouponCode && !isValidCouponCode(couponCode)) {
+                return res.status(400).json({
+                    success: false,
+                    coupon_invalid: true,
+                    message: couponMessage("invalid")
                 });
             }
 
@@ -4783,14 +5044,31 @@ app.post(
                 }
             }
 
+            /* =================================================
+               CUPOM — confere antes de criar o pedido
+            ================================================= */
+            let coupon = null;
+            if (couponCode) {
+                const couponResult = await checkCoupon(couponCode, customerCpf, customerEmail);
+                if (!couponResult?.ok) {
+                    return res.status(400).json({
+                        success: false,
+                        coupon_invalid: true,
+                        message: couponMessage(couponResult?.reason)
+                    });
+                }
+                coupon = couponResult.coupon;
+            }
+
             // A peça pode ter sido vendida na Olist depois da última sincronização.
             // A conferência usa só as chamadas que sobram na requisição: cada peça já usou
             // 2 (variação e frete) e o resto do pedido usa umas 10 (preços, cotação do frete,
-            // número do pedido, pedido, itens, InfinitePay e folga).
+            // número do pedido, pedido, itens, InfinitePay e folga) e mais 3 com cupom
+            // (conferência, registro do uso e uma possível liberação).
             // Peças em pré-venda ainda não chegaram: o estoque delas é o do site, não o da Olist.
             const olistShortage = await checkCartAgainstOlistStock(
                 checkedVariants.filter(entry => !entry.item.presale),
-                createCallBudget(WORKER_CALL_LIMIT - 10 - 2 * checkedVariants.length)
+                createCallBudget(WORKER_CALL_LIMIT - (coupon ? 13 : 10) - 2 * checkedVariants.length)
             );
             if (olistShortage) {
                 const { item, available } = olistShortage;
@@ -4917,7 +5195,22 @@ app.post(
             );
             const shippingCents = Math.round(shippingValue * 100);
 
-            const checkoutTotal = (checkoutProductCents + shippingCents) / 100;
+            // Cupom: desconto nas peças, dividido entre as linhas em centavos inteiros.
+            // Cada item guarda o que foi cobrado (charged_units) para a InfinitePay e a Olist.
+            let couponCents = 0;
+            if (coupon) {
+                const units = productItems.reduce((sum, item) => sum + Number(item.quantity), 0);
+                couponCents = couponDiscountCents(coupon, checkoutProductCents, units);
+                const split = splitCouponDiscount(
+                    productItems.map(item => ({ quantity: Number(item.quantity), unitCents: productUnitCents(item) })),
+                    couponCents
+                );
+                productItems.forEach((item, index) => { item.charged_units = split[index]; });
+            }
+            const chargedLines = item => item.charged_units ||
+                [{ quantity: Number(item.quantity), unit_cents: productUnitCents(item) }];
+
+            const checkoutTotal = (checkoutProductCents - couponCents + shippingCents) / 100;
 
             const savedOrders = await supabaseRequest("orders", {
                 method: "POST",
@@ -4942,6 +5235,7 @@ app.post(
                     payment_method: paymentMethod,
                     whatsapp_tracking_opt_in: customer.whatsapp_updates === true,
                     whatsapp_tracking_status: customer.whatsapp_updates === true ? "pending" : "opted_out",
+                    ...(coupon ? { coupon_code: coupon.code, coupon_discount: couponCents / 100 } : {}),
                     items: productItems
                 })
             });
@@ -4963,6 +5257,43 @@ app.post(
                 })))
             });
 
+            // Registra o uso do cupom com trava: se outra pessoa usou o cupom único entre a
+            // conferência e agora, o pedido é desfeito e a cliente pode seguir sem o cupom.
+            if (coupon) {
+                const claim = await supabaseRequest("rpc/claim_coupon", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        p_coupon_id: coupon.id,
+                        p_order_id: savedOrder.id,
+                        p_cpf: customerCpf,
+                        p_email: customerEmail,
+                        p_name: customerName,
+                        p_discount: couponCents / 100
+                    })
+                });
+                if (!claim?.ok) {
+                    await supabaseRequest(`orders?id=eq.${encodeURIComponent(savedOrder.id)}`, {
+                        method: "DELETE",
+                        headers: { "Prefer": "return=minimal" }
+                    });
+                    return res.status(409).json({
+                        success: false,
+                        coupon_invalid: true,
+                        message: couponMessage(claim?.reason)
+                    });
+                }
+                releaseCoupon = async () => {
+                    try {
+                        await supabaseRequest(`coupon_redemptions?order_id=eq.${encodeURIComponent(savedOrder.id)}`, {
+                            method: "DELETE",
+                            headers: { "Prefer": "return=minimal" }
+                        });
+                    } catch (error) {
+                        console.error("Cupom: não foi possível liberar o uso do pedido", orderNsu, error.message);
+                    }
+                };
+            }
+
             /* =================================================
                PIX — CHECKOUT INDEPENDENTE DA INFINITEPAY
                O Pix usa um checkout próprio da InfinitePay.
@@ -4970,11 +5301,11 @@ app.post(
                o frete permanece com o valor integral.
             ================================================= */
             if (paymentMethod === "pix") {
-                const pixItems = productItems.map((item) => ({
-                    quantity: item.quantity,
-                    price: pixUnitCents(item),
+                const pixItems = productItems.flatMap(item => chargedLines(item).map(line => ({
+                    quantity: line.quantity,
+                    price: line.unit_cents,
                     description: item.description
-                }));
+                })));
 
                 if (shippingValue > 0) {
                     pixItems.push({
@@ -5034,6 +5365,7 @@ app.post(
 
                 if (!pixResponse.ok || !pixData?.url) {
                     console.error("PIX — erro ao criar checkout InfinitePay:", pixResponse.status, pixData);
+                    await releaseCoupon();
                     return res.status(pixResponse.ok ? 502 : pixResponse.status).json({
                         success: false,
                         payment_unavailable: true,
@@ -5059,11 +5391,11 @@ app.post(
             ================================================= */
 
             const infinitePayItems =
-                productItems.map((item) => ({
-                    quantity: item.quantity,
-                    price: Math.round(item.price * 100),
+                productItems.flatMap(item => chargedLines(item).map(line => ({
+                    quantity: line.quantity,
+                    price: line.unit_cents,
                     description: item.description
-                }));
+                })));
 
             if (shippingValue > 0) {
                 infinitePayItems.push({
@@ -5245,6 +5577,8 @@ app.post(
                     data
                 );
 
+                await releaseCoupon();
+
 
                 return res.status(
                     response.status
@@ -5280,6 +5614,8 @@ app.post(
                 console.error(
                     data
                 );
+
+                await releaseCoupon();
 
 
                 return res.status(502).json({
@@ -5335,6 +5671,8 @@ app.post(
             console.error(
                 error
             );
+
+            await releaseCoupon();
 
 
             return res.status(500).json({
