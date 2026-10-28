@@ -8243,7 +8243,28 @@ html.catalog-pending .footer {
 .gift-picker-title { margin: 0; font: 400 17px/1.2 "Playfair Display", Georgia, serif; color: var(--co-ink, #0d0d0d); }
 .gift-picker-hint { margin: 4px 0 12px; font-size: 11.5px; color: var(--co-muted, #8a847e); }
 .gift-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 10px; }
-@media (max-width: 600px) { .gift-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.gift-dots { display: none; }
+/* No celular os cards viram carrossel: desliza para o lado e o próximo card aparece na borda. */
+@media (max-width: 600px) {
+    .gift-options {
+        display: flex;
+        gap: 10px;
+        margin: 0 -14px;
+        padding: 0 14px 4px;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        scroll-snap-type: x mandatory;
+        scroll-padding: 0 14px;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+    .gift-options::-webkit-scrollbar { display: none; }
+    .gift-options .gift-card { flex: 0 0 42%; scroll-snap-align: start; }
+    .gift-dots { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
+    .gift-dots[hidden] { display: none; }
+    .gift-dots button { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 999px; background: #e3d6d8; cursor: pointer; transition: width .25s ease, background .25s ease; }
+    .gift-dots button.is-active { width: 18px; background: var(--wine); }
+}
 .gift-card {
     display: block;
     width: 100%;
