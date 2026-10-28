@@ -3354,7 +3354,7 @@ document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
     // A animação começa quando a página aparece, o que no celular pode levar
     // alguns segundos depois da navegação. Conta o tempo pela própria animação.
     if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) root.classList.add("intro-reduced");
-    const duration = root.classList.contains("intro-reduced") ? 1400 : 5000;
+    const duration = root.classList.contains("intro-reduced") ? 1400 : 6900;
     const own = intro.getAnimations ? intro.getAnimations().find(a => a.effect && a.effect.target === intro && !a.effect.pseudoElement) : null;
     let remaining = duration;
     if (own && typeof own.currentTime === "number") {
@@ -3367,12 +3367,16 @@ document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
         if (event.target === intro && !event.pseudoElement) finish();
     });
 
-    const stage = intro.querySelector(".intro-stage");
+    const stages = intro.querySelectorAll(".intro-stage");
+    const tagline = intro.querySelector(".intro-tagline");
     function onMove(event) {
         const x = event.clientX / window.innerWidth - .5;
         const y = event.clientY / window.innerHeight - .5;
-        stage?.style.setProperty("--ix", (x * -16).toFixed(1) + "px");
-        stage?.style.setProperty("--iy", (y * -12).toFixed(1) + "px");
+        stages.forEach(stage => {
+            stage.style.setProperty("--ix", (x * -16).toFixed(1) + "px");
+            stage.style.setProperty("--iy", (y * -12).toFixed(1) + "px");
+        });
+        if (tagline) tagline.style.translate = (x * 10).toFixed(1) + "px " + (y * 8).toFixed(1) + "px";
     }
     window.addEventListener("pointermove", onMove, { passive: true });
 
@@ -3381,7 +3385,7 @@ document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
         intro.classList.add("is-skipping");
         root.classList.add("intro-skipped");
         clearTimeout(timer);
-        timer = setTimeout(finish, 1000);
+        timer = setTimeout(finish, 500);
     });
 })();
 
