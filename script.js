@@ -3354,7 +3354,7 @@ document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
     // A animação começa quando a página aparece, o que no celular pode levar
     // alguns segundos depois da navegação. Conta o tempo pela própria animação.
     if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) root.classList.add("intro-reduced");
-    const duration = root.classList.contains("intro-reduced") ? 1400 : 6900;
+    const duration = root.classList.contains("intro-reduced") ? 1400 : 7100;
     const own = intro.getAnimations ? intro.getAnimations().find(a => a.effect && a.effect.target === intro && !a.effect.pseudoElement) : null;
     let remaining = duration;
     if (own && typeof own.currentTime === "number") {
