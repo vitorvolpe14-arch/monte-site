@@ -8279,7 +8279,7 @@ html.catalog-pending .footer {
 }
 .gift-card .product-image, .gift-card .product-info, .gift-card .product-name, .gift-card .product-price { display: block; }
 .gift-card .product-image { background: #fff !important; box-shadow: inset 0 0 0 1px var(--co-line, #ece8e2); transition: box-shadow .2s ease; }
-.gift-card .product-badge { top: 8px; left: 8px; right: 8px; padding: 5px 6px; font-size: 7px; text-align: center; }
+.gift-card .product-badge { top: 8px; left: 8px; right: 8px; padding: 5px 4px; font-size: 6.5px; letter-spacing: .5px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gift-card .product-info { padding-top: 10px; }
 .gift-card .product-name { margin-bottom: 5px; font-size: 11px; }
 .gift-card .product-price { font-size: 11px; }
