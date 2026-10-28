@@ -6649,15 +6649,16 @@ html.intro-skipped .header { animation-delay: .5s; }
     --co-lg-rim: linear-gradient(180deg, rgba(255, 255, 255, .95), rgba(255, 255, 255, .3) 26%, rgba(255, 255, 255, .18) 60%, #fff);
     --co-lg-clear:
         radial-gradient(80% 60% at 50% 100%, rgba(255, 255, 255, .34), rgba(255, 255, 255, 0) 72%),
-        linear-gradient(180deg, rgba(0, 0, 0, .14), rgba(255, 255, 255, .04) 45%, rgba(255, 255, 255, .12));
+        linear-gradient(180deg, rgba(0, 0, 0, .05), rgba(255, 255, 255, .06) 45%, rgba(255, 255, 255, .14));
+    /* Sobre o branco o botão é o próprio cinza da campanha (#959595). */
     --co-lg-tinted:
         radial-gradient(80% 60% at 50% 100%, rgba(255, 255, 255, .34), rgba(255, 255, 255, 0) 72%),
-        linear-gradient(180deg, rgba(90, 90, 90, .88), rgba(128, 128, 128, .84) 55%, rgba(158, 158, 158, .84));
+        var(--co-accent);
     --co-lg-shadow:
-        inset 0 10px 16px -10px rgba(0, 0, 0, .4),
+        inset 0 10px 16px -10px rgba(0, 0, 0, .22),
         inset 0 -8px 14px -8px rgba(255, 255, 255, .6),
-        0 0 0 1px rgba(50, 50, 50, .22),
-        0 14px 24px -12px rgba(0, 0, 0, .5);
+        0 0 0 1px rgba(80, 80, 80, .16),
+        0 14px 24px -12px rgba(0, 0, 0, .38);
     --co-lg-blur: blur(10px) saturate(150%);
     /* Cabeçalho e barra do total: placas de vidro sobre o conteúdo que rola. */
     --co-glass-surface: rgba(255, 255, 255, .58);
@@ -7435,16 +7436,13 @@ html.intro-skipped .header { animation-delay: .5s; }
     margin-top: 22px;
     padding: 14px 26px calc(14px + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid rgba(255, 255, 255, .35);
-    /* Placa cinza de vidro fosco: é o fundo que faz o vidro do botão aparecer. Quase opaca
-       embaixo, onde o desfoque espelha o conteúdo e o texto de trás vazaria nítido. */
-    background: linear-gradient(165deg, rgba(100, 100, 100, .9), rgba(136, 136, 136, .93) 60%, rgba(152, 152, 152, .97));
-    -webkit-backdrop-filter: var(--co-glass-surface-blur);
-    backdrop-filter: var(--co-glass-surface-blur);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 -18px 30px -24px rgba(0, 0, 0, .45);
+    /* Placa no cinza da campanha (#959595): é o fundo que faz o vidro do botão aparecer. */
+    background: var(--co-accent);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 -18px 30px -24px rgba(0, 0, 0, .35);
 }
 
 #cartOverlay .checkout-bar-total span,
-#cartOverlay .checkout-bar-total small { color: rgba(255, 255, 255, .82); }
+#cartOverlay .checkout-bar-total small { color: #fff; }
 
 .checkout-bar-total { display: flex; flex-direction: column; flex: 0 1 auto; min-width: 0; max-width: 50%; }
 .checkout-bar-total span { font-size: 9.5px; letter-spacing: .24em; text-transform: uppercase; color: var(--co-muted); }
