@@ -6214,10 +6214,10 @@ canvas {
 
 
 /* =====================================================
-   ABERTURA — logo desenhada + cortina em camadas (parallax)
-   Linha do tempo: traço das letras (0,2–1,5s), preenchimento,
-   filete bordô e assinatura, depois a cortina branca sobe, a faixa
-   bordô vem logo atrás e a logo sobe mais devagar (parallax).
+   ABERTURA — 1 ano da MONTÊ: bolo em traço + cortina (parallax)
+   Linha do tempo: o bolo é desenhado em traço (0,1–2,1s), a vela de
+   faísca acende e brilha com as estrelinhas, depois a cortina cinza
+   sobe, a faixa areia vem logo atrás e o bolo sobe mais devagar.
    Sem JavaScript a animação roda igual e termina sozinha.
 ===================================================== */
 
@@ -6225,7 +6225,7 @@ canvas {
     position: fixed;
     inset: 0;
     z-index: 10000;
-    animation: introGone 0s linear 4.45s forwards;
+    animation: introGone 0s linear 5s forwards;
 }
 
 html.intro-playing,
@@ -6243,16 +6243,16 @@ html.intro-playing body {
     will-change: transform;
 }
 
-.intro-layer-wine {
-    background: #6D2234;
-    animation: introLift 1.3s cubic-bezier(.76, 0, .24, 1) 3.25s forwards;
+.intro-layer-back {
+    background: #b4afa7;
+    animation: introLift 1.3s cubic-bezier(.76, 0, .24, 1) 3.8s forwards;
 }
 
 .intro-layer-paper {
-    background: #ffffff;
+    background: #969696;
     display: grid;
     place-items: center;
-    animation: introLift 1.2s cubic-bezier(.76, 0, .24, 1) 3.05s forwards;
+    animation: introLift 1.2s cubic-bezier(.76, 0, .24, 1) 3.6s forwards;
 }
 
 @keyframes introLift {
@@ -6260,82 +6260,193 @@ html.intro-playing body {
 }
 
 .intro-stage {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 22px;
     translate: var(--ix, 0px) var(--iy, 0px);
     transition: translate .6s cubic-bezier(.2, .7, .2, 1);
-    animation: introStageOut 1.2s cubic-bezier(.76, 0, .24, 1) 3.05s forwards;
+    animation: introStageOut 1.2s cubic-bezier(.76, 0, .24, 1) 3.6s forwards;
 }
 
-/* A cortina sobe 100%; a logo desce 42% dentro dela: sobe mais devagar. */
+/* A cortina sobe 100%; o bolo desce 42% dentro dela: sobe mais devagar. */
 @keyframes introStageOut {
     to { transform: translate3d(0, 42vh, 0); opacity: 0; }
 }
 
-.intro-wordmark {
-    width: clamp(210px, 34vw, 430px);
+.intro-cake {
+    display: block;
+    width: min(84vw, 47vh, 420px);
     height: auto;
     overflow: visible;
 }
 
-.intro-wordmark path {
-    fill: #0d0d0d;
-    fill-opacity: 0;
-    stroke: #0d0d0d;
-    stroke-width: .9;
+/* Traço do bolo: cada parte é desenhada na sua vez (--at) e no seu ritmo (--dur).
+   O preenchimento é da cor do fundo: esconde o que fica atrás de cada andar. */
+.intro-ln {
+    fill: #969696;
+    stroke: #faf7f2;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
     stroke-dasharray: 1;
     stroke-dashoffset: 1;
-    animation:
-        introDraw 1.35s cubic-bezier(.65, 0, .35, 1) calc(.3s + var(--i) * .14s) forwards,
-        introFill .75s ease calc(1.5s + var(--i) * .09s) forwards;
+    animation: introDraw var(--dur, .9s) cubic-bezier(.65, 0, .35, 1) var(--at, 0s) forwards;
 }
+
+.intro-ln-neck,
+.intro-ln-drip1,
+.intro-ln-drip2,
+.intro-ln-band,
+.intro-ln-stick,
+.intro-ln-wick { fill: none; }
+
+.intro-ln-band { stroke-width: 1.3; }
+.intro-ln-stick { stroke-width: 1.4; }
+.intro-ln-wick { stroke-width: 1.4; }
+
+.intro-ln-base { --at: .1s; --dur: .7s; }
+.intro-ln-neck { --at: .2s; --dur: .6s; }
+.intro-ln-plate { --at: .25s; --dur: .95s; }
+.intro-ln-tier1 { --at: .4s; --dur: 1.05s; }
+.intro-ln-tier2 { --at: .7s; --dur: .95s; }
+.intro-ln-drip1 { --at: 1.05s; --dur: .9s; }
+.intro-ln-drip2 { --at: 1.2s; --dur: .8s; }
+.intro-ln-band { --at: 1.3s; --dur: .6s; }
+.intro-ln-stick { --at: 1.55s; --dur: .4s; }
+.intro-ln-wick { --at: 1.75s; --dur: .35s; }
 
 @keyframes introDraw {
     to { stroke-dashoffset: 0; }
 }
 
-@keyframes introFill {
-    to { fill-opacity: 1; stroke-opacity: 0; }
-}
-
-.intro-rule {
-    display: block;
-    width: min(44vw, 210px);
-    height: 1px;
-    background: #6D2234;
-    transform: scaleX(0);
-    animation: introRule .95s cubic-bezier(.65, 0, .35, 1) 2s forwards;
-}
-
-@keyframes introRule {
-    to { transform: scaleX(1); }
-}
-
-.intro-tagline {
-    margin: 0;
-    padding-left: .62em;
-    font: 500 10px/1 "DM Sans", Arial, sans-serif;
-    letter-spacing: .62em;
-    color: #6D2234;
+.intro-dots {
+    fill: #faf7f2;
     opacity: 0;
-    animation: introTag 1.15s ease 2.25s forwards;
+    animation: introFadeIn .6s ease 1.45s forwards;
 }
 
-@keyframes introTag {
-    from { opacity: 0; letter-spacing: .95em; }
-    to { opacity: 1; letter-spacing: .62em; }
+@keyframes introFadeIn {
+    to { opacity: 1; }
+}
+
+/* A vela acende: ponto de luz, brilho, raios que piscam e fagulhas. */
+.intro-halo {
+    opacity: 0;
+    animation: introHalo .9s ease 2.05s forwards;
+}
+
+@keyframes introHalo {
+    to { opacity: .38; }
+}
+
+.intro-core,
+.intro-glow {
+    opacity: 0;
+    transform-box: fill-box;
+    transform-origin: center;
+}
+
+.intro-core {
+    fill: #ffffff;
+    animation: introIgnite .45s cubic-bezier(.2, .7, .2, 1) 2s forwards;
+}
+
+.intro-glow {
+    animation:
+        introIgnite .5s cubic-bezier(.2, .7, .2, 1) 2.05s forwards,
+        introGlow .3s ease-in-out 2.55s infinite alternate;
+}
+
+@keyframes introIgnite {
+    0% { opacity: 0; transform: scale(.2); }
+    45% { opacity: 1; transform: scale(1.35); }
+    100% { opacity: 1; transform: none; }
+}
+
+@keyframes introGlow {
+    from { opacity: 1; transform: none; }
+    to { opacity: .74; transform: scale(.88); }
+}
+
+.intro-burst {
+    transform-origin: 0 0;
+    transform: scale(0);
+    animation: introBurst .55s cubic-bezier(.2, .8, .2, 1) 2.08s forwards;
+}
+
+@keyframes introBurst {
+    0% { opacity: 0; transform: scale(0); }
+    60% { opacity: 1; transform: scale(1.12); }
+    100% { opacity: 1; transform: none; }
+}
+
+.intro-rays {
+    fill: none;
+    stroke: #faf7f2;
+    stroke-width: 1.3;
+    stroke-linecap: round;
+    transform-origin: 0 0;
+}
+
+.intro-rays-a { animation: introRaysA .5s ease-in-out 2.6s infinite alternate; }
+.intro-rays-b { animation: introRaysB .36s ease-in-out 2.6s infinite alternate; }
+
+@keyframes introRaysA {
+    from { opacity: 1; transform: none; }
+    to { opacity: .5; transform: scale(.88) rotate(4deg); }
+}
+
+@keyframes introRaysB {
+    from { opacity: .45; transform: scale(.9); }
+    to { opacity: 1; transform: scale(1.06) rotate(-5deg); }
+}
+
+.intro-spark {
+    fill: #ffffff;
+    opacity: 0;
+    animation: introSpark var(--dur) cubic-bezier(.1, .6, .3, 1) var(--at) infinite;
+}
+
+.intro-sp-a { --d: 92px; --dur: .9s; --at: 2.15s; }
+.intro-sp-b { --d: 70px; --dur: .7s; --at: 2.3s; }
+.intro-sp-c { --d: 112px; --dur: 1.1s; --at: 2.2s; }
+.intro-sp-d { --d: 58px; --dur: .6s; --at: 2.45s; }
+
+@keyframes introSpark {
+    from { opacity: 1; transform: translate(10px, 0); }
+    to { opacity: 0; transform: translate(var(--d), 0) scale(.4); }
+}
+
+/* Estrelinhas em volta: surgem girando e ficam cintilando. */
+.intro-star {
+    fill: #faf7f2;
+    opacity: 0;
+    transform-box: fill-box;
+    transform-origin: center;
+    animation:
+        introTwinkleIn .6s cubic-bezier(.2, .7, .2, 1) var(--at) forwards,
+        introTwinkle 1.4s ease-in-out calc(var(--at) + .6s) infinite;
+}
+
+.intro-tw-a { --at: 2.1s; }
+.intro-tw-b { --at: 2.3s; }
+.intro-tw-c { --at: 2.5s; }
+
+@keyframes introTwinkleIn {
+    from { opacity: 0; transform: scale(0) rotate(-90deg); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes introTwinkle {
+    0%, 100% { opacity: 1; transform: none; }
+    50% { opacity: .45; transform: scale(.6) rotate(45deg); }
 }
 
 /* O site aparece depois da cortina: foto do topo assenta, cabeçalho desce. */
 html:not(.intro-seen) #carouselSlides {
-    animation: introHero 2s cubic-bezier(.2, .7, .2, 1) 3.45s both;
+    animation: introHero 2s cubic-bezier(.2, .7, .2, 1) 4s both;
 }
 
 html:not(.intro-seen) .shipping-bar,
 html:not(.intro-seen) .header {
-    animation: introHeader 1s cubic-bezier(.2, .7, .2, 1) 3.8s both;
+    animation: introHeader 1s cubic-bezier(.2, .7, .2, 1) 4.35s both;
 }
 
 @keyframes introHero {
@@ -6351,35 +6462,38 @@ html:not(.intro-seen) .header {
 /* Toque na abertura: adianta a saída. */
 .monte-intro.is-skipping { animation: introGone 0s linear .95s forwards; }
 .monte-intro.is-skipping .intro-layer-paper { animation: introLift .8s cubic-bezier(.76, 0, .24, 1) forwards; }
-.monte-intro.is-skipping .intro-layer-wine { animation: introLift .88s cubic-bezier(.76, 0, .24, 1) .07s forwards; }
+.monte-intro.is-skipping .intro-layer-back { animation: introLift .88s cubic-bezier(.76, 0, .24, 1) .07s forwards; }
 .monte-intro.is-skipping .intro-stage { animation: introStageOut .8s cubic-bezier(.76, 0, .24, 1) forwards; }
 html.intro-skipped #carouselSlides { animation-delay: .3s; }
 html.intro-skipped .shipping-bar,
 html.intro-skipped .header { animation-delay: .5s; }
 
-/* Menos movimento: logo aparece pronta e a tela some num fade curto. */
+/* Menos movimento: o bolo aparece pronto, com a vela acesa, e a tela some num fade curto. */
 .intro-reduced .monte-intro { animation: introFade .45s ease .9s forwards; }
 .intro-reduced .intro-layer,
 .intro-reduced .intro-stage,
-.intro-reduced .intro-wordmark path,
-.intro-reduced .intro-rule,
-.intro-reduced .intro-tagline,
+.intro-reduced .intro-cake *,
 .intro-reduced #carouselSlides,
 .intro-reduced .shipping-bar,
 .intro-reduced .header { animation: none; }
-.intro-reduced .intro-wordmark path { fill-opacity: 1; stroke: none; }
-.intro-reduced .intro-rule { transform: none; }
-.intro-reduced .intro-tagline { opacity: 1; }
+.intro-reduced .intro-ln { stroke-dashoffset: 0; }
+.intro-reduced .intro-dots,
+.intro-reduced .intro-star,
+.intro-reduced .intro-core,
+.intro-reduced .intro-glow { opacity: 1; }
+.intro-reduced .intro-halo { opacity: .38; }
+.intro-reduced .intro-burst { transform: none; }
 
 @keyframes introFade {
     to { opacity: 0; visibility: hidden; pointer-events: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .intro-wordmark path { animation: none; fill-opacity: 1; stroke: none; }
-    .intro-layer, .intro-stage, .intro-rule, .intro-tagline { animation: none; }
-    .intro-rule { transform: none; }
-    .intro-tagline { opacity: 1; }
+    .intro-layer, .intro-stage, .intro-cake * { animation: none; }
+    .intro-ln { stroke-dashoffset: 0; }
+    .intro-dots, .intro-star, .intro-core, .intro-glow { opacity: 1; }
+    .intro-halo { opacity: .38; }
+    .intro-burst { transform: none; }
     .monte-intro { animation: introFade .45s ease .9s forwards; }
     html:not(.intro-seen) #carouselSlides,
     html:not(.intro-seen) .shipping-bar,
@@ -7631,11 +7745,6 @@ body.cart-open .toast { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); 
    SEGURANÇA (CSP) — o que antes era style="" no HTML
 ===================================================== */
 .is-hidden-start { display: none; }
-.intro-letter-0 { --i: 0; }
-.intro-letter-1 { --i: 1; }
-.intro-letter-2 { --i: 2; }
-.intro-letter-3 { --i: 3; }
-.intro-letter-4 { --i: 4; }
 
 
 /* =====================================================
@@ -7702,8 +7811,7 @@ body.cart-open .toast { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); 
     .footer-rights,
     .footer-credit,
     .footer-credit a,
-    .shipping-bar,
-    .intro-tagline {
+    .shipping-bar {
         font-size: 11px !important;
     }
 }
