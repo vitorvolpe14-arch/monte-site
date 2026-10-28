@@ -310,18 +310,20 @@ function renderProducts() {
     const newContainer = document.getElementById("newProducts");
     if (newContainer) newContainer.replaceChildren();
 
-    // Bolsas em pré-venda aparecem nas vitrines normais, com o selo "Pré-venda" no card.
+    // Bolsas em pré-venda não aparecem nas vitrines da página inicial.
+    const inStore = products.filter(product => !product.presale);
+
     renderCollectionProducts(
-        products.filter(product => product.category === "bolsas")
+        inStore.filter(product => product.category === "bolsas")
     );
 
     renderCategorySectionProducts(
         "cintos-acessorios",
-        products.filter(product => product.category === "cintos" || product.category === "acessorios")
+        inStore.filter(product => product.category === "cintos" || product.category === "acessorios")
     );
 
-    renderSaleProducts(products.filter(product => product.sale));
-    renderNewProducts(products.filter(product => product.newProduct));
+    renderSaleProducts(inStore.filter(product => product.sale));
+    renderNewProducts(inStore.filter(product => product.newProduct));
 }
 
 
