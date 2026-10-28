@@ -77,7 +77,7 @@ function showLogin(){$("loginView").classList.remove("hidden");$("appView").clas
 async function login(e){e.preventDefault();$("loginError").textContent="";try{await enterApp(await api("/api/admin/login",{method:"POST",body:JSON.stringify({email:$("loginEmail").value.trim(),password:$("loginPassword").value})}))}catch(e){$("loginError").textContent=e.message}}
 async function logout(){try{await api("/api/admin/logout",{method:"POST"})}catch{}products=[];orders=[];showLogin();$("loginPassword").value=""}
 async function enterApp(s){$("loginView").classList.add("hidden");$("appView").classList.remove("hidden");$("adminEmail").textContent=s.email||"Administrador";try{await Promise.all([loadProducts(),loadOrders(),loadStockMovements()]);renderDashboard()}catch(e){console.error("Falha ao carregar dados do painel:",e);$("loginError").textContent="Login realizado, mas houve um erro ao carregar os dados. Atualize a página e tente novamente.";renderDashboard()}}
-function showSection(s){document.querySelectorAll(".section").forEach(x=>x.classList.add("hidden"));$(s+"Section").classList.remove("hidden");document.querySelectorAll(".nav-button").forEach(b=>b.classList.toggle("active",b.dataset.section===s));$("pageTitle").textContent={dashboard:"Visão geral",products:"Produtos",carousel:"Carrossel",orders:"Pedidos",coupons:"Cupons",promotions:"Promoções",stock:"Estoque",analytics:"Analytics & Financeiro"}[s];if(s==="analytics")loadAnalytics();if(s==="products")renderProducts();if(s==="carousel"&&typeof window.loadCarousel==="function")window.loadCarousel();if(s==="orders")renderOrders();if(s==="coupons")loadCoupons();if(s==="promotions")loadPromotions();if(s==="stock"){renderStock();loadStockSyncStatus()}}
+function showSection(s){document.querySelectorAll(".section").forEach(x=>x.classList.add("hidden"));$(s+"Section").classList.remove("hidden");document.querySelectorAll(".nav-button").forEach(b=>b.classList.toggle("active",b.dataset.section===s));$("pageTitle").textContent={dashboard:"Visão geral",products:"Produtos",carousel:"Banners",orders:"Pedidos",coupons:"Cupons",promotions:"Promoções",stock:"Estoque",analytics:"Analytics & Financeiro"}[s];if(s==="analytics")loadAnalytics();if(s==="products")renderProducts();if(s==="carousel"&&typeof window.loadCarousel==="function")window.loadCarousel();if(s==="orders")renderOrders();if(s==="coupons")loadCoupons();if(s==="promotions")loadPromotions();if(s==="stock"){renderStock();loadStockSyncStatus()}}
 async function loadProducts(){const d=await api("/api/admin/products");products=d.products||[];renderProducts();renderStock();renderDashboard();renderPhotoOptimizerInfo()}
 async function loadStockMovements(){try{const d=await api("/api/admin/stock/movements");renderStockMovements(d.movements||[])}catch(e){setHTML($("stockMovements"), '<p>'+esc(e.message)+'</p>')}}
 async function loadOrders(){const d=await api("/api/admin/orders");orders=d.orders||[];renderOrders();renderDashboard()}
@@ -551,10 +551,11 @@ registerClickActions({editPromotion,togglePromotion,startPromotionNow,endPromoti
    antes de enviar: uma versão grande (galeria) e uma pequena (cards,
    miniaturas e sacola). O botão OTIMIZAR FOTOS DO SITE faz o mesmo com as
    fotos de produtos que já estão no site; a lista original de cada produto
-   fica guardada no banco (images_original). As fotos do banner (carrossel)
-   nunca são trocadas: continuam exatamente como foram enviadas.
+   fica guardada no banco (images_original). As fotos do carrossel do topo
+   nunca são trocadas: continuam exatamente como foram enviadas. As do banner
+   do meio são reduzidas na hora de enviar, com qualidade mais alta.
 ===================================================== */
-const PHOTO_SIZES={product:{full:1600,small:640}};
+const PHOTO_SIZES={product:{full:1600,small:640,quality:[.84,.8]},banner:{full:2400,small:1200,quality:[.9,.86]}};
 function smallPhoto(url){return isOptimizedPhoto(url)?String(url).replace(/-full\.(webp|jpg)$/,"-small.$1"):url}
 function isOptimizedPhoto(url){return /\/opt\/[^?#]+-full\.(webp|jpg)$/.test(String(url||""))}
 async function loadImageSource(source){
@@ -585,7 +586,7 @@ async function optimizePhoto(source,kind){
   const image=await loadImageSource(source);
   const fullCanvas=drawScaled(image,sizes.full),smallCanvas=drawScaled(image,sizes.small);
   if(typeof image.close==="function")image.close();
-  const full=await encodeCanvas(fullCanvas,.84),small=await encodeCanvas(smallCanvas,.8);
+  const full=await encodeCanvas(fullCanvas,sizes.quality[0]),small=await encodeCanvas(smallCanvas,sizes.quality[1]);
   if(!full||!small||full.type!==small.type)throw new Error("Não foi possível converter a foto.");
   return {contentType:full.type,full,small,width:fullCanvas.width,height:fullCanvas.height};
 }
@@ -599,7 +600,7 @@ async function putSignedPhoto(uploadUrl,blob){
 async function uploadOptimizedPhoto(source,kind,productId){
   const photo=await optimizePhoto(source,kind);
   try{
-    const s=await api("/api/admin/uploads/optimized-image/sign",{method:"POST",body:JSON.stringify({product_id:productId||"",content_type:photo.contentType})});
+    const s=await api("/api/admin/uploads/optimized-image/sign",{method:"POST",body:JSON.stringify({kind,product_id:productId||"",content_type:photo.contentType})});
     await Promise.all([putSignedPhoto(s.full.upload_url,photo.full),putSignedPhoto(s.small.upload_url,photo.small)]);
     return {url:s.full.url,width:photo.width,height:photo.height};
   }catch(e){console.warn("Envio direto falhou; enviando pelo servidor:",e.message)}

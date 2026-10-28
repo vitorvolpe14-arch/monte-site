@@ -3862,15 +3862,35 @@ function renderCheckoutExtras({ subtotal, shipping, pixDiscount, couponDiscount 
 ===================================================== */
 
 /* =====================================================
-   CARROSSEL BORDEAUX COLLECTION (seção "Mais que bolsas.")
+   BANNER DO MEIO (carrossel da seção "Mais que bolsas.")
    Setas, pontos, arrastar no celular e troca a cada 6 s enquanto
    a seção está na tela. Para no mouse/foco e para quem pede menos
    movimento no sistema.
 ===================================================== */
 (function setupEditorialCarousel() {
-    const start = () => {
+    // Página sem as fotos do painel já dentro (data-ssr): busca e troca as do HTML.
+    async function loadPanelSlides(root) {
+        if (root.dataset.ssr === "1") return;
+        try {
+            const response = await fetch("/api/editorial", { cache: "no-store" });
+            const data = await response.json();
+            const slides = Array.isArray(data?.slides) ? data.slides.filter(slide => slide?.src) : [];
+            const box = root.querySelector(".editorial-slides");
+            if (!slides.length || !box) return;
+            setHTML(box, slides.map((slide, i) =>
+                '<figure class="editorial-slide' + (i === 0 ? " active" : "") + '"' + (i === 0 ? "" : ' aria-hidden="true"') + '><img src="' + escapeHTML(slide.src) + '"' +
+                (slide.srcset ? ' srcset="' + escapeHTML(slide.srcset) + '" sizes="(max-width: 1023px) 100vw, 62vw"' : "") +
+                ' width="2000" height="1000" loading="lazy" decoding="async" alt="MONTÊ — Mais que bolsas."></figure>'
+            ).join(""));
+        } catch {
+            // Sem resposta: ficam as fotos que já estão na página.
+        }
+    }
+
+    const start = async () => {
         const root = document.getElementById("editorialCarousel");
         if (!root) return;
+        await loadPanelSlides(root);
         const slides = [...root.querySelectorAll(".editorial-slide")];
         const dotsBox = document.getElementById("editorialCarouselDots");
         if (slides.length < 2) {
