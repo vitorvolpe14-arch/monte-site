@@ -8223,7 +8223,6 @@ html.catalog-pending .footer {
 }
 .gift-perk-icon svg { width: 17px; height: 17px; fill: none; stroke: #fff; stroke-width: 1.4; stroke-linejoin: round; }
 .gift-perk-copy { min-width: 0; }
-.gift-perk-kicker { display: block; margin-bottom: 2px; font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--wine); font-weight: 600; }
 .gift-perk p { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--co-ink, #0d0d0d); }
 .gift-perk p strong { font-weight: 600; }
 

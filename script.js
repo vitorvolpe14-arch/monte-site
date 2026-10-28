@@ -1977,7 +1977,6 @@ function renderGiftPerk({ subtotal, freeShippingApplies }) {
         next ? `Faltam <strong>${formatPrice(next.value - subtotal)}</strong> para ${next.goal}` : ""
     ].filter(Boolean).join(" ");
     perk.classList.toggle("is-active", !!reached);
-    setHTML(document.getElementById("giftPerkKicker"), escapeHTML((reached || tiers[0]).promotion.name));
     setHTML(document.getElementById("giftPerkText"), text);
 
     // Degraus espaçados por igual; a barra enche aos poucos dentro de cada etapa.
@@ -2035,7 +2034,7 @@ function renderGiftPerk({ subtotal, freeShippingApplies }) {
                 <span class="cart-gift-tag">Presente</span>
                 <div class="cart-item-name">${escapeHTML(chosen.product.name)}</div>
                 <div class="cart-item-variant">${escapeHTML(chosen.color || "Cor única")}</div>
-                <div class="cart-item-row"><span class="cart-gift-qty">${escapeHTML(chosen.promotion.name)}</span><div class="cart-item-price"><s>${formatPrice(chosen.product.price)}</s> Grátis</div></div>
+                <div class="cart-item-row"><span class="cart-gift-qty">1 unidade</span><div class="cart-item-price"><s>${formatPrice(chosen.product.price)}</s> Grátis</div></div>
             </div>
         </div>`);
     }
@@ -3350,7 +3349,7 @@ function renderCheckoutNote(summary) {
             ? cart.map(item => `<div class="order-note-item"><span>${escapeHTML(item.name)}</span><span>${formatPrice(Number(item.price || 0) * Number(item.quantity || 0))}</span><small>${escapeHTML(colorLabel(item.variant_color, item.name) || "Cor única")} · ${Number(item.quantity || 0)} un.</small></div>`).join("")
             : '<div class="order-note-item"><span class="is-empty">Nenhuma peça na sacola</span></div>');
         const gift = currentGift();
-        if (gift) appendHTML(itemsBox, `<div class="order-note-item"><span>${escapeHTML(gift.product.name)}</span><span>Presente</span><small>${escapeHTML(gift.color || "Cor única")} · 1 un. · ${escapeHTML(gift.promotion.name)}</small></div>`);
+        if (gift) appendHTML(itemsBox, `<div class="order-note-item"><span>${escapeHTML(gift.product.name)}</span><span>Presente</span><small>${escapeHTML(gift.color || "Cor única")} · 1 un.</small></div>`);
     }
 
     setNoteText("noteShipping", selectedShippingOption ? `${selectedShippingOption.name} · ${shippingPriceLabel(selectedShippingOption)}` : "");
