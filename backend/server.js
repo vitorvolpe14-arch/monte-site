@@ -1959,6 +1959,51 @@ app.put("/api/admin/carousel",requireAdmin,async(req,res)=>{
   }catch(e){console.error("Admin carousel PUT:",e);return res.status(500).json({success:false,message:adminErrorMessage(e,"Não foi possível salvar o carrossel.")})}
 });
 
+// Banner do meio da página inicial (fotos ao lado de "Mais que bolsas."), trocado pelo painel.
+// Sem fotos salvas, a página mostra as da Bordeaux Collection que já estão no index.html.
+// Fotos enviadas pelo painel são otimizadas no navegador: "-full" (2400 px) e "-small" (1200 px).
+const EDITORIAL_KV_KEY = "site_editorial_images";
+const DEFAULT_EDITORIAL_IMAGES = ["/assets/bordeaux-collection-2-2000.webp", "/assets/bordeaux-collection-1-2000.webp"];
+function editorialImageUrl(value){
+  const url=safeString(value);
+  return DEFAULT_EDITORIAL_IMAGES.includes(url)?url:canonicalProductImageUrl(url);
+}
+async function readEditorialImages(){
+  const rows=await supabaseRequest("kv_store_48db9b7e?key=eq."+encodeURIComponent(EDITORIAL_KV_KEY)+"&select=key,value",{method:"GET"});
+  const value=Array.isArray(rows)?rows[0]?.value:null;
+  return (Array.isArray(value?.images)?value.images:[]).map(editorialImageUrl).filter(Boolean).slice(0,10);
+}
+function editorialSlides(images){
+  return images.map(url=>{
+    const original=/^\/assets\/(bordeaux-collection-\d)-2000\.webp$/.exec(url);
+    if(original){const base="/assets/"+original[1];return {src:base+"-1200.webp",srcset:base+"-800.webp 800w, "+base+"-1200.webp 1200w, "+base+"-2000.webp 2000w"}}
+    const src=siteMediaPath(url),small=smallImageUrl(src);
+    return {src,srcset:small?small+" 1200w, "+src+" 2400w":""};
+  });
+}
+app.get("/api/editorial",async(req,res)=>{
+  try{const images=await cachedPublic("editorial",60*1000,readEditorialImages);return res.json({success:true,slides:editorialSlides(images)})}
+  catch(e){console.error("Public editorial GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar o banner."})}
+});
+app.get("/api/admin/editorial",requireAdmin,async(req,res)=>{
+  try{const images=await readEditorialImages();return res.json({success:true,images:images.length?images:DEFAULT_EDITORIAL_IMAGES,custom:images.length>0})}
+  catch(e){console.error("Admin editorial GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar o banner do meio."})}
+});
+app.put("/api/admin/editorial",requireAdmin,async(req,res)=>{
+  try{
+    const sent=Array.isArray(req.body?.images)?req.body.images.map(safeString).filter(Boolean):[];
+    if(!sent.length)return res.status(400).json({success:false,message:"Adicione pelo menos uma foto ao banner do meio."});
+    if(sent.length>10)return res.status(400).json({success:false,message:"Use no máximo 10 fotos no banner do meio."});
+    const images=sent.map(editorialImageUrl);
+    const invalid=sent.find((url,i)=>!images[i]);
+    if(invalid)return res.status(400).json({success:false,message:"Foto inválida na lista ("+invalid.slice(0,160)+")."});
+    const body=JSON.stringify({key:EDITORIAL_KV_KEY,value:{images,updated_at:new Date().toISOString()}});
+    await supabaseRequest("kv_store_48db9b7e",{method:"POST",body,headers:{"Prefer":"resolution=merge-duplicates,return=minimal"}});
+    publicCache.delete("editorial");
+    return res.json({success:true,images,custom:true});
+  }catch(e){console.error("Admin editorial PUT:",e);return res.status(500).json({success:false,message:adminErrorMessage(e,"Não foi possível salvar o banner do meio.")})}
+});
+
 app.get("/api/admin/products",requireAdmin,async(req,res)=>{try{const data=await supabaseRequest("products?select=*,product_variants(*)&order=created_at.desc");return res.json({success:true,products:data||[]})}catch(e){console.error("Admin products GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar os produtos."})}});
 
 function analyticsClientInfo(req){
@@ -2266,15 +2311,21 @@ async function signedStorageUpload(objectPath) {
     if (!response.ok || !data?.url || !String(data.url).includes("token=")) throw new Error("Não foi possível preparar o envio da foto (" + response.status + ").");
     return { upload_url: "https://" + new URL(SUPABASE_URL).host + "/storage/v1" + data.url, url: storagePublicUrl(objectPath) };
 }
+// Pasta das fotos otimizadas: a do produto, ou "banner" para as fotos do banner do meio.
+function optimizedPhotoFolder(body) {
+    if (safeString(body?.kind) === "banner") return "banner";
+    const productId = safeString(body?.product_id);
+    if (!/^[0-9a-f-]{36}$/i.test(productId)) throw new Error("Produto inválido.");
+    return productId;
+}
 app.post("/api/admin/uploads/optimized-image/sign", requireAdmin, async (req, res) => {
     try {
         if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY não configurada no backend.");
-        const productId = safeString(req.body?.product_id);
-        if (!/^[0-9a-f-]{36}$/i.test(productId)) throw new Error("Produto inválido.");
+        const folder = optimizedPhotoFolder(req.body);
         const contentType = safeString(req.body?.content_type).toLowerCase();
         if (!["image/webp", "image/jpeg"].includes(contentType)) throw new Error("Formato inválido para a foto otimizada.");
         const ext = contentType === "image/webp" ? "webp" : "jpg";
-        const base = "opt/" + productId + "/" + Date.now() + "-" + crypto.randomBytes(5).toString("hex");
+        const base = "opt/" + folder + "/" + Date.now() + "-" + crypto.randomBytes(5).toString("hex");
         const [full, small] = await Promise.all([signedStorageUpload(base + "-full." + ext), signedStorageUpload(base + "-small." + ext)]);
         return res.json({ success: true, full, small });
     } catch (e) {
@@ -2299,8 +2350,7 @@ async function uploadStorageObject(objectPath, contentType, buffer) {
 app.post("/api/admin/uploads/optimized-image", requireAdmin, async (req, res) => {
     try {
         if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY não configurada no backend.");
-        const productId = safeString(req.body?.product_id);
-        if (!/^[0-9a-f-]{36}$/i.test(productId)) throw new Error("Produto inválido.");
+        const folder = optimizedPhotoFolder(req.body);
         const contentType = safeString(req.body?.content_type).toLowerCase();
         if (!["image/webp", "image/jpeg"].includes(contentType)) throw new Error("Formato inválido para a foto otimizada.");
         const decode = value => Buffer.from(String(value || "").replace(/^data:[^;]+;base64,/, ""), "base64");
@@ -2310,10 +2360,10 @@ app.post("/api/admin/uploads/optimized-image", requireAdmin, async (req, res) =>
         if (full.length > 6 * 1024 * 1024 || small.length > 2 * 1024 * 1024) throw new Error("A foto otimizada ficou grande demais.");
         const ext = contentType === "image/webp" ? "webp" : "jpg";
         const name = Date.now() + "-" + crypto.randomBytes(5).toString("hex");
-        const folder = "opt/" + productId + "/";
+        const prefix = "opt/" + folder + "/";
         const [url, smallUrl] = await Promise.all([
-            uploadStorageObject(folder + name + "-full." + ext, contentType, full),
-            uploadStorageObject(folder + name + "-small." + ext, contentType, small)
+            uploadStorageObject(prefix + name + "-full." + ext, contentType, full),
+            uploadStorageObject(prefix + name + "-small." + ext, contentType, small)
         ]);
         return res.status(201).json({ success: true, url, small: smallUrl, width: fullInfo.width, height: fullInfo.height });
     } catch (e) {
@@ -4222,6 +4272,11 @@ function jsonForHtml(value) {
 function escapeAttribute(value) {
     return String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
+function editorialSlidesHtml(slides) {
+    return slides.map((slide, i) => '<figure class="editorial-slide' + (i === 0 ? " active" : "") + '"' + (i === 0 ? "" : ' aria-hidden="true"') + '><img src="' + escapeAttribute(slide.src) + '"' +
+        (slide.srcset ? ' srcset="' + escapeAttribute(slide.srcset) + '" sizes="(max-width: 1023px) 100vw, 62vw"' : "") +
+        ' width="2000" height="1000" loading="lazy" decoding="async" alt="MONTÊ — Mais que bolsas."></figure>').join("");
+}
 function heroSlidesHtml(slides) {
     return slides.map((slide, i) => {
         const size = slide.width && slide.height ? ' width="' + slide.width + '" height="' + slide.height + '"' : "";
@@ -4235,12 +4290,18 @@ function heroSlidesHtml(slides) {
 // dentro do HTML. A loja aparece sem esperar outras requisições e o banner não empurra a página.
 app.get("/", async (req, res) => {
     try {
-        const [html, catalog, slides] = await Promise.all([
+        const [html, catalog, slides, editorial] = await Promise.all([
             readSitePage("index.html"),
             getPublicCatalog().catch(error => { console.error("Página inicial — catálogo:", error.message); return null; }),
-            cachedPublic("carousel", 60 * 1000, carouselSlides).catch(error => { console.error("Página inicial — carrossel:", error.message); return null; })
+            cachedPublic("carousel", 60 * 1000, carouselSlides).catch(error => { console.error("Página inicial — carrossel:", error.message); return null; }),
+            cachedPublic("editorial", 60 * 1000, readEditorialImages).catch(error => { console.error("Página inicial — banner do meio:", error.message); return null; })
         ]);
         let page = html;
+        // Banner do meio: com fotos do painel, troca as do HTML; data-ssr evita que a página peça de novo.
+        if (Array.isArray(editorial)) {
+            if (editorial.length) page = page.replace(/<!-- BANNER DO MEIO -->[\s\S]*?<!-- FIM DO BANNER DO MEIO -->/, () => editorialSlidesHtml(editorialSlides(editorial)));
+            page = page.replace('<div class="editorial-carousel" id="editorialCarousel"', '<div class="editorial-carousel" id="editorialCarousel" data-ssr="1"');
+        }
         if (Array.isArray(slides) && slides.length) {
             page = page
                 .replace(/<!-- SLIDES -->[\s\S]*?<!-- FIM DOS SLIDES -->/, () => heroSlidesHtml(slides))
