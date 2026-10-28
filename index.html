@@ -37,7 +37,7 @@
     <meta name="twitter:description" content="Conheça a coleção MONTÊ e compre online.">
     <meta name="twitter:image" content="https://oficialmontee.com.br/og-image.jpg?v=1">
 
-    <link rel="stylesheet" href="style.css?v=20261026-cupom">
+    <link rel="stylesheet" href="style.css?v=20261101-cinto">
     <!-- PRELOAD DO BANNER -->
 
     <link rel="preload" href="/fonts/dm-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
@@ -92,6 +92,8 @@
 
 <div class="shipping-bar">
 
+    <span class="shipping-bar-msg shipping-bar-promo" id="shippingBarPromo" hidden></span>
+    <span class="shipping-bar-sep shipping-bar-promo" aria-hidden="true" hidden>·</span>
     <span class="shipping-bar-msg">FRETE GRÁTIS EM FORTALEZA E REGIÃO A PARTIR DE R$ 599</span>
     <span class="shipping-bar-sep" aria-hidden="true">·</span>
     <span class="shipping-bar-msg">5% OFF NO PIX</span>
@@ -960,6 +962,8 @@
         </div>
 
         <div id="cartItems" class="cart-items"></div>
+        <!-- Presente escolhido na promoção (aba Promoções do painel). -->
+        <div id="cartGiftLine" class="cart-gift-line" hidden></div>
 
         <div class="cart-footer">
 
@@ -972,6 +976,27 @@
                 <span class="pix-perk-icon" aria-hidden="true"></span>
                 <p id="pixPerkText">Pagando no Pix você economiza <strong>R$ 0,00</strong></p>
                 <button type="button" id="pixPerkButton" class="pix-perk-button" hidden>USAR PIX</button>
+            </div>
+
+            <!-- Promoções de presente (painel, aba Promoções): escada de benefícios com os degraus
+                 das promoções no ar e do frete grátis, e a escolha do presente. Sem promoção, fica escondida. -->
+            <div class="gift-perk" id="giftPerk" hidden>
+                <div class="gift-perk-head">
+                    <span class="gift-perk-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="9" width="17" height="11.5" rx="1.5"/><path d="M2.5 9h19v-3h-19zM12 6v14.5M12 6c-1.6-3.2-5.6-3.4-5.6-1 0 1.6 3.2 1 5.6 1zM12 6c1.6-3.2 5.6-3.4 5.6-1 0 1.6-3.2 1-5.6 1z"/></svg></span>
+                    <div class="gift-perk-copy">
+                        <span class="gift-perk-kicker" id="giftPerkKicker"></span>
+                        <p id="giftPerkText"></p>
+                    </div>
+                </div>
+                <div class="gift-ladder" aria-hidden="true">
+                    <span class="gift-ladder-bar"><i id="giftLadderFill"></i></span>
+                    <span id="giftLadderSteps"></span>
+                </div>
+                <div class="gift-picker" id="giftPicker" hidden>
+                    <p class="gift-picker-title" id="giftPickerTitle"></p>
+                    <p class="gift-picker-hint" id="giftPickerHint"></p>
+                    <div class="gift-options" id="giftOptions" role="radiogroup" aria-label="Cintos de presente"></div>
+                </div>
             </div>
 
             <!-- Frete grátis em Fortaleza e região a partir de R$ 599: quanto falta, com barra de progresso. -->
@@ -1158,7 +1183,7 @@
 
 <!-- CATÁLOGO -->
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="script.js?v=20261026-cupom"></script>
+<script src="script.js?v=20261101-cinto"></script>
 
 </body>
 </html>

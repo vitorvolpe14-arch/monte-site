@@ -61,7 +61,7 @@ function renderOrder(o){
   const items=o.items||[];
   setHTML(document.getElementById("items"), items.length ? items.map(i=>
     '<div class="item"><span class="item-name">'+esc(i.product_name)+'</span>'+
-    '<span class="item-price">'+money(i.total_price)+'</span>'+
+    '<span class="item-price">'+(Number(i.total_price)===0?"Presente":money(i.total_price))+'</span>'+
     '<span class="item-meta">'+(i.variant_color?esc(i.variant_color)+" · ":"")+Number(i.quantity||0)+(Number(i.quantity)===1?" peça":" peças")+'</span></div>'
   ).join("") : '<p class="letter-text ps-s9">Itens do pedido indisponíveis no momento.</p>');
 
