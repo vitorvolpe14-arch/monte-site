@@ -310,27 +310,18 @@ function renderProducts() {
     const newContainer = document.getElementById("newProducts");
     if (newContainer) newContainer.replaceChildren();
 
-    // Bolsas em pré-venda ficam só na aba Pré-venda (com o aviso do prazo).
-    const inStore = products.filter(product => !product.presale);
-    const presale = products.filter(product => product.presale);
-
+    // Bolsas em pré-venda aparecem nas vitrines normais, com o selo "Pré-venda" no card.
     renderCollectionProducts(
-        inStore.filter(product => product.category === "bolsas")
+        products.filter(product => product.category === "bolsas")
     );
 
     renderCategorySectionProducts(
         "cintos-acessorios",
-        inStore.filter(product => product.category === "cintos" || product.category === "acessorios")
+        products.filter(product => product.category === "cintos" || product.category === "acessorios")
     );
 
-    // A aba e o link do menu só aparecem quando há produtos em pré-venda.
-    document.getElementById("prevenda")?.toggleAttribute("hidden", !presale.length);
-    document.querySelector(".presale-ticker")?.toggleAttribute("hidden", !presale.length);
-    document.querySelectorAll(".presale-nav-link").forEach(link => link.toggleAttribute("hidden", !presale.length));
-    renderCategorySectionProducts("prevenda", presale);
-
-    renderSaleProducts(inStore.filter(product => product.sale));
-    renderNewProducts(inStore.filter(product => product.newProduct));
+    renderSaleProducts(products.filter(product => product.sale));
+    renderNewProducts(products.filter(product => product.newProduct));
 }
 
 
@@ -882,7 +873,6 @@ enableShowcaseSwipe("newProducts", nextNewPage, previousNewPage);
 enableShowcaseSwipe("saleProducts", nextSalePage, previousSalePage);
 enableShowcaseSwipe("allProducts", nextCollectionPage, previousCollectionPage);
 enableShowcaseSwipe("cintosAcessoriosProducts", () => nextCategoryPage("cintos-acessorios"), () => previousCategoryPage("cintos-acessorios"));
-enableShowcaseSwipe("prevendaProducts", () => nextCategoryPage("prevenda"), () => previousCategoryPage("prevenda"));
 
 /* =====================================================
    FILTRO
@@ -896,7 +886,6 @@ window.addEventListener("resize", () => {
     lastMobileCarouselMode = mobileMode;
     renderCollectionPage();
     renderCategorySection("cintos-acessorios");
-    renderCategorySection("prevenda");
     renderNewPage();
     renderSalePage();
 });
