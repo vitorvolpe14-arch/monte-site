@@ -1998,6 +1998,33 @@ function pickGiftProduct(promotionId, productId) {
     document.getElementById("giftColors")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
+// Bolinhas do carrossel de presentes no celular (mostram em que card a cliente está).
+function renderGiftDots(count) {
+    const dots = document.getElementById("giftDots");
+    const box = document.getElementById("giftOptions");
+    if (!dots || !box) return;
+    dots.hidden = count < 2;
+    setHTML(dots, Array.from({ length: count }, (_, i) => `<button type="button" data-index="${i}"></button>`).join(""));
+    const update = () => {
+        const card = box.querySelector(".gift-card");
+        const step = card ? card.getBoundingClientRect().width + 10 : 1;
+        const last = box.scrollLeft + box.clientWidth >= box.scrollWidth - 2;
+        const index = last ? count - 1 : Math.round(box.scrollLeft / step);
+        dots.querySelectorAll("button").forEach((dot, i) => dot.classList.toggle("is-active", i === index));
+    };
+    if (!box.dataset.dotsReady) {
+        box.dataset.dotsReady = "1";
+        box.addEventListener("scroll", () => requestAnimationFrame(update), { passive: true });
+        dots.addEventListener("click", event => {
+            const dot = event.target.closest("button[data-index]");
+            const card = dot && box.querySelectorAll(".gift-card")[Number(dot.dataset.index)];
+            const first = box.querySelector(".gift-card");
+            if (card && first) box.scrollTo({ left: card.offsetLeft - first.offsetLeft, behavior: "smooth" });
+        });
+    }
+    update();
+}
+
 // Escada de benefícios + escolha do presente. Devolve true quando está na tela (aí ela já
 // mostra o frete grátis e o aviso simples de frete some).
 function renderGiftPerk({ subtotal, freeShippingApplies }) {
@@ -2099,6 +2126,7 @@ function renderGiftPerk({ subtotal, freeShippingApplies }) {
                 </span>
             </button>`;
         }).join(""));
+        renderGiftDots(groups.length);
         const colorsBox = document.getElementById("giftColors");
         if (colorsBox) {
             colorsBox.hidden = !(active && active.options.length > 1);
