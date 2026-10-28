@@ -3354,7 +3354,7 @@ document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
     // A animação começa quando a página aparece, o que no celular pode levar
     // alguns segundos depois da navegação. Conta o tempo pela própria animação.
     if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) root.classList.add("intro-reduced");
-    const duration = root.classList.contains("intro-reduced") ? 1400 : 7100;
+    const duration = root.classList.contains("intro-reduced") ? 1400 : 7450;
     const own = intro.getAnimations ? intro.getAnimations().find(a => a.effect && a.effect.target === intro && !a.effect.pseudoElement) : null;
     let remaining = duration;
     if (own && typeof own.currentTime === "number") {
@@ -3387,6 +3387,128 @@ document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
         clearTimeout(timer);
         timer = setTimeout(finish, 500);
     });
+})();
+
+
+/* =====================================================
+   ABERTURA — faíscas da vela do bolo de 1 ano
+   Fagulhas saem do pavio em todas as direções, deixam rastro, se dividem
+   em forquilha, esfriam (branco → dourado) e caem. Sem JavaScript ficam
+   os raios desenhados no SVG.
+===================================================== */
+(function setupSparkler() {
+    const canvas = document.querySelector(".intro-sparkler");
+    const stage = canvas?.closest(".intro-stage-cake");
+    const core = stage?.querySelector(".intro-core");
+    if (!canvas || !core || !canvas.getContext) return;
+    if (!document.documentElement.classList.contains("intro-playing")) return;
+    if (document.documentElement.classList.contains("intro-reduced")) return;
+
+    // Acende junto com o ponto de luz do SVG (animação introIgnite).
+    const ignite = core.getAnimations ? core.getAnimations().find(a => a.animationName === "introIgnite") : null;
+    const delay = ignite ? Number(ignite.effect.getTiming().delay) || 0 : 0;
+    const wait = ignite && typeof ignite.currentTime === "number" ? Math.max(0, delay - ignite.currentTime) : 0;
+    setTimeout(start, wait);
+
+    function start() {
+        if (!canvas.isConnected) return;
+        const ctx = canvas.getContext("2d");
+        const w = canvas.offsetWidth;
+        const h = canvas.offsetHeight;
+        if (!ctx || !w || !h) return;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
+        ctx.scale(dpr, dpr);
+        ctx.lineCap = "round";
+
+        // O canvas cobre o desenho do bolo (viewBox 540 × 740); o pavio fica em 270, 175.
+        const k = w / 540;
+        const cx = 270 * k;
+        const cy = 175 * h / 740;
+        const sparks = [];
+        let last = performance.now();
+        let carry = 0;
+        stage.classList.add("is-live");
+
+        function spawn(x, y, angle, speed, life, gen) {
+            const splits = gen < 2 && Math.random() < (gen ? .4 : .7);
+            sparks.push({
+                x, y, gen, life, age: 0,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                split: splits ? life * (.4 + Math.random() * .35) : Infinity
+            });
+        }
+
+        function frame(now) {
+            if (!canvas.isConnected) return;
+            const dt = Math.min(.05, Math.max(0, (now - last) / 1000));
+            last = now;
+
+            carry += dt * 720;
+            for (; carry >= 1; carry--) {
+                const long = Math.random() < .14;
+                spawn(cx, cy, Math.random() * Math.PI * 2,
+                    (long ? 560 + Math.random() * 220 : 180 + Math.random() ** .6 * 420) * k,
+                    long ? .34 + Math.random() * .18 : .12 + Math.random() * .26, 0);
+            }
+
+            ctx.globalCompositeOperation = "source-over";
+            ctx.clearRect(0, 0, w, h);
+            ctx.globalCompositeOperation = "lighter";
+
+            // Clarão do pavio: pisca sem ritmo, como numa vela de faísca de verdade.
+            const flare = (16 + Math.random() * 14) * k;
+            const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, flare * 2.6);
+            glow.addColorStop(0, "rgba(255, 253, 244, .95)");
+            glow.addColorStop(.22, "rgba(255, 243, 212, .5)");
+            glow.addColorStop(1, "rgba(255, 243, 212, 0)");
+            ctx.fillStyle = glow;
+            ctx.fillRect(cx - flare * 2.6, cy - flare * 2.6, flare * 5.2, flare * 5.2);
+
+            const drag = Math.exp(-3 * dt);
+            const gravity = 320 * k * dt;
+            for (let i = sparks.length - 1; i >= 0; i--) {
+                const s = sparks[i];
+                s.age += dt;
+                if (s.age >= s.life) {
+                    sparks.splice(i, 1);
+                    continue;
+                }
+                s.vx *= drag;
+                s.vy = s.vy * drag + gravity;
+                s.x += s.vx * dt;
+                s.y += s.vy * dt;
+
+                // Forquilha: a fagulha estoura em 2 ou 3 menores, com um ponto de luz.
+                if (s.age >= s.split) {
+                    s.split = Infinity;
+                    const angle = Math.atan2(s.vy, s.vx);
+                    const speed = Math.hypot(s.vx, s.vy);
+                    const count = Math.random() < .4 ? 3 : 2;
+                    for (let j = 0; j < count; j++) {
+                        spawn(s.x, s.y, angle + (Math.random() - .5) * 1.8, speed * (.5 + Math.random() * .45), .06 + Math.random() * .14, s.gen + 1);
+                    }
+                    ctx.fillStyle = "rgba(255, 252, 238, .9)";
+                    ctx.beginPath();
+                    ctx.arc(s.x, s.y, 2.4 * k, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                const t = s.age / s.life;
+                const tail = .05 + s.gen * .01;
+                ctx.strokeStyle = `rgba(255, ${Math.round(255 - 22 * t)}, ${Math.round(250 - 70 * t)}, ${(1 - t * t).toFixed(3)})`;
+                ctx.lineWidth = (s.gen === 0 ? 2.6 : s.gen === 1 ? 1.9 : 1.4) * k;
+                ctx.beginPath();
+                ctx.moveTo(s.x - s.vx * tail, s.y - s.vy * tail);
+                ctx.lineTo(s.x, s.y);
+                ctx.stroke();
+            }
+            requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+    }
 })();
 
 
