@@ -6217,11 +6217,11 @@ canvas {
    ABERTURA — logo desenhada e 1 ano da MONTÊ, em cortinas (parallax)
    Linha do tempo:
    1. A abertura da loja: traço das letras (0,3s), preenchimento, filete
-      bordô e assinatura; a cortina branca sobe (2,45s), a faixa bordô
+      bordô e assinatura; a cortina branca sobe (2,45s), uma faixa cinza
       vem logo atrás e a logo sobe mais devagar.
    2. Por baixo, o bolo em traço creme no cinza (3,1–4,8s); a vela de
       faísca acende com as estrelinhas; a cortina cinza sobe (5,85s) com
-      a faixa areia logo atrás e o bolo sobe mais devagar.
+      outra faixa cinza logo atrás e o bolo sobe mais devagar.
    Sem JavaScript a animação roda igual e termina sozinha.
 ===================================================== */
 
@@ -6247,8 +6247,8 @@ html.intro-playing body {
     will-change: transform;
 }
 
-.intro-layer-wine {
-    background: #6D2234;
+.intro-layer-band {
+    background: #bcbcbc;
     animation: introLift 1.3s cubic-bezier(.76, 0, .24, 1) 2.65s forwards;
 }
 
@@ -6260,7 +6260,7 @@ html.intro-playing body {
 }
 
 .intro-layer-back {
-    background: #b4afa7;
+    background: #bcbcbc;
     animation: introLift 1.2s cubic-bezier(.76, 0, .24, 1) 6s forwards;
 }
 
