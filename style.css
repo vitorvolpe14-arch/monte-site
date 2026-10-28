@@ -6621,7 +6621,7 @@ html.intro-skipped .header { animation-delay: .5s; }
 
 /* =====================================================
    NOTA MONTÊ — etiqueta de roupa no checkout (parallax)
-   Pendurada por um cordão bordô; inclina com o ponteiro,
+   Pendurada por um cordão cinza; inclina com o ponteiro,
    as camadas internas se deslocam em profundidades diferentes
    e ela balança quando os dados mudam.
 ===================================================== */
@@ -6634,7 +6634,7 @@ html.intro-skipped .header { animation-delay: .5s; }
     margin: 0 0 6px;
     font-size: 9px;
     letter-spacing: .24em;
-    color: #6D2234;
+    color: var(--co-accent-deep, #666);
     text-align: center;
 }
 
@@ -6661,7 +6661,7 @@ html.intro-skipped .header { animation-delay: .5s; }
 
 .order-note-cord path {
     fill: none;
-    stroke: #6D2234;
+    stroke: var(--co-accent, #959595);
     stroke-width: 2.2;
     stroke-linecap: round;
     vector-effect: non-scaling-stroke;
@@ -6740,7 +6740,7 @@ html.intro-skipped .header { animation-delay: .5s; }
     margin: 0;
     font-size: 8.5px;
     letter-spacing: .32em;
-    color: #6D2234;
+    color: var(--co-accent-deep, #666);
 }
 
 .order-note-head span {
@@ -6793,7 +6793,7 @@ html.intro-skipped .header { animation-delay: .5s; }
 }
 
 @keyframes noteInk {
-    from { color: #6D2234; }
+    from { color: var(--co-accent, #959595); }
 }
 
 .order-note-items {
@@ -6871,6 +6871,30 @@ html.intro-skipped .header { animation-delay: .5s; }
     --co-line: #ece8e2;
     --co-field: #e2ddd6;
     --co-soft: #f7f5f2;
+    /* Cinza da campanha de 1 ano no lugar do bordô. O tom fechado (#666) fica para
+       textos pequenos sobre o branco, que no cinza claro ficariam difíceis de ler. */
+    --co-accent: #959595;
+    --co-accent-deep: #666;
+    /* Vidro líquido dos botões: aro de luz mais forte em cima e embaixo, sombra interna
+       no alto, brilho de refração na base e sombra projetada. Sobre a placa cinza da barra
+       o vidro é transparente; sobre o branco o próprio botão carrega o cinza. */
+    --co-lg-rim: linear-gradient(180deg, rgba(255, 255, 255, .95), rgba(255, 255, 255, .3) 26%, rgba(255, 255, 255, .18) 60%, #fff);
+    --co-lg-clear:
+        radial-gradient(80% 60% at 50% 100%, rgba(255, 255, 255, .34), rgba(255, 255, 255, 0) 72%),
+        linear-gradient(180deg, rgba(0, 0, 0, .05), rgba(255, 255, 255, .06) 45%, rgba(255, 255, 255, .14));
+    /* Sobre o branco o botão é o próprio cinza da campanha (#959595). */
+    --co-lg-tinted:
+        radial-gradient(80% 60% at 50% 100%, rgba(255, 255, 255, .34), rgba(255, 255, 255, 0) 72%),
+        var(--co-accent);
+    --co-lg-shadow:
+        inset 0 10px 16px -10px rgba(0, 0, 0, .22),
+        inset 0 -8px 14px -8px rgba(255, 255, 255, .6),
+        0 0 0 1px rgba(80, 80, 80, .16),
+        0 14px 24px -12px rgba(0, 0, 0, .38);
+    --co-lg-blur: blur(10px) saturate(150%);
+    /* Cabeçalho e barra do total: placas de vidro sobre o conteúdo que rola. */
+    --co-glass-surface: rgba(255, 255, 255, .58);
+    --co-glass-surface-blur: blur(24px) saturate(180%);
     background: rgba(12, 10, 9, .46);
     -webkit-backdrop-filter: blur(3px);
     backdrop-filter: blur(3px);
@@ -6895,15 +6919,20 @@ html.intro-skipped .header { animation-delay: .5s; }
     align-items: center;
     row-gap: 18px;
     padding: 22px 26px 16px;
-    border-bottom: 1px solid var(--co-line);
-    background: #fff;
+    border-bottom: 1px solid rgba(149, 149, 149, .22);
+    /* Vidro: as peças passam desfocadas por baixo do cabeçalho fixo. Mais denso embaixo:
+       perto da borda o desfoque espelha o conteúdo e ele brigaria com as etapas. */
+    background: linear-gradient(180deg, var(--co-glass-surface), rgba(255, 255, 255, .72) 50%, rgba(255, 255, 255, .94) 82%);
+    -webkit-backdrop-filter: var(--co-glass-surface-blur);
+    backdrop-filter: var(--co-glass-surface-blur);
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, .6);
 }
 
 #cartOverlay .cart-kicker {
     margin: 0 0 6px;
     font-size: 9px;
     letter-spacing: .34em;
-    color: var(--wine);
+    color: var(--co-accent-deep);
 }
 
 #cartOverlay .cart-header h2 {
@@ -6932,16 +6961,13 @@ html.intro-skipped .header { animation-delay: .5s; }
     width: 40px;
     height: 40px;
     padding: 0;
-    border: 1px solid var(--co-line);
     border-radius: 50%;
-    background: #fff;
-    color: var(--co-ink);
     cursor: pointer;
-    transition: transform .35s ease, background .25s ease, color .25s ease;
+    transition: transform .35s ease, filter .25s ease;
 }
 
 #cartOverlay .cart-close svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; }
-#cartOverlay .cart-close:hover { transform: rotate(90deg); background: var(--co-ink); color: #fff; }
+#cartOverlay .cart-close:hover { transform: rotate(90deg); }
 
 /* Etapas */
 .checkout-steps {
@@ -7016,10 +7042,10 @@ html.intro-skipped .header { animation-delay: .5s; }
     transform: rotate(-45deg);
 }
 
-.checkout-steps .is-current button { color: var(--wine); }
+.checkout-steps .is-current button { color: var(--co-accent-deep); }
 
 .checkout-steps .is-current i {
-    border: 3.5px solid var(--wine);
+    border: 3.5px solid var(--co-accent);
     animation: coPulse 1.8s ease-out infinite;
 }
 
@@ -7094,7 +7120,6 @@ html.intro-skipped .header { animation-delay: .5s; }
     display: inline-flex;
     align-items: center;
     margin: 0;
-    border: 1px solid var(--co-field);
     border-radius: 999px;
 }
 
@@ -7105,13 +7130,13 @@ html.intro-skipped .header { animation-delay: .5s; }
     border: 0;
     border-radius: 50%;
     background: none;
-    color: var(--co-ink);
+    color: inherit;
     font-size: 15px;
     cursor: pointer;
     transition: background .2s ease;
 }
 
-#cartOverlay .cart-quantity button:hover { background: var(--co-soft); }
+#cartOverlay .cart-quantity button:hover { background: rgba(255, 255, 255, .16); }
 #cartOverlay .cart-quantity span { width: 22px; font-size: 12px; font-weight: 500; text-align: center; }
 
 #cartOverlay .cart-item-price {
@@ -7138,7 +7163,7 @@ html.intro-skipped .header { animation-delay: .5s; }
 }
 
 #cartOverlay .cart-item-remove svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; }
-#cartOverlay .cart-item-remove:hover { background: var(--co-soft); color: var(--co-ink); }
+#cartOverlay .cart-item-remove:hover { background: rgba(149, 149, 149, .16); color: var(--co-ink); }
 
 /* Sacola vazia */
 #cartOverlay .empty-cart { padding: 72px 24px 48px; text-align: center; color: var(--co-ink); }
@@ -7148,17 +7173,11 @@ html.intro-skipped .header { animation-delay: .5s; }
 
 .empty-cart-button {
     padding: 16px 30px;
-    border: 0;
     border-radius: 999px;
-    background: var(--co-ink);
-    color: #fff;
     font: 500 10px/1 "DM Sans", sans-serif;
     letter-spacing: .22em;
     cursor: pointer;
-    transition: background .3s ease;
 }
-
-.empty-cart-button:hover { background: var(--wine); }
 
 #cartOverlay .cart.is-empty .checkout-steps,
 #cartOverlay .cart.is-empty .cart-footer,
@@ -7186,9 +7205,9 @@ html.intro-skipped .header { animation-delay: .5s; }
     gap: 12px;
     margin-bottom: 6px;
     padding: 13px 14px;
-    border: 1px solid #efe2dc;
+    border: 1px solid #e4e4e4;
     border-radius: 14px;
-    background: linear-gradient(120deg, #f8f0ec, #fcfaf8);
+    background: linear-gradient(120deg, #f1f1f1, #fafafa);
 }
 
 .pix-perk[hidden],
@@ -7201,7 +7220,7 @@ html.intro-skipped .header { animation-delay: .5s; }
     width: 30px;
     height: 30px;
     border-radius: 50%;
-    background: var(--wine);
+    background: var(--co-accent);
 }
 
 .pix-perk-icon::before {
@@ -7213,21 +7232,15 @@ html.intro-skipped .header { animation-delay: .5s; }
 }
 
 .pix-perk p { flex: 1; margin: 0; font-size: 12.5px; line-height: 1.45; }
-.pix-perk strong { color: var(--wine); font-weight: 600; }
+.pix-perk strong { color: var(--co-accent-deep); font-weight: 600; }
 
 .pix-perk-button {
     padding: 9px 14px;
-    border: 1px solid var(--wine);
     border-radius: 999px;
-    background: #fff;
-    color: var(--wine);
     font: 600 9.5px/1 "DM Sans", sans-serif;
     letter-spacing: .16em;
     cursor: pointer;
-    transition: background .25s ease, color .25s ease;
 }
-
-.pix-perk-button:hover { background: var(--wine); color: #fff; }
 
 /* Frete grátis em Fortaleza e região a partir de R$ 599: quanto falta, com barra de progresso. */
 .free-shipping-perk {
@@ -7279,7 +7292,7 @@ html.intro-skipped .header { animation-delay: .5s; }
     width: 0;
     height: 100%;
     border-radius: inherit;
-    background: var(--wine);
+    background: var(--co-accent, #959595);
     transition: width .5s ease;
 }
 
@@ -7413,8 +7426,8 @@ html.intro-skipped .header { animation-delay: .5s; }
     animation: coPop .3s ease both;
 }
 
-#cartOverlay .field.is-invalid input { border-color: var(--wine); background: #fdf8f8; box-shadow: 0 0 0 4px rgba(101, 31, 43, .07); }
-.field.is-invalid > span { color: var(--wine); }
+#cartOverlay .field.is-invalid input { border-color: var(--co-accent); background: #f8f8f8; box-shadow: 0 0 0 4px rgba(149, 149, 149, .14); }
+.field.is-invalid > span { color: var(--co-accent-deep); }
 .field.is-invalid { animation: coShake .35s ease; }
 
 .cep-help {
@@ -7441,22 +7454,16 @@ html.intro-skipped .header { animation-delay: .5s; }
     min-width: 104px;
     height: 54px;
     padding: 0 18px;
-    border: 1px solid var(--co-ink);
-    border-radius: 12px;
-    background: var(--co-ink);
-    color: #fff;
+    border-radius: 999px;
     font: 500 11.5px/1 "DM Sans", sans-serif;
     letter-spacing: .14em;
     cursor: pointer;
-    transition: background .2s ease, color .2s ease, opacity .2s ease;
+    transition: filter .2s ease, opacity .2s ease;
 }
-.coupon-apply:hover { background: #fff; color: var(--co-ink); }
 .coupon-apply:disabled { opacity: .6; cursor: wait; }
-.coupon-apply[data-click="removeCoupon"] { background: #fff; color: var(--co-ink); }
-.coupon-apply[data-click="removeCoupon"]:hover { background: var(--co-soft); }
 .coupon-status { min-height: 0; margin: 8px 2px 0; font-size: 12px; line-height: 1.5; color: var(--co-ink); }
 .coupon-status:empty { display: none; }
-.coupon-status.is-error { color: var(--wine); }
+.coupon-status.is-error { color: var(--co-accent-deep); }
 
 /* Frete */
 #cartOverlay .shipping-result { display: block; margin-top: 20px; padding: 0; border: 0; }
@@ -7529,7 +7536,7 @@ html.intro-skipped .header { animation-delay: .5s; }
     animation: coShimmer 1.2s linear infinite;
 }
 
-#cartOverlay .shipping-error { color: var(--wine); background: #fbf3f3; }
+#cartOverlay .shipping-error { color: var(--co-accent-deep); background: #f3f3f3; }
 
 /* Pagamento */
 #cartOverlay .payment-methods {
@@ -7606,7 +7613,7 @@ html.intro-skipped .header { animation-delay: .5s; }
     right: 14px;
     padding: 5px 8px;
     border-radius: 999px;
-    background: var(--wine);
+    background: var(--co-accent);
     color: #fff;
     font: 600 9px/1 "DM Sans", sans-serif;
     font-style: normal;
@@ -7641,16 +7648,12 @@ html.intro-skipped .header { animation-delay: .5s; }
 #cartOverlay .continue-shopping {
     display: block;
     width: auto;
-    margin: 16px auto 0;
-    padding: 10px;
-    border: 0;
-    background: none;
-    color: var(--co-ink);
+    margin: 18px auto 0;
+    padding: 14px 26px;
+    border-radius: 999px;
     font: 500 10px/1 "DM Sans", sans-serif;
     letter-spacing: .2em;
     text-transform: uppercase;
-    text-decoration: underline;
-    text-underline-offset: 5px;
     cursor: pointer;
 }
 
@@ -7664,14 +7667,18 @@ html.intro-skipped .header { animation-delay: .5s; }
     gap: 16px;
     margin-top: 22px;
     padding: 14px 26px calc(14px + env(safe-area-inset-bottom, 0px));
-    border-top: 1px solid var(--co-line);
-    background: #fff;
-    box-shadow: 0 -18px 30px -26px rgba(0, 0, 0, .45);
+    border-top: 1px solid rgba(255, 255, 255, .35);
+    /* Placa no cinza da campanha (#959595): é o fundo que faz o vidro do botão aparecer. */
+    background: var(--co-accent);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 -18px 30px -24px rgba(0, 0, 0, .35);
 }
+
+#cartOverlay .checkout-bar-total span,
+#cartOverlay .checkout-bar-total small { color: #fff; }
 
 .checkout-bar-total { display: flex; flex-direction: column; flex: 0 1 auto; min-width: 0; max-width: 50%; }
 .checkout-bar-total span { font-size: 9.5px; letter-spacing: .24em; text-transform: uppercase; color: var(--co-muted); }
-#cartOverlay .checkout-bar-total strong { display: inline-block; margin: 3px 0 2px; font: 400 26px/1.1 "Playfair Display", serif; white-space: nowrap; transform-origin: left center; }
+#cartOverlay .checkout-bar-total strong { display: inline-block; margin: 3px 0 2px; color: #fff; font: 400 26px/1.1 "Playfair Display", serif; white-space: nowrap; transform-origin: left center; }
 .checkout-bar-total small { overflow: hidden; color: var(--co-muted); font-size: 10.5px; white-space: nowrap; text-overflow: ellipsis; }
 #checkoutTotal.is-bumping { animation: coBump .45s ease; }
 
@@ -7685,16 +7692,11 @@ html.intro-skipped .header { animation-delay: .5s; }
     min-height: 56px;
     margin: 0;
     padding: 0 20px;
-    overflow: hidden;
-    border: 0;
     border-radius: 999px;
-    background: var(--wine);
-    color: #fff;
     font: 500 10.5px/1 "DM Sans", sans-serif;
     letter-spacing: .2em;
     cursor: pointer;
-    transition: background .3s ease, transform .2s ease, box-shadow .3s ease;
-    box-shadow: 0 14px 26px -16px rgba(101, 31, 43, .8);
+    transition: filter .25s ease, transform .2s ease;
 }
 
 #cartOverlay .checkout-button::before {
@@ -7706,16 +7708,52 @@ html.intro-skipped .header { animation-delay: .5s; }
     mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'%3E%3Crect x='5' y='10.5' width='14' height='10' rx='2'/%3E%3Cpath d='M8 10.5V8a4 4 0 0 1 8 0v2.5'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
+/* Vidro líquido: pele comum dos botões do checkout. O aro de luz é um anel recortado
+   com máscara (no Finalizar compra fica no ::after, porque o ::before é o cadeado). */
+#cartOverlay .cart-close,
+#cartOverlay .cart-quantity,
+#cartOverlay .pix-perk-button,
+#cartOverlay .coupon-apply,
+#cartOverlay .empty-cart-button,
+#cartOverlay .continue-shopping,
+#cartOverlay .checkout-button {
+    position: relative;
+    border: 0;
+    background: var(--co-lg-tinted);
+    color: #f6f6f6;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .25);
+    box-shadow: var(--co-lg-shadow);
+    -webkit-backdrop-filter: var(--co-lg-blur);
+    backdrop-filter: var(--co-lg-blur);
+}
+
+#cartOverlay .checkout-button { background: var(--co-lg-clear); }
+
+#cartOverlay .cart-close::before,
+#cartOverlay .cart-quantity::before,
+#cartOverlay .pix-perk-button::before,
+#cartOverlay .coupon-apply::before,
+#cartOverlay .empty-cart-button::before,
+#cartOverlay .continue-shopping::before,
 #cartOverlay .checkout-button::after {
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, .22) 50%, transparent 70%);
-    transform: translateX(-120%);
-    animation: coShine 4.5s ease-in-out 1.2s infinite;
+    padding: 1.6px;
+    border-radius: inherit;
+    background: var(--co-lg-rim);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+    pointer-events: none;
 }
 
-#cartOverlay .checkout-button:hover { background: var(--wine-dark); }
+#cartOverlay .cart-close:hover,
+#cartOverlay .pix-perk-button:hover,
+#cartOverlay .coupon-apply:hover,
+#cartOverlay .empty-cart-button:hover,
+#cartOverlay .continue-shopping:hover,
+#cartOverlay .checkout-button:hover { filter: brightness(1.08); }
 #cartOverlay .checkout-button:active { transform: scale(.98); }
 #cartOverlay .checkout-button:disabled { opacity: .75; cursor: wait; }
 
@@ -7734,8 +7772,7 @@ body.cart-open .toast { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); 
 @keyframes coShake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 @keyframes coBump { 40% { transform: scale(1.07); } }
 @keyframes coShimmer { to { background-position: -200% 0; } }
-@keyframes coShine { 0% { transform: translateX(-120%); } 45%, 100% { transform: translateX(120%); } }
-@keyframes coPulse { 0% { box-shadow: 0 0 0 0 rgba(101, 31, 43, .35); } 100% { box-shadow: 0 0 0 8px rgba(101, 31, 43, 0); } }
+@keyframes coPulse { 0% { box-shadow: 0 0 0 0 rgba(149, 149, 149, .45); } 100% { box-shadow: 0 0 0 8px rgba(149, 149, 149, 0); } }
 
 @media (max-width: 600px) {
     #cartOverlay .cart-header { padding: 16px 18px 14px; row-gap: 16px; }
@@ -7760,7 +7797,6 @@ body.cart-open .toast { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); 
     #cartOverlay .cart,
     #cartOverlay .cart-item,
     #cartOverlay.active .checkout-step,
-    #cartOverlay .checkout-button::after,
     .checkout-steps .is-current i,
     #checkoutTotal.is-bumping { animation: none; transition: none; }
     #cartOverlay .cart { transform: none; }
@@ -8048,11 +8084,15 @@ html.catalog-pending .footer {
     margin: 4px 0 16px;
 }
 
+/* Na sacola, o aviso de pré-venda segue o cinza do checkout. */
+#cartOverlay .presale-delivery-notice { border-left-color: var(--co-accent); background: #f3f3f3; }
+#cartOverlay .presale-delivery-notice strong { color: var(--co-accent-deep); }
+
 .cart-item-presale {
     margin-top: 4px;
     font-size: 11px;
     letter-spacing: .02em;
-    color: #571b29;
+    color: var(--co-accent-deep, #666);
 }
 
 /* =====================================================
@@ -8141,7 +8181,7 @@ html.catalog-pending .footer {
     background: #fcfaf8;
 }
 .gift-perk[hidden], .gift-picker[hidden], .cart-gift-line[hidden] { display: none; }
-.gift-perk.is-active { border-color: #ead7da; background: #fbf5f6; }
+.gift-perk.is-active { border-color: #e4e4e4; background: #f6f6f6; }
 
 .gift-perk-head { display: flex; align-items: center; gap: 12px; }
 .gift-perk-icon {
@@ -8151,7 +8191,7 @@ html.catalog-pending .footer {
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: var(--wine);
+    background: var(--co-accent, #959595);
 }
 .gift-perk-icon svg { width: 17px; height: 17px; fill: none; stroke: #fff; stroke-width: 1.4; stroke-linejoin: round; }
 .gift-perk-copy { min-width: 0; }
@@ -8161,17 +8201,17 @@ html.catalog-pending .footer {
 /* Escada: barra com os degraus do cinto e do frete grátis. */
 .gift-ladder { position: relative; height: 38px; margin: 12px 4px 0; }
 .gift-ladder-bar { position: absolute; left: 0; right: 0; top: 6px; height: 4px; border-radius: 999px; background: #ece8e2; overflow: hidden; }
-.gift-ladder-bar i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--wine); transition: width .5s ease; }
+.gift-ladder-bar i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--co-accent, #959595); transition: width .5s ease; }
 .gift-ladder-step { position: absolute; top: 0; display: grid; justify-items: center; transform: translateX(-50%); }
 .gift-ladder-step.is-last { left: 100%; transform: translateX(-100%); justify-items: end; }
 .gift-ladder-step b { width: 16px; height: 16px; box-sizing: border-box; border: 2px solid #d8d2ca; border-radius: 50%; background: #fff; transition: background .3s ease, border-color .3s ease; }
-.gift-ladder-step.is-done b { border-color: var(--wine); background: var(--wine); box-shadow: inset 0 0 0 3px #fff; }
+.gift-ladder-step.is-done b { border-color: var(--co-accent, #959595); background: var(--co-accent, #959595); box-shadow: inset 0 0 0 3px #fff; }
 .gift-ladder-step small { margin-top: 3px; font-size: 9.5px; line-height: 1.2; text-align: center; color: var(--co-muted, #8a847e); white-space: nowrap; }
 .gift-ladder-step.is-last small { text-align: right; }
 .gift-ladder-step.is-done small { color: var(--co-ink, #0d0d0d); font-weight: 600; }
 
 /* Escolha do presente: cards iguais aos da loja; as cores aparecem ao tocar no modelo. */
-.gift-picker { margin-top: 12px; padding-top: 12px; border-top: 1px dashed #e6d7da; }
+.gift-picker { margin-top: 12px; padding-top: 12px; border-top: 1px dashed #e0e0e0; }
 .gift-picker-title { margin: 0; font: 400 17px/1.2 "Playfair Display", Georgia, serif; color: var(--co-ink, #0d0d0d); }
 .gift-picker-hint { margin: 4px 0 12px; font-size: 11.5px; color: var(--co-muted, #8a847e); }
 .gift-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 10px; }
@@ -8194,8 +8234,8 @@ html.catalog-pending .footer {
     .gift-options .gift-card { flex: 0 0 42%; scroll-snap-align: start; }
     .gift-dots { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
     .gift-dots[hidden] { display: none; }
-    .gift-dots button { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 999px; background: #e3d6d8; cursor: pointer; transition: width .25s ease, background .25s ease; }
-    .gift-dots button.is-active { width: 18px; background: var(--wine); }
+    .gift-dots button { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 999px; background: #dcdcdc; cursor: pointer; transition: width .25s ease, background .25s ease; }
+    .gift-dots button.is-active { width: 18px; background: var(--co-accent, #959595); }
 }
 .gift-card {
     display: block;
@@ -8211,15 +8251,15 @@ html.catalog-pending .footer {
 }
 .gift-card .product-image, .gift-card .product-info, .gift-card .product-name, .gift-card .product-price { display: block; }
 .gift-card .product-image { background: #fff !important; box-shadow: inset 0 0 0 1px var(--co-line, #ece8e2); transition: box-shadow .2s ease; }
-.gift-card .product-badge { top: 8px; left: 8px; right: 8px; padding: 5px 4px; font-size: 6.5px; letter-spacing: .5px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gift-card .product-badge { background: var(--co-accent, #959595); top: 8px; left: 8px; right: 8px; padding: 5px 4px; font-size: 6.5px; letter-spacing: .5px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gift-card .product-info { padding-top: 10px; }
 .gift-card .product-name { margin-bottom: 5px; font-size: 11px; }
 .gift-card .product-price { font-size: 11px; }
-.gift-card .sale-price { color: var(--wine); font-weight: 600; letter-spacing: .06em; }
+.gift-card .sale-price { color: var(--co-accent-deep, #666); font-weight: 600; letter-spacing: .06em; }
 .gift-card-colors { display: block; margin-top: 4px; font-size: 10.5px; color: var(--co-muted, #8a847e); }
 .gift-card:focus-visible { outline: none; }
-.gift-card:focus-visible .product-image { box-shadow: inset 0 0 0 2px rgba(101, 31, 43, .35); }
-.gift-card.is-active .product-image { box-shadow: inset 0 0 0 2px var(--wine); }
+.gift-card:focus-visible .product-image { box-shadow: inset 0 0 0 2px rgba(149, 149, 149, .5); }
+.gift-card.is-active .product-image { box-shadow: inset 0 0 0 2px var(--co-accent, #959595); }
 .gift-card.is-selected .product-image::after {
     content: "";
     position: absolute;
@@ -8229,7 +8269,7 @@ html.catalog-pending .footer {
     width: 22px;
     height: 22px;
     border-radius: 50%;
-    background: var(--wine) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12.5l4 4 8-9' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 14px no-repeat;
+    background: var(--co-accent, #959595) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12.5l4 4 8-9' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 14px no-repeat;
 }
 .gift-colors { margin-top: 14px; padding: 12px; border-radius: 12px; background: #fff; box-shadow: inset 0 0 0 1px var(--co-line, #ece8e2); }
 .gift-colors[hidden] { display: none; }
@@ -8241,9 +8281,9 @@ html.catalog-pending .footer {
 /* O presente aparece na sacola, logo abaixo das peças. */
 #cartOverlay #cartGiftLine { padding: 0 26px; }
 @media (max-width: 600px) { #cartOverlay #cartGiftLine { padding: 0 18px; } }
-.cart-gift-tag { display: inline-block; margin-bottom: 4px; padding: 2px 8px; border-radius: 999px; background: var(--wine); color: #fff; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
+.cart-gift-tag { display: inline-block; margin-bottom: 4px; padding: 2px 8px; border-radius: 999px; background: var(--co-accent, #959595); color: #fff; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
 .cart-gift-qty { font-size: 11px; color: var(--co-muted, #8a847e); }
-#cartOverlay .cart-gift-item .cart-item-price { color: var(--wine); }
+#cartOverlay .cart-gift-item .cart-item-price { color: var(--co-accent-deep, #666); }
 
 /* Benefício desligado no painel (frete grátis ou desconto do Pix) some do site. */
 [data-benefit-show][hidden] { display: none !important; }
