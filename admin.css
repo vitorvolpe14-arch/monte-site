@@ -2400,3 +2400,14 @@ input:focus,select:focus,textarea:focus{
 .promo-name{margin:0 0 6px;font:22px Georgia,serif}
 .chip-gift{background:#651f2b;color:#fff}
 @media(max-width:800px){.promo-form-grid{grid-template-columns:1fr}}
+
+/* Benefícios da loja (frete grátis e Pix) */
+.benefits-panel{margin:20px 0}
+.benefits-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.benefit-card{display:grid;gap:12px;align-content:start;padding:16px;border:1px solid #e7e7e7;border-radius:14px;background:#fafafa}
+.benefit-toggle{display:flex;align-items:center;gap:8px;font-size:14px;color:#191919}
+.benefit-toggle input{width:auto}
+.benefit-card .field-help{margin:0}
+.benefits-actions{grid-column:1/-1;display:flex;justify-content:flex-end;align-items:center;gap:14px}
+.promo-subtitle{margin:28px 0 0;font:20px Georgia,serif;font-weight:400}
+@media(max-width:800px){.benefits-grid{grid-template-columns:1fr}.benefits-actions{flex-direction:column;align-items:stretch}}

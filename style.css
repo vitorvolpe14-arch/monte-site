@@ -8238,67 +8238,52 @@ html.catalog-pending .footer {
 .gift-ladder-step.is-last small { text-align: right; }
 .gift-ladder-step.is-done small { color: var(--co-ink, #0d0d0d); font-weight: 600; }
 
-/* Escolha do cinto */
+/* Escolha do presente: cards iguais aos da loja; as cores aparecem ao tocar no modelo. */
 .gift-picker { margin-top: 12px; padding-top: 12px; border-top: 1px dashed #e6d7da; }
 .gift-picker-title { margin: 0; font: 400 17px/1.2 "Playfair Display", Georgia, serif; color: var(--co-ink, #0d0d0d); }
-.gift-picker-hint { margin: 4px 0 10px; font-size: 11.5px; color: var(--co-muted, #8a847e); }
-.gift-options {
-    display: flex;
-    gap: 10px;
-    overflow-x: auto;
-    padding: 2px 2px 6px;
-    scroll-snap-type: x proximity;
-    -webkit-overflow-scrolling: touch;
-}
-.gift-option {
-    flex: 0 0 128px;
-    display: grid;
-    gap: 3px;
-    padding: 8px;
-    border: 1px solid var(--co-line, #ece8e2);
-    border-radius: 12px;
-    background: #fff;
+.gift-picker-hint { margin: 4px 0 12px; font-size: 11.5px; color: var(--co-muted, #8a847e); }
+.gift-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 10px; }
+@media (max-width: 600px) { .gift-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.gift-card {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
     color: var(--co-ink, #0d0d0d);
     font: inherit;
     text-align: left;
     cursor: pointer;
-    scroll-snap-align: start;
-    transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
 }
-.gift-option:hover { border-color: #cbc5bd; }
-.gift-option:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(101, 31, 43, .18); }
-.gift-option.is-selected { border-color: var(--wine); box-shadow: 0 0 0 1px var(--wine); }
-.gift-option-media { position: relative; display: block; aspect-ratio: 1; margin-bottom: 4px; border-radius: 8px; background: var(--co-soft, #f7f5f2); overflow: hidden; }
-.gift-option-media img { width: 100%; height: 100%; object-fit: cover; }
-.gift-option.is-selected .gift-option-media::after {
+.gift-card .product-image, .gift-card .product-info, .gift-card .product-name, .gift-card .product-price { display: block; }
+.gift-card .product-image { background: #fff !important; box-shadow: inset 0 0 0 1px var(--co-line, #ece8e2); transition: box-shadow .2s ease; }
+.gift-card .product-badge { top: 8px; left: 8px; right: 8px; padding: 5px 6px; font-size: 7px; text-align: center; }
+.gift-card .product-info { padding-top: 10px; }
+.gift-card .product-name { margin-bottom: 5px; font-size: 11px; }
+.gift-card .product-price { font-size: 11px; }
+.gift-card .sale-price { color: var(--wine); font-weight: 600; letter-spacing: .06em; }
+.gift-card-colors { display: block; margin-top: 4px; font-size: 10.5px; color: var(--co-muted, #8a847e); }
+.gift-card:focus-visible { outline: none; }
+.gift-card:focus-visible .product-image { box-shadow: inset 0 0 0 2px rgba(101, 31, 43, .35); }
+.gift-card.is-active .product-image { box-shadow: inset 0 0 0 2px var(--wine); }
+.gift-card.is-selected .product-image::after {
     content: "";
     position: absolute;
-    top: 6px;
-    right: 6px;
-    width: 20px;
-    height: 20px;
+    right: 8px;
+    bottom: 8px;
+    z-index: 4;
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
     background: var(--wine) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12.5l4 4 8-9' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 14px no-repeat;
 }
-.gift-option-match {
-    position: absolute;
-    left: 5px;
-    right: 5px;
-    bottom: 5px;
-    padding: 3px 5px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, .92);
-    color: var(--wine);
-    font-size: 8.5px;
-    font-style: normal;
-    font-weight: 600;
-    line-height: 1.2;
-    text-align: center;
-}
-.gift-option-name { font-size: 11.5px; font-weight: 600; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.gift-option-color { font-size: 10.5px; color: var(--co-muted, #8a847e); }
-.gift-option-price { font-size: 11px; font-weight: 600; color: var(--wine); }
-.gift-option-price s, .cart-gift-item .cart-item-price s { margin-right: 3px; color: var(--co-muted, #8a847e); font-weight: 400; }
+.gift-colors { margin-top: 14px; padding: 12px; border-radius: 12px; background: #fff; box-shadow: inset 0 0 0 1px var(--co-line, #ece8e2); }
+.gift-colors[hidden] { display: none; }
+.gift-colors-title { margin: 0; font-size: 12px; font-weight: 600; color: var(--co-ink, #0d0d0d); }
+.gift-colors .variant-options { margin-top: 8px; }
+#cartOverlay .gift-colors .variant-option { border-radius: 999px; cursor: pointer; }
+.cart-gift-item .cart-item-price s { margin-right: 3px; color: var(--co-muted, #8a847e); font-weight: 400; }
 
 /* O presente aparece na sacola, logo abaixo das peças. */
 #cartOverlay #cartGiftLine { padding: 0 26px; }
@@ -8306,3 +8291,6 @@ html.catalog-pending .footer {
 .cart-gift-tag { display: inline-block; margin-bottom: 4px; padding: 2px 8px; border-radius: 999px; background: var(--wine); color: #fff; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
 .cart-gift-qty { font-size: 11px; color: var(--co-muted, #8a847e); }
 #cartOverlay .cart-gift-item .cart-item-price { color: var(--wine); }
+
+/* Benefício desligado no painel (frete grátis ou desconto do Pix) some do site. */
+[data-benefit-show][hidden] { display: none !important; }

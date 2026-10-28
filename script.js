@@ -1664,17 +1664,55 @@ function getCartSubtotal() {
     return cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
 }
 
-// Frete grátis só na entrega MONTÊ (Fortaleza e região metropolitana), em compras a partir
-// de R$ 599 (soma das peças pelo preço de tabela, antes do desconto do Pix). As outras
-// cidades continuam pagando. O servidor aplica a mesma regra (shippingChargeFor) e é ele
-// que define o valor cobrado.
-const FREE_SHIPPING_MIN = 599;
+// Frete grátis só na entrega MONTÊ (Fortaleza e região metropolitana), a partir de um valor
+// em peças (preço de tabela, antes do Pix e do cupom; o frete não conta), e o desconto do
+// Pix nas peças. Os dois são editados no painel (aba Promoções) e chegam por /api/promocoes
+// (applyStoreBenefits); estes são os valores até a resposta chegar. O servidor aplica as
+// mesmas regras e é ele que define o valor cobrado.
+let FREE_SHIPPING_ENABLED = true;
+let FREE_SHIPPING_MIN = 599;
+let PIX_DISCOUNT_PERCENT = 5;
 const FREE_SHIPPING_OPTION_IDS = ["monte-fortaleza", "monte-regiao-metropolitana"];
+
+// Desconto do Pix em uma unidade, em centavos (mesma conta do servidor).
+function pixUnitDiscountCents(unitCents) {
+    return PIX_DISCOUNT_PERCENT > 0 ? unitCents - Math.round(unitCents * (100 - PIX_DISCOUNT_PERCENT) / 100) : 0;
+}
 
 function shippingPriceFor(option, subtotal = getCartSubtotal()) {
     if (!option) return 0;
     const price = Number(option.price || 0);
-    return FREE_SHIPPING_OPTION_IDS.includes(option.id) && subtotal >= FREE_SHIPPING_MIN ? 0 : price;
+    return FREE_SHIPPING_ENABLED && FREE_SHIPPING_OPTION_IDS.includes(option.id) && subtotal >= FREE_SHIPPING_MIN ? 0 : price;
+}
+
+const shortPrice = value => formatPrice(value).replace(",00", "");
+const percentText = value => String(value).replace(".", ",") + "%";
+
+// Textos da loja com o frete grátis e o desconto do Pix do painel. Benefício desligado some.
+function applyStoreBenefits(benefits) {
+    const shipping = benefits?.free_shipping;
+    const pix = benefits?.pix_discount;
+    if (shipping) {
+        FREE_SHIPPING_ENABLED = shipping.enabled !== false;
+        FREE_SHIPPING_MIN = Number(shipping.min_subtotal) || FREE_SHIPPING_MIN;
+    }
+    if (pix) PIX_DISCOUNT_PERCENT = pix.enabled === false ? 0 : Number(pix.percent) || 0;
+    const pixOn = PIX_DISCOUNT_PERCENT > 0;
+    const setText = (name, text) => document.querySelectorAll(`[data-benefit="${name}"]`).forEach(el => { el.textContent = text; });
+    const show = (name, visible) => document.querySelectorAll(`[data-benefit-show="${name}"]`).forEach(el => { el.hidden = !visible; });
+    setText("shipping-bar", `FRETE GRÁTIS EM FORTALEZA E REGIÃO A PARTIR DE ${shortPrice(FREE_SHIPPING_MIN)}`);
+    setText("shipping-benefit", FREE_SHIPPING_ENABLED ? `Frete grátis em Fortaleza e região acima de ${shortPrice(FREE_SHIPPING_MIN)}.` : "Envio com rastreio.");
+    setText("pix-bar", `${percentText(PIX_DISCOUNT_PERCENT)} OFF NO PIX`);
+    setText("pix-badge", `${percentText(PIX_DISCOUNT_PERCENT)} OFF`);
+    setText("pix-trust", `Pix com ${percentText(PIX_DISCOUNT_PERCENT)} OFF`);
+    setText("payment-hint", [
+        pixOn ? "O desconto do Pix vale para as peças." : "",
+        FREE_SHIPPING_ENABLED ? `Frete grátis em Fortaleza e região a partir de ${shortPrice(FREE_SHIPPING_MIN)}.` : ""
+    ].filter(Boolean).join(" "));
+    show("shipping", FREE_SHIPPING_ENABLED);
+    show("pix", pixOn);
+    show("shipping-and-pix", FREE_SHIPPING_ENABLED && pixOn);
+    show("payment-hint", FREE_SHIPPING_ENABLED || pixOn);
 }
 
 function shippingPriceLabel(option) {
@@ -1685,7 +1723,7 @@ function shippingPriceLabel(option) {
 // Cada peça continua custando pelo menos R$ 1,00 (mesma regra do servidor).
 const COUPON_MIN_UNIT_CENTS = 100;
 
-// Totais do checkout. Mesmo cálculo do servidor: 5% do Pix por unidade, arredondado em
+// Totais do checkout. Mesmo cálculo do servidor: desconto do Pix por unidade, arredondado em
 // centavos; o cupom vale nas peças (depois do Pix) e o frete fica integral.
 function checkoutTotals(subtotal = getCartSubtotal()) {
     const shipping = getShippingValue();
@@ -1695,7 +1733,7 @@ function checkoutTotals(subtotal = getCartSubtotal()) {
         "pix";
     const unitCents = item => Math.round(Number(item.price || 0) * 100);
     const pixDiscountCents = paymentMethod === "pix"
-        ? cart.reduce((sum, item) => sum + (unitCents(item) - Math.round(unitCents(item) * 0.95)) * Number(item.quantity || 0), 0)
+        ? cart.reduce((sum, item) => sum + pixUnitDiscountCents(unitCents(item)) * Number(item.quantity || 0), 0)
         : 0;
     const productCents = cart.reduce((sum, item) => sum + unitCents(item) * Number(item.quantity || 0), 0) - pixDiscountCents;
     const units = cart.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
@@ -1856,6 +1894,7 @@ async function loadStorePromotions() {
         const response = await fetch("/api/promocoes", { headers: { "Accept": "application/json" } });
         const body = await response.json();
         storePromotions = Array.isArray(body?.promotions) ? body.promotions : [];
+        if (body?.benefits) applyStoreBenefits(body.benefits);
     } catch {
         storePromotions = [];
     }
@@ -1936,9 +1975,27 @@ function saveSelectedGift(gift) {
     } catch {}
 }
 
+// Modelo tocado na escolha do presente, esperando a cor: { promotion_id, product_id }.
+let giftDraft = null;
+
 function chooseGift(promotionId, productId, variantId) {
+    giftDraft = { promotion_id: promotionId, product_id: productId };
     saveSelectedGift({ promotion_id: promotionId, product_id: productId, variant_id: variantId });
     updatePaymentSummary();
+}
+
+// Toque no card do modelo: com uma cor só, ela já fica escolhida; com várias, aparecem as cores.
+function pickGiftProduct(promotionId, productId) {
+    const tier = reachedTier();
+    const colors = tier ? tier.options.filter(option => String(option.product.id) === String(productId)) : [];
+    if (colors.length === 1) {
+        chooseGift(promotionId, productId, colors[0].variant.id);
+        return;
+    }
+    giftDraft = { promotion_id: promotionId, product_id: productId };
+    if (selectedGift && String(selectedGift.product_id) !== String(productId)) saveSelectedGift(null);
+    updatePaymentSummary();
+    document.getElementById("giftColors")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 // Escada de benefícios + escolha do presente. Devolve true quando está na tela (aí ela já
@@ -2006,23 +2063,54 @@ function renderGiftPerk({ subtotal, freeShippingApplies }) {
     if (selectedGift && !chosen) saveSelectedGift(null);
     const words = giftWords(reached.promotion);
     setHTML(document.getElementById("giftPickerTitle"), escapeHTML("Escolha " + words.mine + " de presente"));
+    // Um card por modelo, igual aos da loja; as cores aparecem ao tocar no modelo.
+    const groups = [];
+    reached.options.forEach(option => {
+        let group = groups.find(g => String(g.product.id) === String(option.product.id));
+        if (!group) groups.push(group = { product: option.product, options: [], matches: false });
+        group.options.push(option);
+        group.matches = group.matches || option.matches;
+    });
+    groups.sort((a, b) => (b.matches - a.matches) || (Number(b.product.price) - Number(a.product.price)) || a.product.name.localeCompare(b.product.name));
+    const draftId = chosen ? String(chosen.product.id)
+        : giftDraft && String(giftDraft.promotion_id) === String(reached.promotion.id) ? String(giftDraft.product_id) : "";
+    const active = groups.find(group => String(group.product.id) === draftId) || null;
+    if (!active) giftDraft = null;
+
     setHTML(document.getElementById("giftPickerHint"), chosen
         ? `Seu presente: <strong>${escapeHTML(chosen.product.name)}</strong> · ${escapeHTML(chosen.color || "Cor única")}`
-        : "Toque no modelo que você quer ganhar.");
-    const signature = reached.promotion.id + ":" + reached.options.map(o => o.variant.id + (chosen && o.variant.id === chosen.variant.id ? "*" : "")).join("|");
+        : active ? "Agora escolha a cor." : "Toque no modelo que você quer ganhar.");
+    const signature = reached.promotion.id + ":" + draftId + ":" + (chosen ? chosen.variant.id : "") + ":" +
+        reached.options.map(o => o.variant.id).join("|");
     if (optionsBox.dataset.signature !== signature) {
         optionsBox.dataset.signature = signature;
-        setHTML(optionsBox, reached.options.map(option => {
-            const selected = chosen && String(option.variant.id) === String(chosen.variant.id);
-            const image = smallImage(Array.isArray(option.product.images) ? option.product.images[0] || "" : "");
-            return `<button type="button" class="gift-option${selected ? " is-selected" : ""}" role="radio" aria-checked="${selected ? "true" : "false"}"
-                data-click="chooseGift" data-args="${escapeHTML(JSON.stringify([reached.promotion.id, option.product.id, option.variant.id]))}">
-                <span class="gift-option-media">${image ? `<img src="${escapeHTML(image)}" alt="" loading="lazy">` : ""}${option.matches ? '<em class="gift-option-match">Combina com a sua sacola</em>' : ""}</span>
-                <span class="gift-option-name">${escapeHTML(option.product.name)}</span>
-                <span class="gift-option-color">${escapeHTML(option.color || "Cor única")}</span>
-                <span class="gift-option-price"><s>${formatPrice(option.product.price)}</s> Grátis</span>
+        setHTML(optionsBox, groups.map(group => {
+            const isActive = active === group;
+            const image = smallImage(Array.isArray(group.product.images) ? group.product.images[0] || "" : "");
+            const colors = group.options.length;
+            const colorText = isActive && chosen ? chosen.color || "Cor única" : colors === 1 ? group.options[0].color || "Cor única" : colors + " cores";
+            return `<button type="button" class="product-card gift-card${isActive ? " is-active" : ""}${isActive && chosen ? " is-selected" : ""}" aria-pressed="${isActive ? "true" : "false"}"
+                data-click="pickGiftProduct" data-args="${escapeHTML(JSON.stringify([reached.promotion.id, group.product.id]))}">
+                <span class="product-image">${group.matches ? '<span class="product-badge">COMBINA COM A SUA SACOLA</span>' : ""}${image ? `<img src="${escapeHTML(image)}" alt="${escapeHTML(group.product.name)}" loading="lazy" decoding="async">` : ""}</span>
+                <span class="product-info">
+                    <span class="product-name">${escapeHTML(group.product.name)}</span>
+                    <span class="product-price"><span class="old-price">${formatPrice(group.product.price)}</span><span class="sale-price">GRÁTIS</span></span>
+                    <span class="gift-card-colors">${escapeHTML(colorText)}</span>
+                </span>
             </button>`;
         }).join(""));
+        const colorsBox = document.getElementById("giftColors");
+        if (colorsBox) {
+            colorsBox.hidden = !(active && active.options.length > 1);
+            if (!colorsBox.hidden) {
+                setHTML(colorsBox, `<p class="gift-colors-title">Escolha a cor do ${escapeHTML(active.product.name)}</p>
+                    <div class="variant-options">${active.options.map(option => {
+                        const selected = chosen && String(option.variant.id) === String(chosen.variant.id);
+                        return `<button type="button" class="variant-option${selected ? " active" : ""}" aria-pressed="${selected ? "true" : "false"}"
+                            data-click="chooseGift" data-args="${escapeHTML(JSON.stringify([reached.promotion.id, active.product.id, option.variant.id]))}">${escapeHTML(option.color || "Cor única")}</button>`;
+                    }).join("")}</div>`);
+            }
+        }
     }
 
     if (line && chosen) {
@@ -2278,8 +2366,8 @@ async function checkout() {
     // Promoção de presente: com a sacola no valor mínimo, a cliente escolhe o presente antes.
     const gift=currentGift();
     if(!gift&&giftEligible()){
-        document.getElementById("giftPicker")?.scrollIntoView({behavior:"smooth",block:"center"});
-        showToast("Escolha o seu presente para finalizar.");
+        document.getElementById(giftDraft?"giftColors":"giftPicker")?.scrollIntoView({behavior:"smooth",block:"center"});
+        showToast(giftDraft?"Escolha a cor do seu presente para finalizar.":"Escolha o seu presente para finalizar.");
         return;
     }
 
@@ -3360,7 +3448,9 @@ function renderCheckoutNote(summary) {
     if (couponRow) couponRow.hidden = !(totals.couponDiscount > 0);
     setNoteText("noteCouponLabel", appliedCoupon ? "Cupom " + appliedCoupon.code : "Cupom");
     setNoteText("noteCoupon", totals.couponDiscount > 0 ? "-" + formatPrice(totals.couponDiscount) : "");
-    setNoteText("notePayment", totals.paymentMethod === "pix" ? "Pix · 5% off nas peças" : "Cartão de crédito");
+    setNoteText("notePayment", totals.paymentMethod === "pix"
+        ? (PIX_DISCOUNT_PERCENT > 0 ? `Pix · ${percentText(PIX_DISCOUNT_PERCENT)} off nas peças` : "Pix")
+        : "Cartão de crédito");
     setNoteText("noteTotal", formatPrice(totals.total));
 
     const signature = [noteValue("customerName"), noteValue("customerCpf"), address, cart.length, totals.total].join("|");
@@ -3510,10 +3600,8 @@ function updateCheckoutProgress() {
 }
 
 function renderCheckoutExtras({ subtotal, shipping, pixDiscount, couponDiscount = 0, paymentMethod }) {
-    const potential = cart.reduce((sum, item) => {
-        const unitCents = Math.round(Number(item.price || 0) * 100);
-        return sum + (unitCents - Math.round(unitCents * 0.95)) * Number(item.quantity || 0);
-    }, 0) / 100;
+    const potential = cart.reduce((sum, item) =>
+        sum + pixUnitDiscountCents(Math.round(Number(item.price || 0) * 100)) * Number(item.quantity || 0), 0) / 100;
 
     const perk = document.getElementById("pixPerk");
     const perkText = document.getElementById("pixPerkText");
@@ -3533,10 +3621,10 @@ function renderCheckoutExtras({ subtotal, shipping, pixDiscount, couponDiscount 
     const freePerkText = document.getElementById("freeShippingPerkText");
     const freePerkFill = document.getElementById("freeShippingPerkFill");
     const otherCity = !!selectedShippingOption && !FREE_SHIPPING_OPTION_IDS.includes(selectedShippingOption.id);
-    const giftPromoShown = renderGiftPerk({ subtotal, freeShippingApplies: !otherCity });
+    const giftPromoShown = renderGiftPerk({ subtotal, freeShippingApplies: FREE_SHIPPING_ENABLED && !otherCity });
     if (freePerk && freePerkText) {
         const missing = Math.max(0, FREE_SHIPPING_MIN - subtotal);
-        freePerk.hidden = !cart.length || otherCity || giftPromoShown;
+        freePerk.hidden = !cart.length || otherCity || giftPromoShown || !FREE_SHIPPING_ENABLED;
         freePerk.classList.toggle("is-active", missing === 0);
         setHTML(freePerkText, missing === 0
             ? (selectedShippingOption ? "Você ganhou <strong>frete grátis</strong>!" : "Frete grátis para <strong>Fortaleza e região</strong> nesta compra")
@@ -3734,7 +3822,7 @@ function browseNovidades() {
 }
 
 registerClickActions({
-    applyCoupon, browseNovidades, chooseGift, changeQuantity, checkout, closeCart, closeCartOutside, closeMobileMenu,
+    applyCoupon, browseNovidades, chooseGift, pickGiftProduct, changeQuantity, checkout, closeCart, closeCartOutside, closeMobileMenu,
     closeProductImageLightbox, closeProductModal, closeSearch, goToNovidades, navigateProductLightbox,
     nextCategoryPage, nextCollectionPage, nextNewPage, nextSalePage, nextSlide, openCart, openSearch,
     openWhatsAppReservation, previousCategoryPage, previousCollectionPage, previousNewPage,
