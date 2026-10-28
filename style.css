@@ -6643,12 +6643,24 @@ html.intro-skipped .header { animation-delay: .5s; }
        textos pequenos sobre o branco, que no cinza claro ficariam difíceis de ler. */
     --co-accent: #959595;
     --co-accent-deep: #666;
-    /* Botões de vidro: cinza translúcido com pouca opacidade e desfoque do que passa atrás. */
-    --co-glass: linear-gradient(135deg, rgba(255, 255, 255, .55), rgba(149, 149, 149, .16));
-    --co-glass-hover: linear-gradient(135deg, rgba(255, 255, 255, .4), rgba(149, 149, 149, .3));
-    --co-glass-line: rgba(149, 149, 149, .38);
-    --co-glass-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 10px 24px -16px rgba(0, 0, 0, .3);
-    --co-glass-blur: blur(14px) saturate(140%);
+    /* Vidro: quase transparente, com reflexo de luz no alto, borda clara e desfoque forte
+       do que passa atrás. O cinza aparece só como um leve tom embaixo. */
+    --co-glass:
+        radial-gradient(120% 70% at 50% 0%, rgba(255, 255, 255, .7), rgba(255, 255, 255, 0) 62%),
+        linear-gradient(180deg, rgba(255, 255, 255, .1), rgba(149, 149, 149, .1));
+    --co-glass-hover:
+        radial-gradient(120% 70% at 50% 0%, rgba(255, 255, 255, .8), rgba(255, 255, 255, 0) 62%),
+        linear-gradient(180deg, rgba(255, 255, 255, .12), rgba(149, 149, 149, .22));
+    --co-glass-line: rgba(149, 149, 149, .3);
+    --co-glass-shadow:
+        inset 0 1px 1px rgba(255, 255, 255, .95),
+        inset 0 -1px 1px rgba(149, 149, 149, .2),
+        inset 0 0 14px rgba(255, 255, 255, .45),
+        0 8px 22px -14px rgba(0, 0, 0, .28);
+    --co-glass-blur: blur(20px) saturate(180%);
+    /* Cabeçalho e barra do total: placas de vidro sobre o conteúdo que rola. */
+    --co-glass-surface: rgba(255, 255, 255, .58);
+    --co-glass-surface-blur: blur(24px) saturate(180%);
     background: rgba(12, 10, 9, .46);
     -webkit-backdrop-filter: blur(3px);
     backdrop-filter: blur(3px);
@@ -6673,8 +6685,13 @@ html.intro-skipped .header { animation-delay: .5s; }
     align-items: center;
     row-gap: 18px;
     padding: 22px 26px 16px;
-    border-bottom: 1px solid var(--co-line);
-    background: #fff;
+    border-bottom: 1px solid rgba(149, 149, 149, .22);
+    /* Vidro: as peças passam desfocadas por baixo do cabeçalho fixo. Mais denso embaixo:
+       perto da borda o desfoque espelha o conteúdo e ele brigaria com as etapas. */
+    background: linear-gradient(180deg, var(--co-glass-surface), rgba(255, 255, 255, .72) 50%, rgba(255, 255, 255, .94) 82%);
+    -webkit-backdrop-filter: var(--co-glass-surface-blur);
+    backdrop-filter: var(--co-glass-surface-blur);
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, .6);
 }
 
 #cartOverlay .cart-kicker {
@@ -7461,12 +7478,13 @@ html.intro-skipped .header { animation-delay: .5s; }
     gap: 16px;
     margin-top: 22px;
     padding: 14px 26px calc(14px + env(safe-area-inset-bottom, 0px));
-    border-top: 1px solid var(--co-line);
-    /* Translúcida: o que rola por baixo aparece desfocado atrás do botão de vidro. */
-    background: rgba(255, 255, 255, .88);
-    -webkit-backdrop-filter: blur(18px) saturate(140%);
-    backdrop-filter: blur(18px) saturate(140%);
-    box-shadow: 0 -18px 30px -26px rgba(0, 0, 0, .45);
+    border-top: 1px solid rgba(149, 149, 149, .22);
+    /* Vidro: o que rola por baixo aparece desfocado atrás do total e do botão. Mais denso
+       embaixo: perto da borda o desfoque espelha o conteúdo e o texto de trás vazaria nítido. */
+    background: linear-gradient(180deg, var(--co-glass-surface), rgba(255, 255, 255, .66) 60%, rgba(255, 255, 255, .95) 80%);
+    -webkit-backdrop-filter: var(--co-glass-surface-blur);
+    backdrop-filter: var(--co-glass-surface-blur);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7), 0 -18px 30px -26px rgba(0, 0, 0, .35);
 }
 
 .checkout-bar-total { display: flex; flex-direction: column; flex: 0 1 auto; min-width: 0; max-width: 50%; }
@@ -7486,10 +7504,12 @@ html.intro-skipped .header { animation-delay: .5s; }
     margin: 0;
     padding: 0 20px;
     overflow: hidden;
-    border: 1px solid rgba(149, 149, 149, .45);
+    border: 1px solid rgba(149, 149, 149, .38);
     border-radius: 999px;
     /* Vidro com um pouco mais de cinza que os outros botões: é a ação principal. */
-    background: linear-gradient(135deg, rgba(149, 149, 149, .3), rgba(149, 149, 149, .14));
+    background:
+        radial-gradient(120% 70% at 50% 0%, rgba(255, 255, 255, .75), rgba(255, 255, 255, 0) 60%),
+        linear-gradient(180deg, rgba(149, 149, 149, .08), rgba(149, 149, 149, .24));
     color: var(--co-ink);
     -webkit-backdrop-filter: var(--co-glass-blur);
     backdrop-filter: var(--co-glass-blur);
@@ -7497,7 +7517,7 @@ html.intro-skipped .header { animation-delay: .5s; }
     letter-spacing: .2em;
     cursor: pointer;
     transition: background .3s ease, transform .2s ease, box-shadow .3s ease;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .85), 0 14px 26px -16px rgba(0, 0, 0, .35);
+    box-shadow: var(--co-glass-shadow);
 }
 
 #cartOverlay .checkout-button::before {
@@ -7518,7 +7538,11 @@ html.intro-skipped .header { animation-delay: .5s; }
     animation: coShine 4.5s ease-in-out 1.2s infinite;
 }
 
-#cartOverlay .checkout-button:hover { background: linear-gradient(135deg, rgba(149, 149, 149, .42), rgba(149, 149, 149, .24)); }
+#cartOverlay .checkout-button:hover {
+    background:
+        radial-gradient(120% 70% at 50% 0%, rgba(255, 255, 255, .8), rgba(255, 255, 255, 0) 60%),
+        linear-gradient(180deg, rgba(149, 149, 149, .14), rgba(149, 149, 149, .36));
+}
 #cartOverlay .checkout-button:active { transform: scale(.98); }
 #cartOverlay .checkout-button:disabled { opacity: .75; cursor: wait; }
 
