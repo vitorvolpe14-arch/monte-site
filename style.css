@@ -6216,8 +6216,8 @@ canvas {
 /* =====================================================
    ABERTURA — logo desenhada e 1 ano da MONTÊ, em cortinas (parallax)
    Linha do tempo:
-   1. A abertura da loja: traço das letras (0,3s), preenchimento, filete
-      bordô e assinatura; a cortina branca sobe (2,45s), uma faixa no cinza do bolo
+   1. A abertura da loja: traço das letras (0,3s) e preenchimento da logo
+      (só a logo, sem texto); a cortina branca sobe (2,45s), uma faixa no cinza do bolo
       vem logo atrás e a logo sobe mais devagar.
    2. Por baixo, o bolo em traço creme no cinza (3,1–4,8s) com as etiquetas
       "1 ANO" e "MONTÊ"; a vela de faísca acende com as estrelinhas; a
@@ -6532,34 +6532,6 @@ html.intro-playing body {
     to { fill-opacity: 1; stroke-opacity: 0; }
 }
 
-.intro-rule {
-    display: block;
-    width: min(44vw, 210px);
-    height: 1px;
-    background: #6D2234;
-    transform: scaleX(0);
-    animation: introRule .85s cubic-bezier(.65, 0, .35, 1) 1.55s forwards;
-}
-
-@keyframes introRule {
-    to { transform: scaleX(1); }
-}
-
-.intro-tagline {
-    margin: 0;
-    padding-left: .62em;
-    font: 500 10px/1 "DM Sans", Arial, sans-serif;
-    letter-spacing: .62em;
-    color: #6D2234;
-    opacity: 0;
-    animation: introTag 1.05s ease 1.75s forwards;
-}
-
-@keyframes introTag {
-    from { opacity: 0; letter-spacing: .95em; }
-    to { opacity: 1; letter-spacing: .62em; }
-}
-
 /* O site aparece depois da cortina: foto do topo assenta, cabeçalho desce. */
 html:not(.intro-seen) #carouselSlides {
     animation: introHero 2s cubic-bezier(.2, .7, .2, 1) 6.6s both;
@@ -6593,14 +6565,10 @@ html.intro-skipped .header { animation-delay: .5s; }
 .intro-reduced .intro-layer,
 .intro-reduced .intro-stage,
 .intro-reduced .intro-wordmark path,
-.intro-reduced .intro-rule,
-.intro-reduced .intro-tagline,
 .intro-reduced #carouselSlides,
 .intro-reduced .shipping-bar,
 .intro-reduced .header { animation: none; }
 .intro-reduced .intro-wordmark path { fill-opacity: 1; stroke: none; }
-.intro-reduced .intro-rule { transform: none; }
-.intro-reduced .intro-tagline { opacity: 1; }
 
 @keyframes introFade {
     to { opacity: 0; visibility: hidden; pointer-events: none; }
@@ -6609,9 +6577,7 @@ html.intro-skipped .header { animation-delay: .5s; }
 @media (prefers-reduced-motion: reduce) {
     .intro-layer-cake, .intro-layer-back { display: none; }
     .intro-wordmark path { animation: none; fill-opacity: 1; stroke: none; }
-    .intro-layer, .intro-stage, .intro-rule, .intro-tagline { animation: none; }
-    .intro-rule { transform: none; }
-    .intro-tagline { opacity: 1; }
+    .intro-layer, .intro-stage { animation: none; }
     .monte-intro { animation: introFade .45s ease .9s forwards; }
     html:not(.intro-seen) #carouselSlides,
     html:not(.intro-seen) .shipping-bar,
@@ -7970,8 +7936,7 @@ body.cart-open .toast { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); 
     .footer-rights,
     .footer-credit,
     .footer-credit a,
-    .shipping-bar,
-    .intro-tagline {
+    .shipping-bar {
         font-size: 11px !important;
     }
 }

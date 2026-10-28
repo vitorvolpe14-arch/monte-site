@@ -3368,7 +3368,6 @@ document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
     });
 
     const stages = intro.querySelectorAll(".intro-stage");
-    const tagline = intro.querySelector(".intro-tagline");
     function onMove(event) {
         const x = event.clientX / window.innerWidth - .5;
         const y = event.clientY / window.innerHeight - .5;
@@ -3376,7 +3375,6 @@ document.addEventListener("DOMContentLoaded", setupPaymentMethodSelector);
             stage.style.setProperty("--ix", (x * -16).toFixed(1) + "px");
             stage.style.setProperty("--iy", (y * -12).toFixed(1) + "px");
         });
-        if (tagline) tagline.style.translate = (x * 10).toFixed(1) + "px " + (y * 8).toFixed(1) + "px";
     }
     window.addEventListener("pointermove", onMove, { passive: true });
 
