@@ -465,19 +465,22 @@ async function createOrGetOlistOrder(order) {
                 quantidade: Math.max(1, Number(item.quantity || 1)),
                 valorUnitario: isPix ? pixDiscountedUnitCents(item.price) / 100 : Number(item.price || 0)
             }];
+        const color = safeString(item.variant_color || item.color);
+        const info = [color ? "Cor: " + color : "", isGiftItem(item) ? "Presente: " + safeString(item.promotion_name || "promoção") : ""].filter(Boolean).join(" | ");
         for (const line of lines) {
             orderItems.push({
                 produto: {id:Number(product.id), tipo:"P"},
                 quantidade: line.quantidade,
                 valorUnitario: line.valorUnitario,
-                infoAdicional: safeString(item.variant_color || item.color)
-                    ? "Cor: " + safeString(item.variant_color || item.color)
-                    : null
+                infoAdicional: info || null,
+                gift: isGiftItem(item)
             });
         }
     }
 
     if (!orderItems.length) throw new Error("OLIST_ORDER_WITHOUT_ITEMS");
+    const giftLines = orderItems.filter(line => line.gift);
+    orderItems.forEach(line => delete line.gift);
 
     const contactId = await findOrCreateOlistContact(order);
     const paymentIds = await findOlistPaymentIds(order.payment_method);
@@ -520,6 +523,17 @@ async function createOrGetOlistOrder(order) {
         const onlyOptionalProblem = error.status === 400 &&
             Array.isArray(error.data?.detalhes) && error.data.detalhes.length &&
             error.data.detalhes.every(d => optional(safeString(d?.campo)));
+        // Presente da promoção (valor zero) recusado: o pedido vai sem ele e o presente fica
+        // escrito na observação, para a loja lançar à parte.
+        if (!onlyOptionalProblem && error.status === 400 && giftLines.length) {
+            console.warn("Olist recusou o pedido com o presente; enviando sem ele:", ecommerceNumber);
+            payload.itens = orderItems.filter(line => !giftLines.includes(line));
+            payload.observacoesInternas += " | PRESENTE (lançar à parte): " +
+                orderGiftItems(order).map(item => safeString(item.name) + (item.variant_color ? " " + safeString(item.variant_color) : "") + (item.variant_sku ? " SKU " + safeString(item.variant_sku) : "")).join(", ");
+            created = await olistRequest("/pedidos", {method:"POST", body:JSON.stringify(payload)});
+            if (!created?.id) throw new Error("OLIST_ORDER_CREATE_FAILED");
+            return {id:Number(created.id), numeroPedido:created.numeroPedido || null, created:true};
+        }
         if (!onlyOptionalProblem) throw error;
         const rejected = error.data.detalhes.map(d => safeString(d.campo));
         console.warn("Olist recusou campos opcionais; criando o pedido sem eles:", ecommerceNumber, rejected.join(", "));
@@ -1020,7 +1034,7 @@ async function sendWhatsAppAdminNewOrderNotification(order) {
             const name = safeString(item.name || item.product_name || item.description) || "Produto";
             const qty = Math.max(1, Number(item.quantity || 1));
             const unit = Number(item.price ?? item.unit_price ?? 0);
-            return qty + "x " + name + (variant ? " (" + variant + ")" : "") + " — " + formatWhatsAppCurrency(unit);
+            return qty + "x " + name + (variant ? " (" + variant + ")" : "") + " — " + (isGiftItem(item) ? "PRESENTE" : formatWhatsAppCurrency(unit));
         }).join("\n")
         : "Consultar itens no painel administrativo.";
     const customerData = "Tel.: " + customerPhone + "\nCPF: " + cpf + "\nEndereço: " + formatWhatsAppAddress(order.customer_address);
@@ -1099,6 +1113,7 @@ async function sendOrderConfirmationEmail(order) {
     const customerName = safeString(order.customer_name).split(/\s+/)[0] || "cliente";
     const total = Number(order.total || 0);
     const purchasesUrl = PUBLIC_SITE_URL + "/minhas-compras.html?order_nsu=" + encodeURIComponent(orderCode);
+    const gifts = orderGiftItems(order).map(item => safeString(item.name) + (item.variant_color ? " (" + safeString(item.variant_color) + ")" : "")).join(", ");
     const html = "<html><body style=\"margin:0;background:#f7f5f2;font-family:Arial,Helvetica,sans-serif;color:#171717;\">" +
       "<div style=\"max-width:620px;margin:0 auto;padding:40px 20px;\"><div style=\"background:#111;color:#fff;text-align:center;padding:24px 20px;letter-spacing:6px;font-size:24px;\">MONTÊ</div>" +
       "<div style=\"background:#fff;padding:38px 30px;\"><p style=\"margin:0 0 12px;font-size:12px;letter-spacing:2px;color:#777;\">COMPRA CONFIRMADA</p>" +
@@ -1106,11 +1121,13 @@ async function sendOrderConfirmationEmail(order) {
       "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Seu pagamento foi confirmado e seu pedido já está registrado na MONTÊ.</p>" +
       "<div style=\"margin:28px 0;padding:20px;background:#f7f5f2;\"><p style=\"margin:0 0 8px;font-size:11px;letter-spacing:1.5px;color:#777;\">NÚMERO DO PEDIDO</p><strong style=\"font-size:20px;\">" + escapeEmailHtml(orderCode) + "</strong><p style=\"margin:14px 0 0;font-size:14px;color:#555;\">Total: <strong>R$ " + total.toFixed(2).replace(".", ",") + "</strong></p></div>" +
       (orderHasPresale(order) ? "<p style=\"font-size:15px;line-height:1.7;color:#555;\"><strong>Pré-venda:</strong> seu pedido tem peça em produção, com estoque limitado. A entrega é em " + PRESALE_MIN_BUSINESS_DAYS + " dias úteis. A MONTÊ confirma o seu pedido em breve; se não for possível atender, o valor pago é devolvido integralmente.</p>" : "") +
+      (gifts ? "<p style=\"font-size:15px;line-height:1.7;color:#555;\"><strong>Seu presente:</strong> " + escapeEmailHtml(gifts) + " vai junto no pedido.</p>" : "") +
       "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Acompanhe o status do seu pedido e novas atualizações pela área <strong>Minhas Compras</strong>.</p>" +
       "<div style=\"text-align:center;margin:30px 0;\"><a href=\"" + purchasesUrl + "\" style=\"display:inline-block;background:#111;color:#fff;text-decoration:none;padding:15px 26px;font-size:13px;letter-spacing:1.5px;\">ACESSAR MINHAS COMPRAS</a></div></div>" +
       "<p style=\"text-align:center;font-size:11px;color:#999;margin:20px 0;\">MONTÊ — Bolsas e acessórios</p></div></body></html>";
     const text = "Compra confirmada na MONTÊ\n\nPedido: " + orderCode + "\nTotal: R$ " + total.toFixed(2).replace(".", ",") +
         (orderHasPresale(order) ? "\n\nPré-venda: a entrega é em " + PRESALE_MIN_BUSINESS_DAYS + " dias úteis." : "") +
+        (gifts ? "\n\nSeu presente: " + gifts + " vai junto no pedido." : "") +
         "\n\nAcesse: " + purchasesUrl;
     const idempotencyKey = "monte-order-confirmation-" + String(order.order_nsu);
     const response = await fetch("https://api.resend.com/emails", {
@@ -1169,7 +1186,7 @@ async function sendAdminSaleNotificationEmail(order) {
             const color = safeString(item.variant_color || item.color);
             const qty = Math.max(1, Number(item.quantity || 1));
             const unit = Number(item.price ?? item.unit_price ?? 0);
-            return qty + "x " + escapeEmailHtml(name) + (color ? " (" + escapeEmailHtml(color) + ")" : "") + (item.presale === true ? " — PRÉ-VENDA" : "") + " — R$ " + unit.toFixed(2).replace(".", ",");
+            return qty + "x " + escapeEmailHtml(name) + (color ? " (" + escapeEmailHtml(color) + ")" : "") + (item.presale === true ? " — PRÉ-VENDA" : "") + (isGiftItem(item) ? " — PRESENTE (" + escapeEmailHtml(item.promotion_name || "promoção") + ")" : " — R$ " + unit.toFixed(2).replace(".", ","));
         }).join("<br>")
         : "Consultar itens do pedido no painel.";
     const html =
@@ -4443,6 +4460,219 @@ app.delete("/api/admin/coupons/:id", requireAdmin, async (req, res) => {
 });
 
 /* =====================================================
+   PROMOÇÕES DE PRESENTE (cadastradas no painel, aba Promoções)
+   Compra com as peças somando pelo menos min_subtotal (preço de
+   tabela, antes do Pix e do cupom; o frete não conta) ganha uma peça
+   da categoria da promoção, à escolha da cliente, entre as ativas com
+   estoque. A loja define início e fim. Com mais de uma promoção no ar,
+   elas viram degraus: vale o presente do maior degrau alcançado.
+   O presente entra no pedido com preço zero: baixa o estoque como as
+   outras peças, mas não vai para a InfinitePay.
+   Tabela: backend/sql/promocoes.sql.
+===================================================== */
+const PROMOTION_CATEGORIES = { cintos: "cinto", acessorios: "acessório", bolsas: "bolsa" };
+
+const isGiftItem = item => item?.gift === true;
+const orderGiftItems = order => (Array.isArray(order?.items) ? order.items : []).filter(isGiftItem);
+
+// Promoções ativas que ainda não acabaram (as agendadas também, para o cache servir quando
+// elas começarem). Quem usa filtra pelo horário com promotionLive.
+async function loadPromotions() {
+    const rows = await supabaseRequest(
+        "promotions?active=eq.true&ends_at=gt." + encodeURIComponent(new Date().toISOString()) +
+        "&select=id,name,min_subtotal,gift_category,starts_at,ends_at,banner_text&order=min_subtotal.asc",
+        { method: "GET" }
+    );
+    return Array.isArray(rows) ? rows : [];
+}
+
+function promotionLive(promotion, now = Date.now()) {
+    return Date.parse(promotion.starts_at) <= now && now < Date.parse(promotion.ends_at);
+}
+
+// O degrau alcançado: a promoção no ar de maior valor mínimo que as peças cobrem.
+function reachedPromotion(promotions, productsSubtotal, now = Date.now()) {
+    return promotions
+        .filter(promotion => promotionLive(promotion, now) && productsSubtotal >= Number(promotion.min_subtotal))
+        .sort((a, b) => Number(b.min_subtotal) - Number(a.min_subtotal))[0] || null;
+}
+
+// Página da loja: promoções no ar agora.
+app.get("/api/promocoes", async (req, res) => {
+    try {
+        const promotions = await cachedPublic("promotions", 30 * 1000, loadPromotions);
+        res.setHeader("Cache-Control", "public, max-age=30");
+        return res.json({
+            success: true,
+            promotions: promotions.filter(promotion => promotionLive(promotion)).map(promotion => ({
+                id: promotion.id,
+                name: promotion.name,
+                min_subtotal: Number(promotion.min_subtotal),
+                gift_category: promotion.gift_category,
+                ends_at: promotion.ends_at,
+                banner_text: promotion.banner_text || null
+            }))
+        });
+    } catch (error) {
+        console.error("Promoções:", error);
+        return res.json({ success: true, promotions: [] });
+    }
+});
+
+// Presente escolhido pela cliente, conferido no cadastro: peça ativa da categoria da
+// promoção, fora da pré-venda, com a cor ativa e em estoque. Devolve o item do pedido ou null.
+async function loadGiftProduct(promotion, productId, variantId) {
+    const rows = await supabaseRequest(
+        "products?id=eq." + encodeURIComponent(productId) +
+        "&active=eq.true&is_presale=eq.false&category=eq." + encodeURIComponent(promotion.gift_category) +
+        "&select=id,name,product_variants(id,color,sku,stock,active,olist_product_id)" +
+        "&product_variants.id=eq." + encodeURIComponent(variantId),
+        { method: "GET" }
+    );
+    const product = Array.isArray(rows) ? rows[0] : null;
+    const variant = product?.product_variants?.[0];
+    if (!product || !variant || variant.active === false || Number(variant.stock || 0) < 1) return null;
+    return {
+        item: {
+            id: product.id,
+            name: product.name,
+            description: product.name + " (presente)",
+            sku: variant.sku || null,
+            variant_id: variant.id,
+            variant_color: variant.color || null,
+            variant_sku: variant.sku || null,
+            quantity: 1,
+            price: 0,
+            presale: false,
+            gift: true,
+            promotion_id: promotion.id,
+            promotion_name: promotion.name
+        },
+        variant
+    };
+}
+
+// Promoções no painel. Devolve { promotion } ou { error }.
+function sanitizePromotionPayload(body, { partial = false } = {}) {
+    const b = body || {};
+    const promotion = {};
+    const has = key => Object.prototype.hasOwnProperty.call(b, key);
+    if (!partial || has("name")) {
+        const name = safeString(b.name);
+        if (name.length < 2 || name.length > 80) return { error: "Dê um nome à promoção (até 80 letras)." };
+        promotion.name = name;
+    }
+    if (!partial || has("min_subtotal")) {
+        const min = Number(b.min_subtotal);
+        if (!Number.isFinite(min) || min <= 0 || min > 100000) return { error: "Informe o valor mínimo em peças." };
+        promotion.min_subtotal = Number(min.toFixed(2));
+    }
+    if (!partial || has("gift_category")) {
+        const category = safeString(b.gift_category);
+        if (!PROMOTION_CATEGORIES[category]) return { error: "Escolha a categoria do presente." };
+        promotion.gift_category = category;
+    }
+    for (const key of ["starts_at", "ends_at"]) {
+        if (partial && !has(key)) continue;
+        const time = new Date(safeString(b[key]));
+        if (!safeString(b[key]) || Number.isNaN(time.getTime())) return { error: key === "starts_at" ? "Informe quando a promoção começa." : "Informe quando a promoção termina." };
+        promotion[key] = time.toISOString();
+    }
+    if (promotion.starts_at && promotion.ends_at && promotion.ends_at <= promotion.starts_at) {
+        return { error: "O fim precisa ser depois do início." };
+    }
+    if (!partial || has("banner_text")) {
+        const banner = safeString(b.banner_text);
+        if (banner.length > 90) return { error: "O aviso da barra do topo vai até 90 letras." };
+        promotion.banner_text = banner || null;
+    }
+    if (!partial || has("active")) promotion.active = b.active === undefined ? true : b.active === true;
+    return { promotion };
+}
+
+app.get("/api/admin/promotions", requireAdmin, async (req, res) => {
+    try {
+        const promotions = await supabaseRequest("promotions?select=*&order=starts_at.desc", { method: "GET" });
+        // Pedidos que levaram o presente de cada promoção (o item guarda promotion_id).
+        const list = Array.isArray(promotions) ? promotions : [];
+        const orders = await Promise.all(list.map(promotion => supabaseRequest(
+            "orders?items=cs." + encodeURIComponent(JSON.stringify([{ promotion_id: promotion.id }])) +
+            "&select=id,order_code,order_nsu,customer_name,status,total,items,created_at&order=created_at.desc&limit=200",
+            { method: "GET" }
+        ).catch(() => [])));
+        return res.json({
+            success: true,
+            promotions: list.map((promotion, index) => ({
+                ...promotion,
+                orders: (orders[index] || []).map(order => ({
+                    id: order.id,
+                    order_code: order.order_code,
+                    order_nsu: order.order_nsu,
+                    customer_name: order.customer_name,
+                    status: order.status,
+                    total: order.total,
+                    created_at: order.created_at,
+                    gifts: orderGiftItems(order).filter(item => item.promotion_id === promotion.id)
+                        .map(item => ({ name: item.name, color: item.variant_color || null }))
+                }))
+            }))
+        });
+    } catch (error) {
+        console.error("Admin promoções GET:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível carregar as promoções." });
+    }
+});
+
+app.post("/api/admin/promotions", requireAdmin, async (req, res) => {
+    try {
+        const { promotion, error } = sanitizePromotionPayload(req.body);
+        if (error) return res.status(400).json({ success: false, message: error });
+        const saved = await supabaseRequest("promotions", { method: "POST", body: JSON.stringify(promotion) });
+        publicCache.delete("promotions");
+        return res.status(201).json({ success: true, promotion: saved?.[0] || saved });
+    } catch (error) {
+        console.error("Admin promoções POST:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível salvar a promoção." });
+    }
+});
+
+app.patch("/api/admin/promotions/:id", requireAdmin, async (req, res) => {
+    try {
+        const id = encodeURIComponent(req.params.id);
+        const { promotion, error } = sanitizePromotionPayload(req.body, { partial: true });
+        if (error) return res.status(400).json({ success: false, message: error });
+        const current = (await supabaseRequest(`promotions?id=eq.${id}&select=starts_at,ends_at`, { method: "GET" }))?.[0];
+        if (!current) return res.status(404).json({ success: false, message: "Promoção não encontrada." });
+        const startsAt = promotion.starts_at || current.starts_at;
+        const endsAt = promotion.ends_at || current.ends_at;
+        if (Date.parse(endsAt) <= Date.parse(startsAt)) {
+            return res.status(400).json({ success: false, message: "O fim precisa ser depois do início." });
+        }
+        const saved = await supabaseRequest(`promotions?id=eq.${id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ ...promotion, updated_at: new Date().toISOString() })
+        });
+        publicCache.delete("promotions");
+        return res.json({ success: true, promotion: saved?.[0] || saved });
+    } catch (error) {
+        console.error("Admin promoções PATCH:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível salvar a promoção." });
+    }
+});
+
+// Os pedidos guardam o nome da promoção no item do presente: o histórico continua.
+app.delete("/api/admin/promotions/:id", requireAdmin, async (req, res) => {
+    try {
+        await supabaseRequest(`promotions?id=eq.${encodeURIComponent(req.params.id)}`, { method: "DELETE" });
+        publicCache.delete("promotions");
+        return res.json({ success: true });
+    } catch (error) {
+        console.error("Admin promoções DELETE:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível excluir a promoção." });
+    }
+});
+
+/* =====================================================
    CRIAR CHECKOUT
    COM PEDIDO SALVO ANTES DO PAGAMENTO
 ===================================================== */
@@ -4572,7 +4802,8 @@ app.post(
                 customer,
                 shipping_service_id: requestedShippingServiceId,
                 payment_method: requestedPaymentMethod,
-                coupon_code: requestedCouponCode
+                coupon_code: requestedCouponCode,
+                gift: requestedGift
             } = req.body || {};
 
             const paymentMethod = safeString(requestedPaymentMethod || "pix").toLowerCase();
@@ -4966,6 +5197,34 @@ app.post(
             }
 
             /* =================================================
+               PRESENTE DA PROMOÇÃO (cadastrada no painel)
+            ================================================= */
+            let giftItem = null;
+            let giftVariant = null;
+            if (requestedGift) {
+                const giftProductId = safeString(requestedGift.product_id);
+                const giftVariantId = safeString(requestedGift.variant_id);
+                const giftError = message => res.status(409).json({ success: false, gift_invalid: true, message });
+                if (!/^[0-9a-f-]{36}$/i.test(giftProductId) || !/^[0-9a-f-]{36}$/i.test(giftVariantId)) {
+                    return giftError("Escolha o seu presente de novo.");
+                }
+                // Sem cache: a promoção pode ter sido encerrada no painel agora há pouco.
+                const promotion = reachedPromotion(await loadPromotions(), productsSubtotal);
+                if (!promotion) {
+                    return giftError("A promoção de presente não vale para esta compra agora.");
+                }
+                if (String(requestedGift.promotion_id) !== String(promotion.id)) {
+                    return giftError("Sua compra alcançou outro presente. Escolha de novo.");
+                }
+                const gift = await loadGiftProduct(promotion, giftProductId, giftVariantId);
+                if (!gift) {
+                    return giftError("Esse presente acabou de esgotar. Escolha outro.");
+                }
+                giftItem = gift.item;
+                giftVariant = gift.variant;
+            }
+
+            /* =================================================
                VALIDA VARIAÇÕES E ESTOQUE NO SUPABASE
             ================================================= */
             const checkedVariants = [];
@@ -5029,6 +5288,9 @@ app.post(
                 checkedVariants.push({ item, variant });
             }
 
+            // O presente conta junto: a mesma peça comprada e ganha precisa de 2 em estoque.
+            if (giftItem) checkedVariants.push({ item: giftItem, variant: giftVariant });
+
             // A mesma cor em mais de uma linha da sacola: confere a soma das quantidades.
             const quantityByVariant = new Map();
             for (const { item, variant } of checkedVariants) {
@@ -5036,6 +5298,13 @@ app.post(
                 const total = (quantityByVariant.get(variant.id) || 0) + Number(item.quantity || 0);
                 quantityByVariant.set(variant.id, total);
                 if (total > Number(variant.stock || 0)) {
+                    if (isGiftItem(item)) {
+                        return res.status(409).json({
+                            success: false,
+                            gift_invalid: true,
+                            message: "Esse presente acabou de esgotar. Escolha outro."
+                        });
+                    }
                     return res.status(409).json({
                         success: false,
                         message: "Estoque insuficiente para " + item.description +
@@ -5072,6 +5341,13 @@ app.post(
             );
             if (olistShortage) {
                 const { item, available } = olistShortage;
+                if (isGiftItem(item)) {
+                    return res.status(409).json({
+                        success: false,
+                        gift_invalid: true,
+                        message: "Esse presente acabou de esgotar. Escolha outro."
+                    });
+                }
                 const name = item.description + (item.variant_color ? " (" + item.variant_color + ")" : "");
                 return res.status(409).json({
                     success: false,
@@ -5099,6 +5375,9 @@ app.post(
             /* =================================================
                SALVA O PEDIDO ANTES DO PAGAMENTO
             ================================================= */
+
+            // Peças cobradas + o presente da promoção (preço zero, fora da InfinitePay).
+            const orderLines = giftItem ? [...productItems, giftItem] : productItems;
 
             const pendingOrder = {
 
@@ -5166,7 +5445,7 @@ app.post(
                 },
 
                 items:
-                    productItems,
+                    orderLines,
 
                 shipping: {
                     value: Number(shippingValue.toFixed(2)),
@@ -5236,7 +5515,7 @@ app.post(
                     whatsapp_tracking_opt_in: customer.whatsapp_updates === true,
                     whatsapp_tracking_status: customer.whatsapp_updates === true ? "pending" : "opted_out",
                     ...(coupon ? { coupon_code: coupon.code, coupon_discount: couponCents / 100 } : {}),
-                    items: productItems
+                    items: orderLines
                 })
             });
 
@@ -5244,7 +5523,7 @@ app.post(
 
             await supabaseRequest("order_items", {
                 method: "POST",
-                body: JSON.stringify(productItems.map(item => ({
+                body: JSON.stringify(orderLines.map(item => ({
                     order_id: savedOrder.id,
                     product_id: item.id || null,
                     variant_id: item.variant_id || null,

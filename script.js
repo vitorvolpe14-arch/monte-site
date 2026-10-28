@@ -71,6 +71,8 @@ async function loadProductsFromDatabase() {
 
     renderProducts();
     revealCatalogSections();
+    // As opções de presente das promoções vêm do catálogo.
+    if (cart.length) updatePaymentSummary();
 }
 
 /* =====================================================
@@ -81,6 +83,14 @@ let cart = [];
 let selectedPaymentMethod = "pix";
 // Cupom conferido pelo servidor ({ code, discount_type, discount_value }).
 let appliedCoupon = null;
+
+// Promoções de presente no ar (cadastradas no painel, vêm de /api/promocoes).
+let storePromotions = [];
+const GIFT_STORAGE_KEY = "monteGift";
+// Presente escolhido: { promotion_id, product_id, variant_id }.
+let selectedGift = (() => {
+    try { return JSON.parse(localStorage.getItem(GIFT_STORAGE_KEY) || "null"); } catch { return null; }
+})();
 let shippingOptions = [];
 let selectedShippingOption = null;
 let shippingRequestId = 0;
@@ -1823,6 +1833,215 @@ async function applyCoupon() {
     }
 }
 
+/* =====================================================
+   PRESENTES DAS PROMOÇÕES (cadastradas no painel, aba Promoções)
+   Compra com as peças somando o valor mínimo (preço de tabela; o
+   frete não conta) ganha uma peça da categoria da promoção, à
+   escolha da cliente. Na sacola, uma escada de benefícios mostra o
+   que ela já ganhou e o próximo degrau (outra promoção ou o frete
+   grátis de Fortaleza e região). Com mais de uma promoção no ar,
+   vale o presente do maior degrau alcançado. As peças da cor das
+   que estão na sacola aparecem primeiro ("combina com a sua sacola").
+   O servidor confere tudo de novo no checkout.
+===================================================== */
+const GIFT_CATEGORY_WORDS = {
+    cintos: { one: "um cinto", mine: "seu cinto" },
+    acessorios: { one: "um acessório", mine: "seu acessório" },
+    bolsas: { one: "uma bolsa", mine: "sua bolsa" }
+};
+const giftWords = promotion => GIFT_CATEGORY_WORDS[promotion?.gift_category] || { one: "um presente", mine: "seu presente" };
+
+async function loadStorePromotions() {
+    try {
+        const response = await fetch("/api/promocoes", { headers: { "Accept": "application/json" } });
+        const body = await response.json();
+        storePromotions = Array.isArray(body?.promotions) ? body.promotions : [];
+    } catch {
+        storePromotions = [];
+    }
+    // A barra do topo anuncia a promoção (no celular, só esse aviso).
+    const banner = storePromotions.find(promotion => promotion.banner_text)?.banner_text;
+    const barMessage = document.getElementById("shippingBarPromo");
+    if (barMessage && banner) {
+        barMessage.textContent = banner;
+        document.querySelectorAll(".shipping-bar-promo").forEach(el => { el.hidden = false; });
+        document.querySelector(".shipping-bar")?.classList.add("has-promo");
+    }
+    if (cart.length) updatePaymentSummary();
+}
+
+function plainColor(value) {
+    return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
+// Peças que podem ser o presente: da categoria da promoção, ativas, fora da pré-venda e com
+// a cor em estoque (descontando o que já está na sacola).
+function giftOptionsFor(promotion) {
+    const inCart = new Map();
+    cart.forEach(item => {
+        if (item.variant_id) inCart.set(String(item.variant_id), (inCart.get(String(item.variant_id)) || 0) + Number(item.quantity || 0));
+    });
+    const categoryOf = item => products.find(product => String(product.id) === String(item.id || item.product_id))?.category;
+    const cartColors = new Set(cart
+        .filter(item => categoryOf(item) !== promotion.gift_category)
+        .map(item => plainColor(colorLabel(item.variant_color, item.name)).split(/\s+/)[0])
+        .filter(Boolean));
+    const options = [];
+    products
+        .filter(product => product.category === promotion.gift_category && !product.presale && product.active !== false)
+        .forEach(product => (product.variants || []).forEach(variant => {
+            if (variant.active === false) return;
+            const available = Number(variant.stock || 0) - (inCart.get(String(variant.id)) || 0);
+            if (available < 1) return;
+            const color = colorLabel(variant.color, product.name);
+            options.push({ product, variant, color, matches: cartColors.has(plainColor(color).split(/\s+/)[0]) });
+        }));
+    return options.sort((a, b) =>
+        (b.matches - a.matches) || (Number(b.product.price) - Number(a.product.price)) || a.product.name.localeCompare(b.product.name));
+}
+
+// Degraus das promoções no ar que têm presente em estoque, do menor valor para o maior.
+function promotionTiers() {
+    const now = Date.now();
+    return storePromotions
+        .filter(promotion => now < Date.parse(promotion.ends_at))
+        .map(promotion => ({ promotion, options: giftOptionsFor(promotion) }))
+        .filter(tier => tier.options.length)
+        .sort((a, b) => Number(a.promotion.min_subtotal) - Number(b.promotion.min_subtotal));
+}
+
+function reachedTier(subtotal = getCartSubtotal(), tiers = promotionTiers()) {
+    return [...tiers].reverse().find(tier => subtotal >= Number(tier.promotion.min_subtotal)) || null;
+}
+
+function giftEligible(subtotal = getCartSubtotal()) {
+    return !!reachedTier(subtotal);
+}
+
+// O presente escolhido, se ainda vale (degrau alcançado e cor com estoque).
+function currentGift(subtotal = getCartSubtotal()) {
+    if (!selectedGift) return null;
+    const tier = reachedTier(subtotal);
+    if (!tier || String(tier.promotion.id) !== String(selectedGift.promotion_id)) return null;
+    const option = tier.options.find(o => String(o.variant.id) === String(selectedGift.variant_id) &&
+        String(o.product.id) === String(selectedGift.product_id));
+    return option ? { ...option, promotion: tier.promotion } : null;
+}
+
+function saveSelectedGift(gift) {
+    selectedGift = gift;
+    try {
+        if (gift) localStorage.setItem(GIFT_STORAGE_KEY, JSON.stringify(gift));
+        else localStorage.removeItem(GIFT_STORAGE_KEY);
+    } catch {}
+}
+
+function chooseGift(promotionId, productId, variantId) {
+    saveSelectedGift({ promotion_id: promotionId, product_id: productId, variant_id: variantId });
+    updatePaymentSummary();
+}
+
+// Escada de benefícios + escolha do presente. Devolve true quando está na tela (aí ela já
+// mostra o frete grátis e o aviso simples de frete some).
+function renderGiftPerk({ subtotal, freeShippingApplies }) {
+    const perk = document.getElementById("giftPerk");
+    const picker = document.getElementById("giftPicker");
+    const optionsBox = document.getElementById("giftOptions");
+    const line = document.getElementById("cartGiftLine");
+    const tiers = promotionTiers();
+    const visible = !!perk && cart.length > 0 && tiers.length > 0;
+    if (perk) perk.hidden = !visible;
+    if (line) line.hidden = true;
+    if (!visible) return false;
+
+    const reached = reachedTier(subtotal, tiers);
+    const shippingReached = freeShippingApplies && subtotal >= FREE_SHIPPING_MIN;
+    const steps = tiers.map(tier => ({
+        value: Number(tier.promotion.min_subtotal),
+        label: giftWords(tier.promotion).one.split(" ")[1],
+        goal: "ganhar " + giftWords(tier.promotion).one + " de presente"
+    }));
+    if (freeShippingApplies) steps.push({ value: FREE_SHIPPING_MIN, label: "frete grátis", goal: "frete grátis em Fortaleza e região" });
+    steps.sort((a, b) => a.value - b.value);
+    // Degraus no mesmo valor viram um só ("cinto + frete grátis").
+    for (let i = steps.length - 1; i > 0; i--) {
+        if (steps[i].value !== steps[i - 1].value) continue;
+        steps[i - 1] = { value: steps[i].value, label: steps[i - 1].label + " + " + steps[i].label, goal: steps[i - 1].goal + " e " + steps[i].goal };
+        steps.splice(i, 1);
+    }
+    const next = steps.find(step => subtotal < step.value);
+
+    const won = [reached ? giftWords(reached.promotion).one + " de presente" : "", shippingReached ? "frete grátis" : ""].filter(Boolean);
+    const text = [
+        won.length ? `<strong>Você ganhou ${won.join(" e ")}!</strong>` : "",
+        next ? `Faltam <strong>${formatPrice(next.value - subtotal)}</strong> para ${next.goal}` : ""
+    ].filter(Boolean).join(" ");
+    perk.classList.toggle("is-active", !!reached);
+    setHTML(document.getElementById("giftPerkKicker"), escapeHTML((reached || tiers[0]).promotion.name));
+    setHTML(document.getElementById("giftPerkText"), text);
+
+    // Degraus espaçados por igual; a barra enche aos poucos dentro de cada etapa.
+    const position = index => (index + 1) / steps.length * 100;
+    let filled = 0;
+    for (let i = 0; i < steps.length; i++) {
+        const from = i ? steps[i - 1].value : 0;
+        const start = i ? position(i - 1) : 0;
+        if (subtotal >= steps[i].value) { filled = position(i); continue; }
+        filled = start + (position(i) - start) * Math.max(0, (subtotal - from) / (steps[i].value - from));
+        break;
+    }
+    const fill = document.getElementById("giftLadderFill");
+    if (fill) fill.style.width = Math.min(100, filled).toFixed(1) + "%";
+    setHTML(document.getElementById("giftLadderSteps"), steps.map((step, index) => {
+        const last = index === steps.length - 1;
+        return `<span class="gift-ladder-step${last ? " is-last" : ""}${subtotal >= step.value ? " is-done" : ""}" data-left="${last ? "" : position(index).toFixed(1)}"><b></b><small>${escapeHTML(step.label.charAt(0).toUpperCase() + step.label.slice(1))}<br>${escapeHTML(formatPrice(step.value).replace(",00", ""))}</small></span>`;
+    }).join(""));
+    // O HTML seguro não aceita style: a posição de cada degrau vai por aqui.
+    document.querySelectorAll("#giftLadderSteps [data-left]").forEach(el => { if (el.dataset.left) el.style.left = el.dataset.left + "%"; });
+
+    if (picker) picker.hidden = !reached;
+    if (!reached || !optionsBox) return true;
+
+    // Presente escolhido que esgotou, saiu da loja ou é de outro degrau: escolhe de novo.
+    const chosen = currentGift(subtotal);
+    if (selectedGift && !chosen) saveSelectedGift(null);
+    const words = giftWords(reached.promotion);
+    setHTML(document.getElementById("giftPickerTitle"), escapeHTML("Escolha " + words.mine + " de presente"));
+    setHTML(document.getElementById("giftPickerHint"), chosen
+        ? `Seu presente: <strong>${escapeHTML(chosen.product.name)}</strong> · ${escapeHTML(chosen.color || "Cor única")}`
+        : "Toque no modelo que você quer ganhar.");
+    const signature = reached.promotion.id + ":" + reached.options.map(o => o.variant.id + (chosen && o.variant.id === chosen.variant.id ? "*" : "")).join("|");
+    if (optionsBox.dataset.signature !== signature) {
+        optionsBox.dataset.signature = signature;
+        setHTML(optionsBox, reached.options.map(option => {
+            const selected = chosen && String(option.variant.id) === String(chosen.variant.id);
+            const image = smallImage(Array.isArray(option.product.images) ? option.product.images[0] || "" : "");
+            return `<button type="button" class="gift-option${selected ? " is-selected" : ""}" role="radio" aria-checked="${selected ? "true" : "false"}"
+                data-click="chooseGift" data-args="${escapeHTML(JSON.stringify([reached.promotion.id, option.product.id, option.variant.id]))}">
+                <span class="gift-option-media">${image ? `<img src="${escapeHTML(image)}" alt="" loading="lazy">` : ""}${option.matches ? '<em class="gift-option-match">Combina com a sua sacola</em>' : ""}</span>
+                <span class="gift-option-name">${escapeHTML(option.product.name)}</span>
+                <span class="gift-option-color">${escapeHTML(option.color || "Cor única")}</span>
+                <span class="gift-option-price"><s>${formatPrice(option.product.price)}</s> Grátis</span>
+            </button>`;
+        }).join(""));
+    }
+
+    if (line && chosen) {
+        line.hidden = false;
+        const image = smallImage(Array.isArray(chosen.product.images) ? chosen.product.images[0] || "" : "");
+        setHTML(line, `<div class="cart-item cart-gift-item">
+            <div class="cart-item-media">${image ? `<img src="${escapeHTML(image)}" alt="${escapeHTML(chosen.product.name)}">` : ""}</div>
+            <div class="cart-item-body">
+                <span class="cart-gift-tag">Presente</span>
+                <div class="cart-item-name">${escapeHTML(chosen.product.name)}</div>
+                <div class="cart-item-variant">${escapeHTML(chosen.color || "Cor única")}</div>
+                <div class="cart-item-row"><span class="cart-gift-qty">${escapeHTML(chosen.promotion.name)}</span><div class="cart-item-price"><s>${formatPrice(chosen.product.price)}</s> Grátis</div></div>
+            </div>
+        </div>`);
+    }
+    return true;
+}
+
 function removeCoupon(message = "") {
     appliedCoupon = null;
     const input = document.getElementById("couponCode");
@@ -2057,6 +2276,14 @@ async function checkout() {
     const paymentMethod=document.querySelector('input[name="paymentMethod"]:checked')?.value||selectedPaymentMethod||"pix";
     if(!["pix","credit_card"].includes(paymentMethod)){showToast("Selecione uma forma de pagamento válida.");return;}
 
+    // Promoção de presente: com a sacola no valor mínimo, a cliente escolhe o presente antes.
+    const gift=currentGift();
+    if(!gift&&giftEligible()){
+        document.getElementById("giftPicker")?.scrollIntoView({behavior:"smooth",block:"center"});
+        showToast("Escolha o seu presente para finalizar.");
+        return;
+    }
+
     // Cupom digitado sem tocar em APLICAR: confere antes de seguir.
     const typedCoupon=String(document.getElementById("couponCode")?.value||"").trim();
     if(typedCoupon&&!appliedCoupon){
@@ -2075,6 +2302,7 @@ async function checkout() {
             headers:{"Content-Type":"application/json","Accept":"application/json"},
             body:JSON.stringify({items,shipping_service_id:shippingServiceId,payment_method:paymentMethod,
                 coupon_code:appliedCoupon?.code||undefined,
+                gift:gift?{promotion_id:gift.promotion.id,product_id:gift.product.id,variant_id:gift.variant.id}:undefined,
                 customer:{name,email,phone,whatsapp_phone:whatsappNumber,whatsapp_updates:true,cpf:cpfDigits,
                     address:{cep,street,number,complement:complement||"",neighborhood,city,state}}})
         });
@@ -2083,6 +2311,14 @@ async function checkout() {
         try{data=JSON.parse(responseText);}catch{console.error("Resposta não é JSON:",responseText);}
         if(!response.ok){
             if(data?.stock_changed&&typeof loadProductsFromDatabase==="function")loadProductsFromDatabase().catch(()=>{});
+            // Presente esgotado ou promoção encerrada: confere de novo e escolhe outro.
+            if(data?.gift_invalid){
+                saveSelectedGift(null);
+                await Promise.all([loadProductsFromDatabase().catch(()=>{}),loadStorePromotions()]);
+                updatePaymentSummary();
+                document.getElementById("giftPerk")?.scrollIntoView({behavior:"smooth",block:"center"});
+                throw new Error(data.message||"Escolha o cinto de presente de novo.");
+            }
             // Cupom recusado no checkout: sai do pedido e a cliente confere o novo total.
             if(data?.coupon_invalid){
                 removeCoupon(data.message||"Cupom inválido.");
@@ -2651,6 +2887,8 @@ document.addEventListener(
         await loadProductsFromDatabase();
 
         loadCart();
+        // Promoções de presente do painel (escada de benefícios e aviso no topo).
+        loadStorePromotions();
 
         restoreCartFromLink();
         openProductFromLink();
@@ -3111,6 +3349,8 @@ function renderCheckoutNote(summary) {
         setHTML(itemsBox, cart.length
             ? cart.map(item => `<div class="order-note-item"><span>${escapeHTML(item.name)}</span><span>${formatPrice(Number(item.price || 0) * Number(item.quantity || 0))}</span><small>${escapeHTML(colorLabel(item.variant_color, item.name) || "Cor única")} · ${Number(item.quantity || 0)} un.</small></div>`).join("")
             : '<div class="order-note-item"><span class="is-empty">Nenhuma peça na sacola</span></div>');
+        const gift = currentGift();
+        if (gift) appendHTML(itemsBox, `<div class="order-note-item"><span>${escapeHTML(gift.product.name)}</span><span>Presente</span><small>${escapeHTML(gift.color || "Cor única")} · 1 un. · ${escapeHTML(gift.promotion.name)}</small></div>`);
     }
 
     setNoteText("noteShipping", selectedShippingOption ? `${selectedShippingOption.name} · ${shippingPriceLabel(selectedShippingOption)}` : "");
@@ -3293,10 +3533,11 @@ function renderCheckoutExtras({ subtotal, shipping, pixDiscount, couponDiscount 
     const freePerk = document.getElementById("freeShippingPerk");
     const freePerkText = document.getElementById("freeShippingPerkText");
     const freePerkFill = document.getElementById("freeShippingPerkFill");
+    const otherCity = !!selectedShippingOption && !FREE_SHIPPING_OPTION_IDS.includes(selectedShippingOption.id);
+    const giftPromoShown = renderGiftPerk({ subtotal, freeShippingApplies: !otherCity });
     if (freePerk && freePerkText) {
         const missing = Math.max(0, FREE_SHIPPING_MIN - subtotal);
-        const otherCity = !!selectedShippingOption && !FREE_SHIPPING_OPTION_IDS.includes(selectedShippingOption.id);
-        freePerk.hidden = !cart.length || otherCity;
+        freePerk.hidden = !cart.length || otherCity || giftPromoShown;
         freePerk.classList.toggle("is-active", missing === 0);
         setHTML(freePerkText, missing === 0
             ? (selectedShippingOption ? "Você ganhou <strong>frete grátis</strong>!" : "Frete grátis para <strong>Fortaleza e região</strong> nesta compra")
@@ -3309,6 +3550,7 @@ function renderCheckoutExtras({ subtotal, shipping, pixDiscount, couponDiscount 
         const parts = [];
         if (pixDiscount > 0) parts.push(`${formatPrice(pixDiscount)} de desconto no Pix`);
         if (couponDiscount > 0) parts.push(`cupom -${formatPrice(couponDiscount)}`);
+        if (currentGift(subtotal)) parts.push("presente incluso");
         parts.push(selectedShippingOption
             ? (shipping === 0 && Number(selectedShippingOption.price || 0) > 0 ? "frete grátis" : `frete ${formatPrice(shipping)}`)
             : "frete a calcular");
@@ -3493,7 +3735,7 @@ function browseNovidades() {
 }
 
 registerClickActions({
-    applyCoupon, browseNovidades, changeQuantity, checkout, closeCart, closeCartOutside, closeMobileMenu,
+    applyCoupon, browseNovidades, chooseGift, changeQuantity, checkout, closeCart, closeCartOutside, closeMobileMenu,
     closeProductImageLightbox, closeProductModal, closeSearch, goToNovidades, navigateProductLightbox,
     nextCategoryPage, nextCollectionPage, nextNewPage, nextSalePage, nextSlide, openCart, openSearch,
     openWhatsAppReservation, previousCategoryPage, previousCollectionPage, previousNewPage,

@@ -54,7 +54,7 @@ form.addEventListener("submit", async (event) => {
                     <strong>${esc(item.product_name)}</strong>
                     <span>${esc(item.variant_color || "Sem cor")} · ${Number(item.quantity)} unidade(s)</span>
                 </div>
-                <strong>${money(item.total_price)}</strong>
+                <strong>${Number(item.total_price) === 0 ? "Presente" : money(item.total_price)}</strong>
             </div>`).join("");
 
         const tracking = o.tracking_code

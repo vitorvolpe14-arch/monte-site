@@ -2393,3 +2393,10 @@ input:focus,select:focus,textarea:focus{
 .coupon-uses-table{border-top:1px solid #eee;padding-top:6px}
 @media(max-width:1000px){.coupon-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:800px){.coupon-form-grid{grid-template-columns:1fr}.coupon-card-head{flex-direction:column}.coupon-card-side{justify-items:start}}
+
+/* Promoções de presente */
+.promo-form-panel{margin:20px 0}
+.promo-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.promo-name{margin:0 0 6px;font:22px Georgia,serif}
+.chip-gift{background:#651f2b;color:#fff}
+@media(max-width:800px){.promo-form-grid{grid-template-columns:1fr}}
