@@ -2118,7 +2118,7 @@ function renderGiftPerk({ subtotal, freeShippingApplies }) {
             const colorText = isActive && chosen ? chosen.color || "Cor única" : colors === 1 ? group.options[0].color || "Cor única" : colors + " cores";
             return `<button type="button" class="product-card gift-card${isActive ? " is-active" : ""}${isActive && chosen ? " is-selected" : ""}" aria-pressed="${isActive ? "true" : "false"}"
                 data-click="pickGiftProduct" data-args="${escapeHTML(JSON.stringify([reached.promotion.id, group.product.id]))}">
-                <span class="product-image">${group.matches ? '<span class="product-badge">COMBINA COM A SUA SACOLA</span>' : ""}${image ? `<img src="${escapeHTML(image)}" alt="${escapeHTML(group.product.name)}" loading="lazy" decoding="async">` : ""}</span>
+                <span class="product-image">${group.matches ? '<span class="product-badge">COMBINA COM SUA SACOLA</span>' : ""}${image ? `<img src="${escapeHTML(image)}" alt="${escapeHTML(group.product.name)}" loading="lazy" decoding="async">` : ""}</span>
                 <span class="product-info">
                     <span class="product-name">${escapeHTML(group.product.name)}</span>
                     <span class="product-price"><span class="old-price">${formatPrice(group.product.price)}</span><span class="sale-price">GRÁTIS</span></span>
