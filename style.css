@@ -6643,21 +6643,22 @@ html.intro-skipped .header { animation-delay: .5s; }
        textos pequenos sobre o branco, que no cinza claro ficariam difíceis de ler. */
     --co-accent: #959595;
     --co-accent-deep: #666;
-    /* Vidro: quase transparente, com reflexo de luz no alto, borda clara e desfoque forte
-       do que passa atrás. O cinza aparece só como um leve tom embaixo. */
-    --co-glass:
-        radial-gradient(120% 70% at 50% 0%, rgba(255, 255, 255, .7), rgba(255, 255, 255, 0) 62%),
-        linear-gradient(180deg, rgba(255, 255, 255, .1), rgba(149, 149, 149, .1));
-    --co-glass-hover:
-        radial-gradient(120% 70% at 50% 0%, rgba(255, 255, 255, .8), rgba(255, 255, 255, 0) 62%),
-        linear-gradient(180deg, rgba(255, 255, 255, .12), rgba(149, 149, 149, .22));
-    --co-glass-line: rgba(149, 149, 149, .3);
-    --co-glass-shadow:
-        inset 0 1px 1px rgba(255, 255, 255, .95),
-        inset 0 -1px 1px rgba(149, 149, 149, .2),
-        inset 0 0 14px rgba(255, 255, 255, .45),
-        0 8px 22px -14px rgba(0, 0, 0, .28);
-    --co-glass-blur: blur(20px) saturate(180%);
+    /* Vidro líquido dos botões: aro de luz mais forte em cima e embaixo, sombra interna
+       no alto, brilho de refração na base e sombra projetada. Sobre a placa cinza da barra
+       o vidro é transparente; sobre o branco o próprio botão carrega o cinza. */
+    --co-lg-rim: linear-gradient(180deg, rgba(255, 255, 255, .95), rgba(255, 255, 255, .3) 26%, rgba(255, 255, 255, .18) 60%, #fff);
+    --co-lg-clear:
+        radial-gradient(80% 60% at 50% 100%, rgba(255, 255, 255, .34), rgba(255, 255, 255, 0) 72%),
+        linear-gradient(180deg, rgba(0, 0, 0, .14), rgba(255, 255, 255, .04) 45%, rgba(255, 255, 255, .12));
+    --co-lg-tinted:
+        radial-gradient(80% 60% at 50% 100%, rgba(255, 255, 255, .34), rgba(255, 255, 255, 0) 72%),
+        linear-gradient(180deg, rgba(90, 90, 90, .88), rgba(128, 128, 128, .84) 55%, rgba(158, 158, 158, .84));
+    --co-lg-shadow:
+        inset 0 10px 16px -10px rgba(0, 0, 0, .4),
+        inset 0 -8px 14px -8px rgba(255, 255, 255, .6),
+        0 0 0 1px rgba(50, 50, 50, .22),
+        0 14px 24px -12px rgba(0, 0, 0, .5);
+    --co-lg-blur: blur(10px) saturate(150%);
     /* Cabeçalho e barra do total: placas de vidro sobre o conteúdo que rola. */
     --co-glass-surface: rgba(255, 255, 255, .58);
     --co-glass-surface-blur: blur(24px) saturate(180%);
@@ -6727,19 +6728,13 @@ html.intro-skipped .header { animation-delay: .5s; }
     width: 40px;
     height: 40px;
     padding: 0;
-    border: 1px solid var(--co-glass-line);
     border-radius: 50%;
-    background: var(--co-glass);
-    color: var(--co-ink);
-    box-shadow: var(--co-glass-shadow);
-    -webkit-backdrop-filter: var(--co-glass-blur);
-    backdrop-filter: var(--co-glass-blur);
     cursor: pointer;
-    transition: transform .35s ease, background .25s ease;
+    transition: transform .35s ease, filter .25s ease;
 }
 
 #cartOverlay .cart-close svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; }
-#cartOverlay .cart-close:hover { transform: rotate(90deg); background: var(--co-glass-hover); }
+#cartOverlay .cart-close:hover { transform: rotate(90deg); }
 
 /* Etapas */
 .checkout-steps {
@@ -6892,12 +6887,7 @@ html.intro-skipped .header { animation-delay: .5s; }
     display: inline-flex;
     align-items: center;
     margin: 0;
-    border: 1px solid var(--co-glass-line);
     border-radius: 999px;
-    background: var(--co-glass);
-    box-shadow: var(--co-glass-shadow);
-    -webkit-backdrop-filter: var(--co-glass-blur);
-    backdrop-filter: var(--co-glass-blur);
 }
 
 #cartOverlay .cart-quantity button {
@@ -6907,13 +6897,13 @@ html.intro-skipped .header { animation-delay: .5s; }
     border: 0;
     border-radius: 50%;
     background: none;
-    color: var(--co-ink);
+    color: inherit;
     font-size: 15px;
     cursor: pointer;
     transition: background .2s ease;
 }
 
-#cartOverlay .cart-quantity button:hover { background: rgba(149, 149, 149, .18); }
+#cartOverlay .cart-quantity button:hover { background: rgba(255, 255, 255, .16); }
 #cartOverlay .cart-quantity span { width: 22px; font-size: 12px; font-weight: 500; text-align: center; }
 
 #cartOverlay .cart-item-price {
@@ -6940,7 +6930,7 @@ html.intro-skipped .header { animation-delay: .5s; }
 }
 
 #cartOverlay .cart-item-remove svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; }
-#cartOverlay .cart-item-remove:hover { background: var(--co-glass-hover); color: var(--co-ink); box-shadow: var(--co-glass-shadow); }
+#cartOverlay .cart-item-remove:hover { background: rgba(149, 149, 149, .16); color: var(--co-ink); }
 
 /* Sacola vazia */
 #cartOverlay .empty-cart { padding: 72px 24px 48px; text-align: center; color: var(--co-ink); }
@@ -6950,20 +6940,11 @@ html.intro-skipped .header { animation-delay: .5s; }
 
 .empty-cart-button {
     padding: 16px 30px;
-    border: 1px solid var(--co-glass-line);
     border-radius: 999px;
-    background: var(--co-glass);
-    color: var(--co-ink);
-    box-shadow: var(--co-glass-shadow);
-    -webkit-backdrop-filter: var(--co-glass-blur);
-    backdrop-filter: var(--co-glass-blur);
     font: 500 10px/1 "DM Sans", sans-serif;
     letter-spacing: .22em;
     cursor: pointer;
-    transition: background .3s ease;
 }
-
-.empty-cart-button:hover { background: var(--co-glass-hover); }
 
 #cartOverlay .cart.is-empty .checkout-steps,
 #cartOverlay .cart.is-empty .cart-footer,
@@ -7022,20 +7003,11 @@ html.intro-skipped .header { animation-delay: .5s; }
 
 .pix-perk-button {
     padding: 9px 14px;
-    border: 1px solid var(--co-glass-line);
     border-radius: 999px;
-    background: var(--co-glass);
-    color: var(--co-ink);
-    box-shadow: var(--co-glass-shadow);
-    -webkit-backdrop-filter: var(--co-glass-blur);
-    backdrop-filter: var(--co-glass-blur);
     font: 600 9.5px/1 "DM Sans", sans-serif;
     letter-spacing: .16em;
     cursor: pointer;
-    transition: background .25s ease;
 }
-
-.pix-perk-button:hover { background: var(--co-glass-hover); }
 
 /* Frete grátis em Fortaleza e região a partir de R$ 599: quanto falta, com barra de progresso. */
 .free-shipping-perk {
@@ -7249,19 +7221,12 @@ html.intro-skipped .header { animation-delay: .5s; }
     min-width: 104px;
     height: 54px;
     padding: 0 18px;
-    border: 1px solid var(--co-glass-line);
     border-radius: 999px;
-    background: var(--co-glass);
-    color: var(--co-ink);
-    box-shadow: var(--co-glass-shadow);
-    -webkit-backdrop-filter: var(--co-glass-blur);
-    backdrop-filter: var(--co-glass-blur);
     font: 500 11.5px/1 "DM Sans", sans-serif;
     letter-spacing: .14em;
     cursor: pointer;
-    transition: background .2s ease, opacity .2s ease;
+    transition: filter .2s ease, opacity .2s ease;
 }
-.coupon-apply:hover { background: var(--co-glass-hover); }
 .coupon-apply:disabled { opacity: .6; cursor: wait; }
 .coupon-status { min-height: 0; margin: 8px 2px 0; font-size: 12px; line-height: 1.5; color: var(--co-ink); }
 .coupon-status:empty { display: none; }
@@ -7452,21 +7417,12 @@ html.intro-skipped .header { animation-delay: .5s; }
     width: auto;
     margin: 18px auto 0;
     padding: 14px 26px;
-    border: 1px solid var(--co-glass-line);
     border-radius: 999px;
-    background: var(--co-glass);
-    color: var(--co-ink);
-    box-shadow: var(--co-glass-shadow);
-    -webkit-backdrop-filter: var(--co-glass-blur);
-    backdrop-filter: var(--co-glass-blur);
     font: 500 10px/1 "DM Sans", sans-serif;
     letter-spacing: .2em;
     text-transform: uppercase;
     cursor: pointer;
-    transition: background .25s ease;
 }
-
-#cartOverlay .continue-shopping:hover { background: var(--co-glass-hover); }
 
 /* Barra fixa: total e finalizar */
 #cartOverlay .checkout-bar {
@@ -7478,18 +7434,21 @@ html.intro-skipped .header { animation-delay: .5s; }
     gap: 16px;
     margin-top: 22px;
     padding: 14px 26px calc(14px + env(safe-area-inset-bottom, 0px));
-    border-top: 1px solid rgba(149, 149, 149, .22);
-    /* Vidro: o que rola por baixo aparece desfocado atrás do total e do botão. Mais denso
-       embaixo: perto da borda o desfoque espelha o conteúdo e o texto de trás vazaria nítido. */
-    background: linear-gradient(180deg, var(--co-glass-surface), rgba(255, 255, 255, .66) 60%, rgba(255, 255, 255, .95) 80%);
+    border-top: 1px solid rgba(255, 255, 255, .35);
+    /* Placa cinza de vidro fosco: é o fundo que faz o vidro do botão aparecer. Quase opaca
+       embaixo, onde o desfoque espelha o conteúdo e o texto de trás vazaria nítido. */
+    background: linear-gradient(165deg, rgba(100, 100, 100, .9), rgba(136, 136, 136, .93) 60%, rgba(152, 152, 152, .97));
     -webkit-backdrop-filter: var(--co-glass-surface-blur);
     backdrop-filter: var(--co-glass-surface-blur);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7), 0 -18px 30px -26px rgba(0, 0, 0, .35);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 -18px 30px -24px rgba(0, 0, 0, .45);
 }
+
+#cartOverlay .checkout-bar-total span,
+#cartOverlay .checkout-bar-total small { color: rgba(255, 255, 255, .82); }
 
 .checkout-bar-total { display: flex; flex-direction: column; flex: 0 1 auto; min-width: 0; max-width: 50%; }
 .checkout-bar-total span { font-size: 9.5px; letter-spacing: .24em; text-transform: uppercase; color: var(--co-muted); }
-#cartOverlay .checkout-bar-total strong { display: inline-block; margin: 3px 0 2px; font: 400 26px/1.1 "Playfair Display", serif; white-space: nowrap; transform-origin: left center; }
+#cartOverlay .checkout-bar-total strong { display: inline-block; margin: 3px 0 2px; color: #fff; font: 400 26px/1.1 "Playfair Display", serif; white-space: nowrap; transform-origin: left center; }
 .checkout-bar-total small { overflow: hidden; color: var(--co-muted); font-size: 10.5px; white-space: nowrap; text-overflow: ellipsis; }
 #checkoutTotal.is-bumping { animation: coBump .45s ease; }
 
@@ -7503,21 +7462,11 @@ html.intro-skipped .header { animation-delay: .5s; }
     min-height: 56px;
     margin: 0;
     padding: 0 20px;
-    overflow: hidden;
-    border: 1px solid rgba(149, 149, 149, .38);
     border-radius: 999px;
-    /* Vidro com um pouco mais de cinza que os outros botões: é a ação principal. */
-    background:
-        radial-gradient(120% 70% at 50% 0%, rgba(255, 255, 255, .75), rgba(255, 255, 255, 0) 60%),
-        linear-gradient(180deg, rgba(149, 149, 149, .08), rgba(149, 149, 149, .24));
-    color: var(--co-ink);
-    -webkit-backdrop-filter: var(--co-glass-blur);
-    backdrop-filter: var(--co-glass-blur);
     font: 500 10.5px/1 "DM Sans", sans-serif;
     letter-spacing: .2em;
     cursor: pointer;
-    transition: background .3s ease, transform .2s ease, box-shadow .3s ease;
-    box-shadow: var(--co-glass-shadow);
+    transition: filter .25s ease, transform .2s ease;
 }
 
 #cartOverlay .checkout-button::before {
@@ -7529,20 +7478,52 @@ html.intro-skipped .header { animation-delay: .5s; }
     mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'%3E%3Crect x='5' y='10.5' width='14' height='10' rx='2'/%3E%3Cpath d='M8 10.5V8a4 4 0 0 1 8 0v2.5'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
+/* Vidro líquido: pele comum dos botões do checkout. O aro de luz é um anel recortado
+   com máscara (no Finalizar compra fica no ::after, porque o ::before é o cadeado). */
+#cartOverlay .cart-close,
+#cartOverlay .cart-quantity,
+#cartOverlay .pix-perk-button,
+#cartOverlay .coupon-apply,
+#cartOverlay .empty-cart-button,
+#cartOverlay .continue-shopping,
+#cartOverlay .checkout-button {
+    position: relative;
+    border: 0;
+    background: var(--co-lg-tinted);
+    color: #f6f6f6;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .25);
+    box-shadow: var(--co-lg-shadow);
+    -webkit-backdrop-filter: var(--co-lg-blur);
+    backdrop-filter: var(--co-lg-blur);
+}
+
+#cartOverlay .checkout-button { background: var(--co-lg-clear); }
+
+#cartOverlay .cart-close::before,
+#cartOverlay .cart-quantity::before,
+#cartOverlay .pix-perk-button::before,
+#cartOverlay .coupon-apply::before,
+#cartOverlay .empty-cart-button::before,
+#cartOverlay .continue-shopping::before,
 #cartOverlay .checkout-button::after {
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, .6) 50%, transparent 70%);
-    transform: translateX(-120%);
-    animation: coShine 4.5s ease-in-out 1.2s infinite;
+    padding: 1.6px;
+    border-radius: inherit;
+    background: var(--co-lg-rim);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+    pointer-events: none;
 }
 
-#cartOverlay .checkout-button:hover {
-    background:
-        radial-gradient(120% 70% at 50% 0%, rgba(255, 255, 255, .8), rgba(255, 255, 255, 0) 60%),
-        linear-gradient(180deg, rgba(149, 149, 149, .14), rgba(149, 149, 149, .36));
-}
+#cartOverlay .cart-close:hover,
+#cartOverlay .pix-perk-button:hover,
+#cartOverlay .coupon-apply:hover,
+#cartOverlay .empty-cart-button:hover,
+#cartOverlay .continue-shopping:hover,
+#cartOverlay .checkout-button:hover { filter: brightness(1.08); }
 #cartOverlay .checkout-button:active { transform: scale(.98); }
 #cartOverlay .checkout-button:disabled { opacity: .75; cursor: wait; }
 
@@ -7561,7 +7542,6 @@ body.cart-open .toast { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); 
 @keyframes coShake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 @keyframes coBump { 40% { transform: scale(1.07); } }
 @keyframes coShimmer { to { background-position: -200% 0; } }
-@keyframes coShine { 0% { transform: translateX(-120%); } 45%, 100% { transform: translateX(120%); } }
 @keyframes coPulse { 0% { box-shadow: 0 0 0 0 rgba(149, 149, 149, .45); } 100% { box-shadow: 0 0 0 8px rgba(149, 149, 149, 0); } }
 
 @media (max-width: 600px) {
@@ -7587,7 +7567,6 @@ body.cart-open .toast { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); 
     #cartOverlay .cart,
     #cartOverlay .cart-item,
     #cartOverlay.active .checkout-step,
-    #cartOverlay .checkout-button::after,
     .checkout-steps .is-current i,
     #checkoutTotal.is-bumping { animation: none; transition: none; }
     #cartOverlay .cart { transform: none; }
