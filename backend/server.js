@@ -423,10 +423,11 @@ function olistAddressFromOrder(order) {
     };
 }
 
-// Preço unitário com o desconto de 5% do Pix, em centavos. É o mesmo valor
-// cobrado pela InfinitePay no checkout e enviado à Olist.
-function pixDiscountedUnitCents(price) {
-    return Math.round(Math.round(Number(price || 0) * 100) * 0.95);
+// Preço unitário com o desconto do Pix, em centavos. É o mesmo valor cobrado pela
+// InfinitePay no checkout. O percentual vem do painel (aba Promoções); pedidos antigos,
+// sem o valor cobrado guardado no item, usam os 5% da época.
+function pixDiscountedUnitCents(price, percent = 5) {
+    return Math.round(Math.round(Number(price || 0) * 100) * (100 - percent) / 100);
 }
 
 async function createOrGetOlistOrder(order) {
@@ -1197,7 +1198,7 @@ async function sendAdminSaleNotificationEmail(order) {
         "<p style=\"margin:0 0 8px;font-size:11px;letter-spacing:2px;color:#777;\">NOVA VENDA</p>" +
         "<h1 style=\"margin:0 0 22px;font-size:28px;font-weight:500;\">Pagamento confirmado</h1>" +
         (order.approval_status === "pending" ? "<p style=\"padding:14px;background:#f6efe8;border-left:3px solid #571b29;font-size:14px;line-height:1.6;\"><strong>Pré-venda:</strong> aceite ou recuse este pedido no painel (Pedidos). Recusado, ele é cancelado e o valor precisa ser estornado no app da InfinitePay.</p>" : "") +
-        (order.pix_paid_by_card ? "<p style=\"padding:14px;background:#fff4e5;border-left:3px solid #b35c00;font-size:14px;line-height:1.6;\"><strong>Atenção:</strong> este pedido foi feito com o desconto de 5% do Pix, mas a cliente pagou com cartão no link da InfinitePay. Confira antes de enviar.</p>" : "") +
+        (order.pix_paid_by_card ? "<p style=\"padding:14px;background:#fff4e5;border-left:3px solid #b35c00;font-size:14px;line-height:1.6;\"><strong>Atenção:</strong> este pedido foi feito com o desconto do Pix, mas a cliente pagou com cartão no link da InfinitePay. Confira antes de enviar.</p>" : "") +
         "<div style=\"padding:18px;background:#f7f5f2;margin-bottom:20px;\"><strong style=\"font-size:20px;\">" + escapeEmailHtml(orderCode) + "</strong><br><span style=\"font-size:14px;color:#555;\">Total: <strong>R$ " + total.toFixed(2).replace(".", ",") + "</strong></span></div>" +
         "<h3 style=\"font-size:14px;letter-spacing:1px;\">CLIENTE</h3>" +
         "<p style=\"line-height:1.7;font-size:14px;\">Nome: " + escapeEmailHtml(customerName) + "<br>E-mail: " + escapeEmailHtml(customerEmail) + "<br>Telefone: " + escapeEmailHtml(customerPhone) + "<br>Endereço: " + escapeEmailHtml(address) + "</p>" +
@@ -1381,14 +1382,66 @@ const orderHasPresale = order => Array.isArray(order?.items) && order.items.some
 
 const METROPOLITAN_CITIES = new Set(["AQUIRAZ","CAUCAIA","EUSEBIO","GUAIUBA","ITAITINGA","MARACANAU"]);
 
-// Frete grátis só na entrega MONTÊ (Fortaleza e região metropolitana), em compras a partir
-// de R$ 599 (soma das peças pelo preço de tabela, antes do desconto do Pix). As outras
-// cidades continuam pagando o frete. O script.js usa a mesma regra na sacola.
-const FREE_SHIPPING_MIN = Number(process.env.FREE_SHIPPING_MIN || 599);
+// Benefícios fixos da loja, editados no painel (aba Promoções) e guardados no kv_store:
+// - frete grátis só na entrega MONTÊ (Fortaleza e região metropolitana), a partir de um
+//   valor em peças (preço de tabela, antes do Pix e do cupom; o frete não conta);
+// - desconto do Pix nas peças (o frete fica integral).
+// O script.js recebe os mesmos valores por /api/promocoes.
+const STORE_BENEFITS_KEY = "store_benefits";
+const STORE_BENEFITS_DEFAULT = {
+    free_shipping: { enabled: true, min_subtotal: Number(process.env.FREE_SHIPPING_MIN || 599) },
+    pix_discount: { enabled: true, percent: 5 }
+};
 const FREE_SHIPPING_OPTION_IDS = new Set(["monte-fortaleza", "monte-regiao-metropolitana"]);
-function shippingChargeFor(option, productsSubtotal) {
+
+function normalizeStoreBenefits(value) {
+    const shipping = value?.free_shipping || {};
+    const pix = value?.pix_discount || {};
+    const min = Number(shipping.min_subtotal);
+    const percent = Number(pix.percent);
+    return {
+        free_shipping: {
+            enabled: shipping.enabled !== false,
+            min_subtotal: Number.isFinite(min) && min > 0 ? Number(min.toFixed(2)) : STORE_BENEFITS_DEFAULT.free_shipping.min_subtotal
+        },
+        pix_discount: {
+            enabled: pix.enabled !== false,
+            percent: Number.isFinite(percent) && percent > 0 && percent <= 50 ? Number(percent.toFixed(2)) : STORE_BENEFITS_DEFAULT.pix_discount.percent
+        }
+    };
+}
+
+async function loadStoreBenefits() {
+    const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + STORE_BENEFITS_KEY + "&select=value&limit=1", { method: "GET" });
+    return normalizeStoreBenefits(rows?.[0]?.value || STORE_BENEFITS_DEFAULT);
+}
+
+// Com cache de 30 s; se o Supabase falhar, valem os benefícios padrão.
+async function storeBenefits() {
+    try {
+        return await cachedPublic("store_benefits", 30 * 1000, loadStoreBenefits);
+    } catch (error) {
+        console.error("Benefícios da loja:", error.message);
+        return normalizeStoreBenefits(STORE_BENEFITS_DEFAULT);
+    }
+}
+
+const pixPercentOf = benefits => benefits?.pix_discount?.enabled ? Number(benefits.pix_discount.percent) : 0;
+
+function shippingChargeFor(option, productsSubtotal, benefits) {
     const price = Number(option?.price || 0);
-    return FREE_SHIPPING_OPTION_IDS.has(option?.id) && productsSubtotal >= FREE_SHIPPING_MIN ? 0 : price;
+    const free = benefits?.free_shipping;
+    return free?.enabled && FREE_SHIPPING_OPTION_IDS.has(option?.id) && productsSubtotal >= Number(free.min_subtotal) ? 0 : price;
+}
+
+// Frase dos e-mails de lembrete com os benefícios que estão valendo.
+function benefitsSentence(benefits) {
+    const parts = [];
+    if (benefits?.pix_discount?.enabled) parts.push("no Pix, você ganha " + String(benefits.pix_discount.percent).replace(".", ",") + "% de desconto");
+    if (benefits?.free_shipping?.enabled) parts.push("em Fortaleza e região metropolitana o frete é grátis em compras a partir de R$ " + Number(benefits.free_shipping.min_subtotal).toFixed(2).replace(".", ",").replace(",00", ""));
+    if (!parts.length) return "";
+    const text = parts.join(", e ") + ".";
+    return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 // CEPs de Fortaleza e da região metropolitana começam com 60 ou 61 (60000-000 a 61999-999).
@@ -4230,7 +4283,7 @@ function safeString(value) {
    registra o uso no pedido com trava, para dois checkouts ao mesmo
    tempo não usarem um cupom único.
    O desconto vale só para as peças (o frete fica integral) e, no Pix,
-   incide depois dos 5%.
+   incide depois do desconto do Pix.
 ===================================================== */
 
 // Cada peça continua custando pelo menos R$ 1,00 no checkout da InfinitePay.
@@ -4497,13 +4550,15 @@ function reachedPromotion(promotions, productsSubtotal, now = Date.now()) {
         .sort((a, b) => Number(b.min_subtotal) - Number(a.min_subtotal))[0] || null;
 }
 
-// Página da loja: promoções no ar agora.
+// Página da loja: promoções no ar agora e os benefícios fixos (frete grátis e Pix).
 app.get("/api/promocoes", async (req, res) => {
+    const benefits = await storeBenefits();
     try {
         const promotions = await cachedPublic("promotions", 30 * 1000, loadPromotions);
         res.setHeader("Cache-Control", "public, max-age=30");
         return res.json({
             success: true,
+            benefits,
             promotions: promotions.filter(promotion => promotionLive(promotion)).map(promotion => ({
                 id: promotion.id,
                 name: promotion.name,
@@ -4515,7 +4570,7 @@ app.get("/api/promocoes", async (req, res) => {
         });
     } catch (error) {
         console.error("Promoções:", error);
-        return res.json({ success: true, promotions: [] });
+        return res.json({ success: true, benefits, promotions: [] });
     }
 });
 
@@ -4590,8 +4645,38 @@ function sanitizePromotionPayload(body, { partial = false } = {}) {
     return { promotion };
 }
 
+// Frete grátis e desconto do Pix (painel, aba Promoções).
+app.put("/api/admin/store-benefits", requireAdmin, async (req, res) => {
+    try {
+        const b = req.body || {};
+        const min = Number(b.free_shipping?.min_subtotal);
+        const percent = Number(b.pix_discount?.percent);
+        if (!Number.isFinite(min) || min <= 0 || min > 100000) {
+            return res.status(400).json({ success: false, message: "Informe o valor mínimo do frete grátis." });
+        }
+        if (!Number.isFinite(percent) || percent <= 0 || percent > 50) {
+            return res.status(400).json({ success: false, message: "O desconto do Pix precisa ser de 0,01% a 50%." });
+        }
+        const benefits = normalizeStoreBenefits({
+            free_shipping: { enabled: b.free_shipping?.enabled === true, min_subtotal: min },
+            pix_discount: { enabled: b.pix_discount?.enabled === true, percent }
+        });
+        await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
+            method: "POST",
+            headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+            body: JSON.stringify({ key: STORE_BENEFITS_KEY, value: benefits })
+        });
+        publicCache.delete("store_benefits");
+        return res.json({ success: true, benefits });
+    } catch (error) {
+        console.error("Admin benefícios PUT:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível salvar." });
+    }
+});
+
 app.get("/api/admin/promotions", requireAdmin, async (req, res) => {
     try {
+        const benefits = await loadStoreBenefits();
         const promotions = await supabaseRequest("promotions?select=*&order=starts_at.desc", { method: "GET" });
         // Pedidos que levaram o presente de cada promoção (o item guarda promotion_id).
         const list = Array.isArray(promotions) ? promotions : [];
@@ -4602,6 +4687,7 @@ app.get("/api/admin/promotions", requireAdmin, async (req, res) => {
         ).catch(() => [])));
         return res.json({
             success: true,
+            benefits,
             promotions: list.map((promotion, index) => ({
                 ...promotion,
                 orders: (orders[index] || []).map(order => ({
@@ -5172,9 +5258,10 @@ app.post(
             const baseDeliveryDays = Number(shippingOption.delivery_days || shippingOption.delivery_max_days) || null;
             const deliveryDays = hasPresale ? Math.max(PRESALE_MIN_BUSINESS_DAYS, baseDeliveryDays || 0) : baseDeliveryDays;
 
-            // Frete grátis em Fortaleza e região a partir de R$ 599 nas peças (preço de tabela).
+            // Frete grátis em Fortaleza e região a partir do valor do painel, nas peças (preço de tabela).
+            const benefits = await storeBenefits();
             const productsSubtotal = productItems.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0);
-            const shippingValue = Number(shippingChargeFor(shippingOption, productsSubtotal).toFixed(2));
+            const shippingValue = Number(shippingChargeFor(shippingOption, productsSubtotal, benefits).toFixed(2));
 
 
             /* =================================================
@@ -5460,12 +5547,13 @@ app.post(
                 (sum, item) => sum + Number(item.price) * Number(item.quantity), 0
             ).toFixed(2));
 
-            // O desconto de 5% do Pix incide somente sobre os produtos.
+            // O desconto do Pix (percentual do painel) incide somente sobre os produtos.
             // O frete permanece integral.
             // Todos os valores são calculados em centavos a partir do mesmo preço
             // unitário enviado à InfinitePay. Assim o total salvo no pedido é
             // exatamente o valor cobrado e o payment_check do webhook confere.
-            const pixUnitCents = item => pixDiscountedUnitCents(item.price);
+            const pixPercent = pixPercentOf(benefits);
+            const pixUnitCents = item => pixDiscountedUnitCents(item.price, pixPercent);
             const productUnitCents = item => paymentMethod === "pix"
                 ? pixUnitCents(item)
                 : Math.round(Number(item.price) * 100);
@@ -5475,19 +5563,18 @@ app.post(
             const shippingCents = Math.round(shippingValue * 100);
 
             // Cupom: desconto nas peças, dividido entre as linhas em centavos inteiros.
-            // Cada item guarda o que foi cobrado (charged_units) para a InfinitePay e a Olist.
+            // Cada item guarda o que foi cobrado (charged_units, já com Pix e cupom) para a
+            // InfinitePay e a Olist: o percentual do Pix pode mudar no painel depois.
             let couponCents = 0;
+            const lines = productItems.map(item => ({ quantity: Number(item.quantity), unitCents: productUnitCents(item) }));
+            let split = lines.map(line => [{ quantity: line.quantity, unit_cents: line.unitCents }]);
             if (coupon) {
                 const units = productItems.reduce((sum, item) => sum + Number(item.quantity), 0);
                 couponCents = couponDiscountCents(coupon, checkoutProductCents, units);
-                const split = splitCouponDiscount(
-                    productItems.map(item => ({ quantity: Number(item.quantity), unitCents: productUnitCents(item) })),
-                    couponCents
-                );
-                productItems.forEach((item, index) => { item.charged_units = split[index]; });
+                split = splitCouponDiscount(lines, couponCents);
             }
-            const chargedLines = item => item.charged_units ||
-                [{ quantity: Number(item.quantity), unit_cents: productUnitCents(item) }];
+            productItems.forEach((item, index) => { item.charged_units = split[index]; });
+            const chargedLines = item => item.charged_units;
 
             const checkoutTotal = (checkoutProductCents - couponCents + shippingCents) / 100;
 
@@ -5576,7 +5663,7 @@ app.post(
             /* =================================================
                PIX — CHECKOUT INDEPENDENTE DA INFINITEPAY
                O Pix usa um checkout próprio da InfinitePay.
-               O desconto de 5% incide somente nos produtos;
+               O desconto do Pix incide somente nos produtos;
                o frete permanece com o valor integral.
             ================================================= */
             if (paymentMethod === "pix") {
@@ -6846,7 +6933,7 @@ async function remindPendingOrders(budget) {
                     title: "Sua seleção ainda está aqui" + (firstName ? ", " + firstName : "") + ".",
                     paragraphs: [
                         "O pagamento do pedido " + code + " não foi concluído" + (pix ? " (o Pix gerado não foi pago)" : "") + ". Se ainda quiser as peças, é só voltar: a sacola já está pronta para você.",
-                        "As peças não ficam reservadas e o estoque é limitado. No Pix, você ganha 5% de desconto, e em Fortaleza e região metropolitana o frete é grátis em compras a partir de R$ 599."
+                        ("As peças não ficam reservadas e o estoque é limitado. " + benefitsSentence(await storeBenefits())).trim()
                     ],
                     items,
                     buttonUrl: url,
@@ -6927,8 +7014,8 @@ async function remindAbandonedCarts(budget) {
                     title: "Esqueceu alguma coisa" + (firstName ? ", " + firstName : "") + "?",
                     paragraphs: [
                         "Guardamos as peças que você escolheu. Elas ainda estão disponíveis, mas o estoque é limitado.",
-                        "No Pix, você ganha 5% de desconto, e em Fortaleza e região metropolitana o frete é grátis em compras a partir de R$ 599."
-                    ],
+                        benefitsSentence(await storeBenefits())
+                    ].filter(Boolean),
                     items,
                     buttonUrl: url,
                     buttonText: "VOLTAR PARA A SACOLA",

@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20261101-promocoes">
+<link rel="stylesheet" href="admin.css?v=20261101-beneficios">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -128,7 +128,24 @@
     </section>
 
     <section id="promotionsSection" class="section hidden">
-      <div class="section-actions"><div><p class="eyebrow">VENDAS</p><h2>Promoções de presente</h2></div><button id="refreshPromotions" class="secondary">ATUALIZAR</button></div>
+      <div class="section-actions"><div><p class="eyebrow">VENDAS</p><h2>Promoções</h2></div><button id="refreshPromotions" class="secondary">ATUALIZAR</button></div>
+      <div class="panel benefits-panel">
+        <div class="panel-head"><div><h2>Benefícios da loja</h2><p class="field-help">Valem o tempo todo, até você desligar. O site, a sacola, a barra do topo e os e-mails de lembrete mostram os valores daqui.</p></div></div>
+        <form id="benefitsForm" class="benefits-grid" autocomplete="off">
+          <div class="benefit-card">
+            <label class="benefit-toggle"><input id="benefitShippingOn" type="checkbox"> <strong>Frete grátis</strong></label>
+            <label>A partir de (R$ em peças)<input id="benefitShippingMin" type="number" step="0.01" min="0.01" required></label>
+            <p class="field-help">Na entrega MONTÊ em Fortaleza e região metropolitana. O frete não entra na conta; vale o preço de tabela das peças.</p>
+          </div>
+          <div class="benefit-card">
+            <label class="benefit-toggle"><input id="benefitPixOn" type="checkbox"> <strong>Desconto no Pix</strong></label>
+            <label>Desconto (%)<input id="benefitPixPercent" type="number" step="0.01" min="0.01" max="50" required></label>
+            <p class="field-help">Só nas peças; o frete fica com o valor cheio. Soma com cupom e presente.</p>
+          </div>
+          <div class="benefits-actions"><span id="benefitsMessage" class="field-help"></span><button type="submit" id="saveBenefitsButton">SALVAR BENEFÍCIOS</button></div>
+        </form>
+      </div>
+      <h3 class="promo-subtitle">Promoções de presente</h3>
       <div class="panel promo-form-panel">
         <div class="panel-head"><div><h2 id="promoFormTitle">Nova promoção</h2><p class="field-help">A cliente ganha uma peça da categoria escolhida (ela escolhe o modelo e a cor, entre as que têm estoque) quando as peças da compra somam o valor mínimo. O frete não conta. A promoção entra no ar e sai sozinha nas datas que você marcar. Com mais de uma promoção no mesmo período, elas viram degraus na sacola (ex.: cinto a partir de R$ 499, bolsa a partir de R$ 999) e vale o presente do maior degrau alcançado.</p></div></div>
         <form id="promoForm" autocomplete="off">
@@ -222,7 +239,7 @@
 </div></div>
 
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="admin.js?v=20261101-promocoes"></script>
+<script src="admin.js?v=20261101-beneficios"></script>
 <script src="admin-carousel.js?v=20261007-banner"></script>
 </body>
 </html>

@@ -37,7 +37,7 @@
     <meta name="twitter:description" content="Conheça a coleção MONTÊ e compre online.">
     <meta name="twitter:image" content="https://oficialmontee.com.br/og-image.jpg?v=1">
 
-    <link rel="stylesheet" href="style.css?v=20261101-presente">
+    <link rel="stylesheet" href="style.css?v=20261101-beneficios">
     <!-- PRELOAD DO BANNER -->
 
     <link rel="preload" href="/fonts/dm-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
@@ -94,9 +94,9 @@
 
     <span class="shipping-bar-msg shipping-bar-promo" id="shippingBarPromo" hidden></span>
     <span class="shipping-bar-sep shipping-bar-promo" aria-hidden="true" hidden>·</span>
-    <span class="shipping-bar-msg">FRETE GRÁTIS EM FORTALEZA E REGIÃO A PARTIR DE R$ 599</span>
-    <span class="shipping-bar-sep" aria-hidden="true">·</span>
-    <span class="shipping-bar-msg">5% OFF NO PIX</span>
+    <span class="shipping-bar-msg" data-benefit="shipping-bar" data-benefit-show="shipping">FRETE GRÁTIS EM FORTALEZA E REGIÃO A PARTIR DE R$ 599</span>
+    <span class="shipping-bar-sep" aria-hidden="true" data-benefit-show="shipping-and-pix">·</span>
+    <span class="shipping-bar-msg" data-benefit="pix-bar" data-benefit-show="pix">5% OFF NO PIX</span>
 
 </div>
 
@@ -582,16 +582,16 @@
         </span>
         <div>
             <strong>ENTREGA EM TODO O BRASIL</strong>
-            <span>Frete grátis em Fortaleza e região acima de R$ 599.</span>
+            <span data-benefit="shipping-benefit">Frete grátis em Fortaleza e região acima de R$ 599.</span>
         </div>
     </div>
 
-    <div class="store-benefit">
+    <div class="store-benefit" data-benefit-show="pix">
         <span class="store-benefit-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none"><path d="M12 3v18M16 7.2c-.7-.9-1.9-1.5-3.7-1.5-2.2 0-3.7 1.1-3.7 2.8 0 4.4 7.5 2 7.5 6.2 0 1.7-1.5 2.8-3.9 2.8-1.8 0-3.1-.6-4-1.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         </span>
         <div>
-            <strong>5% OFF NO PIX</strong>
+            <strong data-benefit="pix-bar">5% OFF NO PIX</strong>
             <span>Pagamento à vista com desconto.</span>
         </div>
     </div>
@@ -994,7 +994,8 @@
                 <div class="gift-picker" id="giftPicker" hidden>
                     <p class="gift-picker-title" id="giftPickerTitle"></p>
                     <p class="gift-picker-hint" id="giftPickerHint"></p>
-                    <div class="gift-options" id="giftOptions" role="radiogroup" aria-label="Cintos de presente"></div>
+                    <div class="gift-options" id="giftOptions" aria-label="Modelos de presente"></div>
+                    <div class="gift-colors" id="giftColors" hidden></div>
                 </div>
             </div>
 
@@ -1068,7 +1069,7 @@
                                 <strong>Pix</strong>
                                 <small>Aprovação imediata</small>
                             </span>
-                            <em class="payment-option-badge">5% OFF</em>
+                            <em class="payment-option-badge" data-benefit="pix-badge" data-benefit-show="pix">5% OFF</em>
                         </label>
                         <label class="payment-option" id="paymentOptionCard">
                             <input type="radio" name="paymentMethod" value="credit_card">
@@ -1079,7 +1080,7 @@
                             </span>
                         </label>
                     </div>
-                    <p class="field-hint">O desconto do Pix vale para as peças. Frete grátis em Fortaleza e região a partir de R$ 599.</p>
+                    <p class="field-hint" data-benefit="payment-hint" data-benefit-show="payment-hint">O desconto do Pix vale para as peças. Frete grátis em Fortaleza e região a partir de R$ 599.</p>
 
                     <div class="coupon-box" id="couponBox">
                         <div class="coupon-row">
@@ -1128,7 +1129,7 @@
                 <ul class="checkout-trust" aria-label="Garantias">
                     <li><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>Pagamento seguro</li>
                     <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg>Envio com rastreio</li>
-                    <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12l-8 8-8-8 8-8z"/><path d="M9.5 12h5"/></svg>Pix com 5% OFF</li>
+                    <li data-benefit-show="pix"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12l-8 8-8-8 8-8z"/><path d="M9.5 12h5"/></svg><span data-benefit="pix-trust">Pix com 5% OFF</span></li>
                 </ul>
 
                 <button type="button" data-click="closeCart" class="continue-shopping">Continuar comprando</button>
@@ -1182,7 +1183,7 @@
 
 <!-- CATÁLOGO -->
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="script.js?v=20261101-presente"></script>
+<script src="script.js?v=20261101-beneficios"></script>
 
 </body>
 </html>

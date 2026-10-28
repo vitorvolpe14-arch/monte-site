@@ -68,6 +68,7 @@ async function init(){
   const cancelCouponEdit=$("cancelCouponEdit"); if(cancelCouponEdit) cancelCouponEdit.onclick=resetCouponForm;
   const refreshCoupons=$("refreshCoupons"); if(refreshCoupons) refreshCoupons.onclick=loadCoupons;
   const promoForm=$("promoForm"); if(promoForm) promoForm.onsubmit=savePromotion;
+  const benefitsForm=$("benefitsForm"); if(benefitsForm) benefitsForm.onsubmit=saveBenefits;
   const cancelPromoEdit=$("cancelPromoEdit"); if(cancelPromoEdit) cancelPromoEdit.onclick=resetPromotionForm;
   const refreshPromotions=$("refreshPromotions"); if(refreshPromotions) refreshPromotions.onclick=loadPromotions;
   try{const s=await api("/api/admin/session");await enterApp(s)}catch{showLogin()}
@@ -508,7 +509,10 @@ async function deleteCoupon(id){const c=coupons.find(x=>String(x.id)===String(id
 ===================================================== */
 const PROMO_CATEGORY_LABELS={cintos:"Cinto",acessorios:"Acessório",bolsas:"Bolsa"};
 function promotionState(p){const now=Date.now();if(!p.active)return["PAUSADA","expired"];if(new Date(p.starts_at).getTime()>now)return["AGENDADA","pending"];if(new Date(p.ends_at).getTime()<=now)return["ENCERRADA","expired"];return["NO AR","paid"]}
-async function loadPromotions(){try{$("promotionsError").textContent="";const d=await api("/api/admin/promotions");promotions=d.promotions||[];promotionsLoaded=true;renderPromotions()}catch(e){$("promotionsError").textContent=e.message}}
+async function loadPromotions(){try{$("promotionsError").textContent="";const d=await api("/api/admin/promotions");promotions=d.promotions||[];promotionsLoaded=true;renderBenefits(d.benefits);renderPromotions()}catch(e){$("promotionsError").textContent=e.message}}
+// Frete grátis e desconto do Pix: valem o tempo todo, até desligar.
+function renderBenefits(b){if(!b)return;$("benefitShippingOn").checked=!!b.free_shipping?.enabled;$("benefitShippingMin").value=Number(b.free_shipping?.min_subtotal||0);$("benefitPixOn").checked=!!b.pix_discount?.enabled;$("benefitPixPercent").value=Number(b.pix_discount?.percent||0);$("benefitsMessage").textContent=""}
+async function saveBenefits(e){e.preventDefault();const button=$("saveBenefitsButton");button.disabled=true;$("benefitsMessage").textContent="";try{const d=await api("/api/admin/store-benefits",{method:"PUT",body:JSON.stringify({free_shipping:{enabled:$("benefitShippingOn").checked,min_subtotal:Number(String($("benefitShippingMin").value).replace(",","."))},pix_discount:{enabled:$("benefitPixOn").checked,percent:Number(String($("benefitPixPercent").value).replace(",","."))}})});renderBenefits(d.benefits);$("benefitsMessage").textContent="Salvo. O site atualiza em até 1 minuto."}catch(err){$("benefitsMessage").textContent=err.message}finally{button.disabled=false}}
 function renderPromotions(){
   const box=$("promotionsList");if(!box)return;
   if(!promotions.length){setHTML(box,`<div class="panel"><p>${promotionsLoaded?"Nenhuma promoção cadastrada ainda.":"Carregando promoções…"}</p></div>`);return}
