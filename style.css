@@ -8021,8 +8021,7 @@ html.catalog-pending .footer {
 /* Benefício desligado no painel (frete grátis ou desconto do Pix) some do site. */
 [data-benefit-show][hidden] { display: none !important; }
 
-/* Regra da promoção para o presente (ex.: sem troca do brinde). */
-.gift-terms { display: flex; align-items: center; gap: 6px; margin: -4px 0 12px; font-size: 11.5px; line-height: 1.4; color: var(--wine); }
-.gift-terms::before { content: "i"; flex: 0 0 auto; display: grid; place-items: center; width: 15px; height: 15px; border: 1px solid currentColor; border-radius: 50%; font: italic 600 9px/1 Georgia, serif; }
+/* Regra da promoção para o presente (ex.: sem troca de brinde): aviso discreto. */
+.gift-terms { margin: -6px 0 12px; font-size: 10.5px; line-height: 1.4; color: #a39d97; }
 .gift-terms[hidden] { display: none; }
-.cart-gift-terms { margin: 2px 0 4px; font-size: 11px; line-height: 1.35; color: var(--wine); }
+.cart-gift-terms { margin: 1px 0 3px; font-size: 10.5px; line-height: 1.35; color: #a39d97; }
