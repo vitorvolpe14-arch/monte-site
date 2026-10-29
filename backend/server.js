@@ -1115,6 +1115,7 @@ async function sendOrderConfirmationEmail(order) {
     const total = Number(order.total || 0);
     const purchasesUrl = PUBLIC_SITE_URL + "/minhas-compras.html?order_nsu=" + encodeURIComponent(orderCode);
     const gifts = orderGiftItems(order).map(item => safeString(item.name) + (item.variant_color ? " (" + safeString(item.variant_color) + ")" : "")).join(", ");
+    const giftTerms = [...new Set(orderGiftItems(order).map(item => safeString(item.promotion_terms)).filter(Boolean))].join(" ");
     const html = "<html><body style=\"margin:0;background:#f7f5f2;font-family:Arial,Helvetica,sans-serif;color:#171717;\">" +
       "<div style=\"max-width:620px;margin:0 auto;padding:40px 20px;\"><div style=\"background:#111;color:#fff;text-align:center;padding:24px 20px;letter-spacing:6px;font-size:24px;\">MONTÊ</div>" +
       "<div style=\"background:#fff;padding:38px 30px;\"><p style=\"margin:0 0 12px;font-size:12px;letter-spacing:2px;color:#777;\">COMPRA CONFIRMADA</p>" +
@@ -1122,13 +1123,13 @@ async function sendOrderConfirmationEmail(order) {
       "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Seu pagamento foi confirmado e seu pedido já está registrado na MONTÊ.</p>" +
       "<div style=\"margin:28px 0;padding:20px;background:#f7f5f2;\"><p style=\"margin:0 0 8px;font-size:11px;letter-spacing:1.5px;color:#777;\">NÚMERO DO PEDIDO</p><strong style=\"font-size:20px;\">" + escapeEmailHtml(orderCode) + "</strong><p style=\"margin:14px 0 0;font-size:14px;color:#555;\">Total: <strong>R$ " + total.toFixed(2).replace(".", ",") + "</strong></p></div>" +
       (orderHasPresale(order) ? "<p style=\"font-size:15px;line-height:1.7;color:#555;\"><strong>Pré-venda:</strong> seu pedido tem peça em produção, com estoque limitado. A entrega é em " + PRESALE_MIN_BUSINESS_DAYS + " dias úteis. A MONTÊ confirma o seu pedido em breve; se não for possível atender, o valor pago é devolvido integralmente.</p>" : "") +
-      (gifts ? "<p style=\"font-size:15px;line-height:1.7;color:#555;\"><strong>Seu presente:</strong> " + escapeEmailHtml(gifts) + " vai junto no pedido.</p>" : "") +
+      (gifts ? "<p style=\"font-size:15px;line-height:1.7;color:#555;\"><strong>Seu presente:</strong> " + escapeEmailHtml(gifts) + " vai junto no pedido." + (giftTerms ? " " + escapeEmailHtml(giftTerms) : "") + "</p>" : "") +
       "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Acompanhe o status do seu pedido e novas atualizações pela área <strong>Minhas Compras</strong>.</p>" +
       "<div style=\"text-align:center;margin:30px 0;\"><a href=\"" + purchasesUrl + "\" style=\"display:inline-block;background:#111;color:#fff;text-decoration:none;padding:15px 26px;font-size:13px;letter-spacing:1.5px;\">ACESSAR MINHAS COMPRAS</a></div></div>" +
       "<p style=\"text-align:center;font-size:11px;color:#999;margin:20px 0;\">MONTÊ — Bolsas e acessórios</p></div></body></html>";
     const text = "Compra confirmada na MONTÊ\n\nPedido: " + orderCode + "\nTotal: R$ " + total.toFixed(2).replace(".", ",") +
         (orderHasPresale(order) ? "\n\nPré-venda: a entrega é em " + PRESALE_MIN_BUSINESS_DAYS + " dias úteis." : "") +
-        (gifts ? "\n\nSeu presente: " + gifts + " vai junto no pedido." : "") +
+        (gifts ? "\n\nSeu presente: " + gifts + " vai junto no pedido." + (giftTerms ? " " + giftTerms : "") : "") +
         "\n\nAcesse: " + purchasesUrl;
     const idempotencyKey = "monte-order-confirmation-" + String(order.order_nsu);
     const response = await fetch("https://api.resend.com/emails", {
@@ -4594,7 +4595,7 @@ const orderGiftItems = order => (Array.isArray(order?.items) ? order.items : [])
 async function loadPromotions() {
     const rows = await supabaseRequest(
         "promotions?active=eq.true&ends_at=gt." + encodeURIComponent(new Date().toISOString()) +
-        "&select=id,name,min_subtotal,gift_category,starts_at,ends_at,banner_text&order=min_subtotal.asc",
+        "&select=id,name,min_subtotal,gift_category,starts_at,ends_at,banner_text,terms_text&order=min_subtotal.asc",
         { method: "GET" }
     );
     return Array.isArray(rows) ? rows : [];
@@ -4626,7 +4627,8 @@ app.get("/api/promocoes", async (req, res) => {
                 min_subtotal: Number(promotion.min_subtotal),
                 gift_category: promotion.gift_category,
                 ends_at: promotion.ends_at,
-                banner_text: promotion.banner_text || null
+                banner_text: promotion.banner_text || null,
+                terms_text: promotion.terms_text || null
             }))
         });
     } catch (error) {
@@ -4662,7 +4664,8 @@ async function loadGiftProduct(promotion, productId, variantId) {
             presale: false,
             gift: true,
             promotion_id: promotion.id,
-            promotion_name: promotion.name
+            promotion_name: promotion.name,
+            promotion_terms: promotion.terms_text || null
         },
         variant
     };
@@ -4701,6 +4704,11 @@ function sanitizePromotionPayload(body, { partial = false } = {}) {
         const banner = safeString(b.banner_text);
         if (banner.length > 90) return { error: "O aviso da barra do topo vai até 90 letras." };
         promotion.banner_text = banner || null;
+    }
+    if (!partial || has("terms_text")) {
+        const terms = safeString(b.terms_text);
+        if (terms.length > 200) return { error: "O aviso sobre o presente vai até 200 letras." };
+        promotion.terms_text = terms || null;
     }
     if (!partial || has("active")) promotion.active = b.active === undefined ? true : b.active === true;
     return { promotion };
