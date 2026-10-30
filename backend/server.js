@@ -4288,6 +4288,36 @@ function heroSlidesHtml(slides) {
 
 // Página inicial: o servidor já entrega o banner (com tamanho e prioridade) e os produtos
 // dentro do HTML. A loja aparece sem esperar outras requisições e o banner não empurra a página.
+// Troca a prévia da página inicial (título, descrição e foto) pela da bolsa do link.
+function productSharePreview(page, product, code) {
+    const firstImage = Array.isArray(product.images) ? safeString(product.images[0]) : "";
+    const image = firstImage ? publicImageUrl(smallImageUrl(firstImage) || firstImage) : "";
+    const price = Number(product.is_sale && product.sale_price != null ? product.sale_price : product.price || 0);
+    const title = safeString(product.name) + " | MONTÊ";
+    const description = "R$ " + price.toFixed(2).replace(".", ",") + " · " +
+        (safeString(product.description) || "Bolsas e acessórios MONTÊ.").replace(/\s+/g, " ").slice(0, 150);
+    const url = PUBLIC_SITE_URL + "/?p=" + code;
+    const attr = value => xmlEscape(value);
+    const meta = (pattern, value) => { page = page.replace(pattern, (tag, before) => before + attr(value) + '">'); };
+    page = page.replace(/<title>[^<]*<\/title>/, () => "<title>" + attr(title) + "</title>");
+    meta(/(<meta name="description" content=")[^"]*">/, description);
+    meta(/(<meta property="og:type" content=")[^"]*">/, "product");
+    meta(/(<meta property="og:title" content=")[^"]*">/, title);
+    meta(/(<meta property="og:description" content=")[^"]*">/, description);
+    meta(/(<meta property="og:url" content=")[^"]*">/, url);
+    meta(/(<meta name="twitter:title" content=")[^"]*">/, title);
+    meta(/(<meta name="twitter:description" content=")[^"]*">/, description);
+    if (image) {
+        meta(/(<meta property="og:image" content=")[^"]*">/, image);
+        meta(/(<meta property="og:image:secure_url" content=")[^"]*">/, image);
+        meta(/(<meta property="og:image:alt" content=")[^"]*">/, safeString(product.name));
+        meta(/(<meta name="twitter:image" content=")[^"]*">/, image);
+        // Tamanho e tipo eram os da imagem padrão da loja.
+        page = page.replace(/\s*<meta property="og:image:(type|width|height)" content="[^"]*">/g, "");
+    }
+    return page;
+}
+
 app.get("/", async (req, res) => {
     try {
         const [html, catalog, slides, editorial] = await Promise.all([
@@ -4314,6 +4344,13 @@ app.get("/", async (req, res) => {
         if (Array.isArray(catalog)) {
             page = page.replace("<!-- CATÁLOGO -->", () => '<script id="catalogData" type="application/json">' + jsonForHtml(catalog) + "</script>");
         }
+        // Link de uma bolsa (/?p=<código>, o mesmo do painel e da barra de endereço): a prévia
+        // mostra a foto, o nome e o preço dela; a loja abre com a bolsa aberta.
+        const shareCode = safeString(req.query?.p);
+        const sharedProduct = /^[A-Za-z0-9]{6,12}$/.test(shareCode) && Array.isArray(catalog)
+            ? catalog.find(product => product.short_code === shareCode)
+            : null;
+        if (sharedProduct) page = productSharePreview(page, sharedProduct, shareCode);
         res.setHeader("Cache-Control", "no-cache");
         return res.status(200).type("html").send(page);
     } catch (error) {
@@ -6812,6 +6849,12 @@ function productSchema(product) {
         }
     };
 }
+
+// /p/<código> leva ao link da bolsa, /?p=<código> (quem digitar o link no formato de pasta).
+app.get("/p/:code", (req, res) => {
+    const code = safeString(req.params.code);
+    return res.redirect(301, /^[A-Za-z0-9]{6,12}$/.test(code) ? "/?p=" + code : "/");
+});
 
 // Link curto das mensagens da loja: leva à sacola pronta no site (só endereços do próprio site).
 const shortLinkRateLimit = createRateLimiter({ windowMs: 60 * 1000, max: 30 });

@@ -953,9 +953,34 @@ function updateProductAvailabilityUI() {
     }
 }
 
+// Bolsa aberta: a barra de endereço mostra o link curto dela (/?p=código), o mesmo do painel,
+// para copiar e mandar (a prévia no WhatsApp mostra a foto). Ao fechar, a barra volta ao que era.
+let addressBeforeProduct = null;
+function showProductAddress(product) {
+    const code = String(product?.short_code || "");
+    if (!/^[A-Za-z0-9]{6,12}$/.test(code) || location.pathname !== "/") return;
+    try {
+        if (addressBeforeProduct === null) addressBeforeProduct = location.search + location.hash;
+        history.replaceState(history.state, "", "/?p=" + code);
+    } catch {}
+}
+
+function restoreAddressAfterProduct() {
+    if (addressBeforeProduct === null) return;
+    const before = addressBeforeProduct;
+    addressBeforeProduct = null;
+    const hashAt = before.indexOf("#");
+    const params = new URLSearchParams(hashAt >= 0 ? before.slice(0, hashAt) : before);
+    params.delete("p");
+    params.delete("produto");
+    const query = params.toString();
+    try { history.replaceState(history.state, "", "/" + (query ? "?" + query : "") + (hashAt >= 0 ? before.slice(hashAt) : "")); } catch {}
+}
+
 function openProductModal(productId) {
     selectedProduct = products.find(product => product.id === productId);
     if (!selectedProduct) return;
+    showProductAddress(selectedProduct);
 
     selectedVariant = null;
     selectedQuantity = 1;
@@ -1210,6 +1235,8 @@ function closeProductModal() {
     document
         .getElementById("productModal")
         .classList.remove("active");
+
+    restoreAddressAfterProduct();
 
 
     document.body.style.overflow = "";
@@ -2907,16 +2934,24 @@ function restoreCartFromLink() {
 
 /* =====================================================
    LINK DIRETO PARA UM PRODUTO
+   /?p=código (link curto do painel e da barra de endereço) ou
    /?produto=ID abre a vitrine com o produto já aberto, depois da
    animação de abertura.
 ===================================================== */
 
 function openProductFromLink() {
     let productId = "";
-    try { productId = new URLSearchParams(location.search).get("produto") || ""; } catch { return; }
+    try {
+        const params = new URLSearchParams(location.search);
+        const code = params.get("p") || "";
+        productId = code ? (products.find(p => p.short_code === code)?.id || "") : (params.get("produto") || "");
+    } catch { return; }
     if (!productId) return;
 
-    if (!products.some(p => p.id === productId)) return;
+    const linked = products.find(p => p.id === productId);
+    if (!linked) return;
+    // Bolsa aberta pelo link compartilhado também conta como produto visto.
+    window.monteAnalytics?.track("view_product", { product_id: linked.id, product_name: linked.name });
 
     const root = document.documentElement;
     let done = false;
