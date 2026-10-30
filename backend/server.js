@@ -6813,6 +6813,26 @@ function productSchema(product) {
     };
 }
 
+// Link curto das mensagens da loja: leva à sacola pronta no site (só endereços do próprio site).
+const shortLinkRateLimit = createRateLimiter({ windowMs: 60 * 1000, max: 30 });
+app.get("/s/:code", shortLinkRateLimit, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("X-Robots-Tag", "noindex");
+    const code = safeString(req.params.code);
+    if (!/^[A-Za-z0-9]{6,12}$/.test(code)) return res.redirect(302, "/");
+    try {
+        const rows = await supabaseRequest(
+            "short_links?code=eq." + code + "&expires_at=gt." + encodeURIComponent(new Date().toISOString()) + "&select=target&limit=1",
+            { method: "GET" }
+        );
+        const target = safeString(Array.isArray(rows) ? rows[0]?.target : "");
+        return res.redirect(302, target.startsWith("/?") ? target : "/");
+    } catch (error) {
+        console.error("Link curto:", error.message);
+        return res.redirect(302, "/");
+    }
+});
+
 app.get("/produto/:id/:slug", async (req, res) => {
     try {
         const id = safeString(req.params.id);
@@ -7046,6 +7066,39 @@ function cartRestoreUrl(items, campaign, medium = "email") {
     return PUBLIC_SITE_URL + "/?sacola=" + payload + "&utm_source=lembrete&utm_medium=" + medium + "&utm_campaign=" + campaign;
 }
 
+// Link curto da loja (oficialmontee.com.br/s/Ab3dE9x) no lugar do link longo da sacola: a
+// mensagem do WhatsApp fica legível. Vale 30 dias. Se não der para criar, vai o link longo.
+const SHORT_LINK_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+// Sem 0/O, 1/l/I: fácil de ler se alguém precisar digitar.
+const SHORT_LINK_ALPHABET = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+function shortLinkCode(length = 7) {
+    let code = "";
+    for (const byte of crypto.randomBytes(length)) code += SHORT_LINK_ALPHABET[byte % SHORT_LINK_ALPHABET.length];
+    return code;
+}
+
+async function shortSiteUrl(longUrl, budget) {
+    const target = safeString(longUrl).startsWith(PUBLIC_SITE_URL + "/") ? safeString(longUrl).slice(PUBLIC_SITE_URL.length) : "";
+    if (!target.startsWith("/?") || target.length > 2000) return longUrl;
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const code = shortLinkCode();
+        try {
+            spend(budget);
+            await supabaseRequest("short_links", {
+                method: "POST",
+                headers: { "Prefer": "return=minimal" },
+                body: JSON.stringify({ code, target, expires_at: new Date(Date.now() + SHORT_LINK_TTL_MS).toISOString() })
+            });
+            return PUBLIC_SITE_URL + "/s/" + code;
+        } catch (error) {
+            if (error?.budget) throw error;
+            console.error("Link curto não criado:", error.message);
+        }
+    }
+    return longUrl;
+}
+
 function formatEmailMoney(value) {
     return "R$ " + Number(value || 0).toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
@@ -7119,8 +7172,9 @@ function reminderFirstName(name) {
 ===================================================== */
 const STORE_FOLLOWUP_ORDER_AFTER_MS = 30 * 60 * 1000;
 const STORE_FOLLOWUP_CART_AFTER_MS = 30 * 60 * 1000;
-// Por aviso: pedidos/compras posteriores, aviso recente, estoque, WhatsApp, e-mail e marcação.
-const STORE_FOLLOWUP_CALLS_EACH = 7;
+// Por aviso: pedidos/compras posteriores, aviso recente, estoque, link curto (até 2), WhatsApp,
+// e-mail e marcação.
+const STORE_FOLLOWUP_CALLS_EACH = 9;
 const WHATSAPP_FOLLOWUP_TEMPLATE_NAME = safeString(process.env.WHATSAPP_FOLLOWUP_TEMPLATE_NAME || "monte_sacola_abandonada");
 const WHATSAPP_FOLLOWUP_TEMPLATE_LANGUAGE = safeString(process.env.WHATSAPP_FOLLOWUP_TEMPLATE_LANGUAGE || "pt_BR");
 
@@ -7249,7 +7303,7 @@ async function storeFollowupPendingOrders(budget) {
         if (!items.length) { await mark("skipped_sold_out"); continue; }
         const code = formatOrderCode(order.order_code || order.order_nsu);
         const firstName = reminderFirstName(order.customer_name);
-        const cartUrl = cartRestoreUrl(items, "pagamento_pendente", "whatsapp");
+        const cartUrl = await shortSiteUrl(cartRestoreUrl(items, "pagamento_pendente", "whatsapp"), budget);
         const greeting = "Oi" + (firstName ? ", " + firstName : "") + "! Aqui é da MONTÊ. Vi que o pagamento do seu pedido " + code +
             " (" + storeFollowupPieces(items) + ") não foi concluído. Aconteceu algum problema? Posso te ajudar a finalizar.";
         const message = greeting + " Sua sacola está pronta neste link: " + cartUrl;
@@ -7336,7 +7390,7 @@ async function storeFollowupAbandonedCarts(budget) {
         const items = await availableReminderItems(cart.items);
         if (!items.length) { await mark("skipped_sold_out"); continue; }
         const firstName = reminderFirstName(cart.customer_name);
-        const cartUrl = cartRestoreUrl(items, "sacola_abandonada", "whatsapp");
+        const cartUrl = await shortSiteUrl(cartRestoreUrl(items, "sacola_abandonada", "whatsapp"), budget);
         const greeting = "Oi" + (firstName ? ", " + firstName : "") + "! Aqui é da MONTÊ. Vi que você deixou " +
             storeFollowupPieces(items) + " na sacola. Ficou alguma dúvida? Posso te ajudar a finalizar.";
         const message = greeting + " Sua sacola está aqui: " + cartUrl;
@@ -7431,6 +7485,7 @@ async function purgeExpiredAnalytics() {
     const minimal = { method: "DELETE", headers: { Prefer: "return=minimal" } };
     await supabaseRequest("cart_snapshots?updated_at=lt." + isoAgo(CART_SNAPSHOT_RETENTION_MS), minimal);
     await supabaseRequest("site_sessions?last_seen_at=lt." + isoAgo(ANALYTICS_RETENTION_MS), minimal);
+    await supabaseRequest("short_links?expires_at=lt." + encodeURIComponent(new Date().toISOString()), minimal);
 }
 
 async function runScheduledTask(cron) {
