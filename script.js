@@ -3097,13 +3097,9 @@ function savePrivacyConsent(choice) {
     const before = privacyConsent;
     privacyConsent = { v: 1, analytics: !!choice.analytics, reminders: !!choice.reminders, at: Date.now() };
     try { localStorage.setItem(CONSENT_KEY, JSON.stringify(privacyConsent)); } catch {}
-    // Sem o lembrete, o WhatsApp guardado na sacola também sai.
-    const hadBagPhone = !!savedBagWhatsapp();
-    if (!privacyConsent.reminders) { try { localStorage.removeItem(BAG_WHATSAPP_KEY); } catch {} }
     hideCookieConsent();
     // Permissão retirada: apaga o que já estava guardado e recarrega para parar o que estava rodando.
-    if ((before?.analytics && !privacyConsent.analytics) || (before?.reminders && !privacyConsent.reminders) ||
-        (hadBagPhone && !privacyConsent.reminders && !privacyConsent.analytics)) {
+    if ((before?.analytics && !privacyConsent.analytics) || (before?.reminders && !privacyConsent.reminders)) {
         forgetTrackingData();
         location.reload();
         return;
@@ -3154,12 +3150,10 @@ function startStoreAnalytics() {
     // Páginas, produtos vistos e sacola: só com a permissão de estatísticas.
     const track = (name, extra) => { if (privacyConsent?.analytics) record(name, extra); };
     // A sacola é salva com estatísticas ou lembrete; nome, e-mail e telefone só com o lembrete.
-    // O WhatsApp deixado na própria sacola ("guardar sacola") vale como lembrete só do telefone.
     function saveCart() {
         const items = Array.isArray(cart) ? cart : [];
         if (!items.length) return;
         const reminders = privacyConsent?.reminders === true;
-        const bagPhone = savedBagWhatsapp();
         const shippingPrice = Number(selectedShippingOption?.price || 0);
         const subtotal = items.reduce((s, i) => s + Number(i.price || 0) * Number(i.quantity || 1), 0);
         post("/api/analytics/cart", {
@@ -3168,7 +3162,7 @@ function startStoreAnalytics() {
             subtotal, shipping: shippingPrice, total: subtotal + shippingPrice,
             customer_name: reminders ? document.getElementById("customerName")?.value || "" : "",
             customer_email: reminders ? document.getElementById("customerEmail")?.value || "" : "",
-            customer_phone: (reminders ? document.getElementById("customerPhone")?.value : "") || bagPhone || ""
+            customer_phone: reminders ? document.getElementById("customerPhone")?.value || "" : ""
         });
     }
     window.monteAnalytics = { track, saveCart, record };
@@ -3648,71 +3642,13 @@ function applyEmailSuggestion() {
     renderEmailSuggestion();
 }
 
-/* Sacola guardada: o WhatsApp que a cliente deixa na sacola para receber o link dela depois.
-   É o consentimento do lembrete (só para esta sacola); fica neste aparelho até ela remover. */
-const BAG_WHATSAPP_KEY = "monte_bag_whatsapp";
-
-// Sem constantes do arquivo aqui: a sacola pode ser desenhada antes delas existirem.
-function savedBagWhatsapp() {
-    try {
-        const value = localStorage.getItem("monte_bag_whatsapp") || "";
-        return /^[1-9]{2}9\d{8}$/.test(phoneDigits(value)) ? value : "";
-    } catch {
-        return "";
-    }
-}
-
+// Máscara do WhatsApp enquanto a cliente digita: (85) 99999-9999.
 function formatPhoneTyping(value) {
     const d = phoneDigits(value).slice(0, 11);
     return d.length > 10 ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
         : d.length > 6 ? `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
         : d.length > 2 ? `(${d.slice(0, 2)}) ${d.slice(2)}`
         : d;
-}
-
-function renderBagSave() {
-    const box = document.getElementById("bagSave");
-    if (!box) return;
-    const saved = savedBagWhatsapp();
-    box.hidden = !cart.length;
-    box.classList.toggle("is-saved", !!saved);
-    const text = document.getElementById("bagSaveText");
-    if (text) {
-        setHTML(text, saved
-            ? `Sacola guardada. Se precisar sair, a MONTÊ te manda o link dela no WhatsApp <strong>${escapeHTML(saved)}</strong>.`
-            : "Precisa sair agora? Deixe seu WhatsApp e a MONTÊ te manda o link desta sacola para você finalizar depois.");
-    }
-}
-
-function saveBagWhatsapp() {
-    const input = document.getElementById("bagWhatsapp");
-    const value = formatPhoneTyping(input?.value || "");
-    if (!CHECKOUT_RULES.customerPhone(value)) {
-        input?.closest(".field")?.classList.add("is-invalid");
-        showToast("Informe seu WhatsApp com DDD e 9 dígitos. Ex.: (85) 99999-9999.");
-        input?.focus();
-        return;
-    }
-    try { localStorage.setItem(BAG_WHATSAPP_KEY, value); } catch {}
-    // O mesmo número já fica no checkout.
-    const phone = document.getElementById("customerPhone");
-    if (phone && !phone.value.trim()) {
-        phone.value = value;
-        phone.dispatchEvent(new Event("input", { bubbles: true }));
-    }
-    startStoreAnalytics();
-    window.monteAnalytics?.saveCart();
-    renderBagSave();
-    showToast("Sacola guardada. Se precisar sair, mandamos o link no seu WhatsApp.");
-}
-
-function removeBagWhatsapp() {
-    try { localStorage.removeItem(BAG_WHATSAPP_KEY); } catch {}
-    const input = document.getElementById("bagWhatsapp");
-    if (input) input.value = "";
-    // A sacola salva deixa de ter o número (sem o lembrete aceito nos cookies).
-    window.monteAnalytics?.saveCart();
-    renderBagSave();
 }
 
 const CHECKOUT_STEP_FIELDS = {
@@ -3785,8 +3721,6 @@ function renderCheckoutExtras({ subtotal, shipping, pixDiscount, couponDiscount 
         if (perkButton) perkButton.hidden = paymentMethod === "pix";
     }
 
-    renderBagSave();
-
     // Frete grátis em Fortaleza e região a partir de R$ 599: quanto falta, ou o aviso de que
     // ganhou. Some quando o endereço é de outra cidade (lá o frete continua sendo cobrado).
     const freePerk = document.getElementById("freeShippingPerk");
@@ -3847,22 +3781,6 @@ function renderCheckoutExtras({ subtotal, shipping, pixDiscount, couponDiscount 
             });
             email.addEventListener("blur", () => renderEmailSuggestion());
         }
-
-        // WhatsApp para guardar a sacola: mesma máscara do checkout; Enter guarda.
-        const bagPhone = document.getElementById("bagWhatsapp");
-        if (bagPhone) {
-            bagPhone.addEventListener("input", () => {
-                bagPhone.value = formatPhoneTyping(bagPhone.value);
-                bagPhone.closest(".field")?.classList.remove("is-invalid");
-                bagPhone.closest(".field")?.classList.toggle("is-valid", CHECKOUT_RULES.customerPhone(bagPhone.value));
-            });
-            bagPhone.addEventListener("keydown", event => {
-                if (event.key !== "Enter") return;
-                event.preventDefault();
-                saveBagWhatsapp();
-            });
-        }
-        renderBagSave();
 
         const state = document.getElementById("customerState");
         if (state) state.addEventListener("input", () => { state.value = state.value.replace(/[^a-z]/gi, "").toUpperCase(); });
@@ -4039,11 +3957,11 @@ registerClickActions({
     openWhatsAppReservation, previousCategoryPage, previousCollectionPage, previousNewPage,
     previousSalePage, previousSlide, removeCoupon, removeFromCart, toggleMobileMenu, updateItemQuantity,
     acceptCookies, rejectCookies, customizeCookies, saveCookieChoices, openCookiePreferences,
-    applyEmailSuggestion, saveBagWhatsapp, removeBagWhatsapp
+    applyEmailSuggestion
 });
 
-// Sacola guardada com WhatsApp numa visita anterior: o lembrete continua valendo.
-if (savedBagWhatsapp()) startStoreAnalytics();
+// A caixa "Guardar sacola" saiu do site: apaga o número que ela tinha guardado neste aparelho.
+try { localStorage.removeItem("monte_bag_whatsapp"); } catch {}
 
 document.getElementById("searchInput")?.addEventListener("input", () => searchProducts());
 // Enter no campo do cupom aplica o cupom (sem enviar nada além disso).

@@ -7034,50 +7034,6 @@ html.intro-skipped .header { animation-delay: .5s; }
 .free-shipping-perk.is-active .free-shipping-perk-icon { background: #2f6b45; }
 .free-shipping-perk.is-active .free-shipping-perk-bar i { background: #2f6b45; }
 
-/* Guardar a sacola: WhatsApp para a MONTÊ mandar o link da sacola depois. */
-.bag-save {
-    margin-bottom: 6px;
-    padding: 12px 14px;
-    border: 1px solid var(--co-line, #ece8e2);
-    border-radius: 14px;
-    background: #fcfaf8;
-}
-.bag-save[hidden] { display: none; }
-.bag-save-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-.bag-save-icon {
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    background: var(--co-ink, #0d0d0d);
-}
-.bag-save-icon svg { width: 15px; height: 15px; fill: none; stroke: #fff; stroke-width: 1.6; stroke-linejoin: round; }
-.bag-save-head p { margin: 0; font-size: 12.5px; line-height: 1.45; }
-.bag-save-head strong { color: var(--co-ink, #0d0d0d); font-weight: 600; white-space: nowrap; }
-.bag-save-row .bag-save-field { flex: 1; min-width: 0; }
-.bag-save-note { margin: 8px 2px 0; font-size: 11px; line-height: 1.5; color: var(--co-muted, #8a847e); }
-.bag-save-note a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
-.bag-save-done { display: none; margin: 0; }
-.bag-save-remove {
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--co-muted, #8a847e);
-    font: inherit;
-    font-size: 11.5px;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-    cursor: pointer;
-}
-.bag-save.is-saved { border-color: #d9e8dc; background: #f3f8f4; }
-.bag-save.is-saved .bag-save-icon { background: #2f6b45; }
-.bag-save.is-saved .bag-save-head { margin-bottom: 4px; }
-.bag-save.is-saved .bag-save-row,
-.bag-save.is-saved .bag-save-note { display: none; }
-.bag-save.is-saved .bag-save-done { display: block; padding-left: 42px; }
-
 /* "Você quis dizer …@gmail.com?" embaixo do e-mail do checkout. */
 .email-suggestion { grid-column: 1 / -1; margin: -2px 2px 2px; font-size: 12px; line-height: 1.5; color: var(--co-ink, #0d0d0d); }
 .email-suggestion[hidden] { display: none; }
