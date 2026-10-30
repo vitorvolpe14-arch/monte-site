@@ -543,7 +543,7 @@ function startPromotionNow(id){if(!window.confirm("Colocar esta promoção no ar
 function endPromotionNow(id){if(!window.confirm("Encerrar esta promoção agora? Ela sai do site na hora (pedidos já feitos mantêm o presente)."))return;patchPromotion(id,{ends_at:new Date().toISOString()})}
 async function deletePromotion(id){const p=promotions.find(x=>String(x.id)===String(id));if(!window.confirm("Excluir a promoção "+(p?.name||"")+"? Os pedidos que já ganharam o presente continuam com ele. Esta ação não pode ser desfeita."))return;try{await api("/api/admin/promotions/"+encodeURIComponent(id),{method:"DELETE"});if(String($("promoId").value)===String(id))resetPromotionForm();await loadPromotions()}catch(e){window.alert(e.message)}}
 
-registerClickActions({copyProductLink,shareProductLink,editPromotion,togglePromotion,startPromotionNow,endPromotionNow,deletePromotion,editCoupon,toggleCoupon,deleteCoupon,approveOrder,rejectOrder,markRefundDone,openProduct,toggleProduct,adjustStock,openOrder,closeOrder,sendTrackingWhatsApp,sendTrackingEmail,syncPaidOrderOlist,saveOrderStatus,removeProductImage,removePendingImage});
+registerClickActions({editPromotion,togglePromotion,startPromotionNow,endPromotionNow,deletePromotion,editCoupon,toggleCoupon,deleteCoupon,approveOrder,rejectOrder,markRefundDone,openProduct,toggleProduct,adjustStock,openOrder,closeOrder,sendTrackingWhatsApp,sendTrackingEmail,syncPaidOrderOlist,saveOrderStatus,removeProductImage,removePendingImage});
 
 /* =====================================================
    FOTOS LEVES
@@ -557,11 +557,9 @@ registerClickActions({copyProductLink,shareProductLink,editPromotion,togglePromo
 ===================================================== */
 const PHOTO_SIZES={product:{full:1600,small:640,quality:[.84,.8]},banner:{full:2400,small:1200,quality:[.9,.86]}};
 // Link curto fixo de cada bolsa para mandar à cliente: a prévia (WhatsApp, Instagram) mostra a
-// foto e o nome, e a cliente cai na loja com a bolsa aberta. Só aparece em bolsa ativa.
-const PRODUCT_LINK_BASE="https://oficialmontee.com.br/?p=";
-function productLinkHtml(p){if(!p.active||!/^[A-Za-z0-9]{6,12}$/.test(String(p.short_code||"")))return "";const url=PRODUCT_LINK_BASE+p.short_code;const args=esc(JSON.stringify([url,p.name]));return `<div class="admin-product-link"><a href="${esc(url)}" target="_blank" rel="noopener">${esc(url.replace(/^https:\/\//,""))}</a><div class="admin-product-link-actions"><button class="secondary" data-click="copyProductLink" data-args="${args}">COPIAR LINK</button>${typeof navigator.share==="function"?`<button class="secondary" data-click="shareProductLink" data-args="${args}">ENVIAR</button>`:""}</div></div>`}
-async function copyProductLink(url){const button=this;let copied=false;try{await navigator.clipboard.writeText(url);copied=true}catch{}if(!copied){window.prompt("Copie o link da bolsa:",url);return}if(button){const label=button.textContent;button.textContent="COPIADO ✓";button.disabled=true;setTimeout(()=>{button.textContent=label;button.disabled=false},1800)}}
-async function shareProductLink(url,name){try{await navigator.share({title:name+" | MONTÊ",url})}catch(e){if(e&&e.name!=="AbortError")copyProductLink.call(this,url)}}
+// foto e o nome, e a cliente cai na loja com a bolsa aberta. Só o link, em texto: um toque
+// seleciona ele inteiro para copiar. Só aparece em bolsa ativa.
+function productLinkHtml(p){if(!p.active||!/^[A-Za-z0-9]{6,12}$/.test(String(p.short_code||"")))return "";return `<div class="admin-product-link"><span class="admin-product-link-text">oficialmontee.com.br/?p=${esc(p.short_code)}</span></div>`}
 function smallPhoto(url){return isOptimizedPhoto(url)?String(url).replace(/-full\.(webp|jpg)$/,"-small.$1"):url}
 function isOptimizedPhoto(url){return /\/opt\/[^?#]+-full\.(webp|jpg)$/.test(String(url||""))}
 async function loadImageSource(source){
