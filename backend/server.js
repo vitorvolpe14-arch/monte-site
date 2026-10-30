@@ -1441,16 +1441,6 @@ function shippingChargeFor(option, productsSubtotal, benefits) {
     return free?.enabled && FREE_SHIPPING_OPTION_IDS.has(option?.id) && productsSubtotal >= Number(free.min_subtotal) ? 0 : price;
 }
 
-// Frase dos e-mails de lembrete com os benefícios que estão valendo.
-function benefitsSentence(benefits) {
-    const parts = [];
-    if (benefits?.pix_discount?.enabled) parts.push("no Pix, você ganha " + String(benefits.pix_discount.percent).replace(".", ",") + "% de desconto");
-    if (benefits?.free_shipping?.enabled) parts.push("em Fortaleza e região metropolitana o frete é grátis em compras a partir de R$ " + Number(benefits.free_shipping.min_subtotal).toFixed(2).replace(".", ",").replace(",00", ""));
-    if (!parts.length) return "";
-    const text = parts.join(", e ") + ".";
-    return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
 // CEPs de Fortaleza e da região metropolitana começam com 60 ou 61 (60000-000 a 61999-999).
 function isLocalDeliveryCep(cep) {
     const digits = safeString(cep).replace(/\D/g, "");
@@ -6985,26 +6975,19 @@ if (!IS_WORKERS) app.use(
 
 
 /* =====================================================
-   LEMBRETES POR E-MAIL E LIMPEZA DOS PEDIDOS SEM PAGAMENTO
-   - Pedido aguardando pagamento (Pix gerado ou cartão não concluído):
-     um lembrete 30 minutos depois, com um link que refaz a sacola.
-   - Sacola abandonada (e-mail preenchido no checkout, sem pedido):
-     um lembrete 2 horas depois da última mexida.
-   - 30 minutos depois de um pedido sem pagamento ou de uma sacola abandonada
+   PEDIDOS SEM PAGAMENTO E SACOLAS ABANDONADAS
+   - A cliente não recebe lembrete automático por e-mail (decisão da loja):
+     30 minutos depois de um pedido sem pagamento ou de uma sacola abandonada
      (com o WhatsApp digitado no checkout), a loja é avisada para chamar a
      cliente no WhatsApp (veja "AVISO PARA A LOJA CHAMAR A CLIENTE").
-   Só pedidos e sacolas das últimas 24 horas, um único e-mail por pedido
-   ou sacola, e só com as peças que ainda têm estoque.
+     Só pedidos e sacolas das últimas 24 horas, um aviso por pedido ou sacola,
+     e só com as peças que ainda têm estoque.
    - Pedido aguardando pagamento há mais de 2 dias vira "expired" e sai
      da lista principal do painel. Se o pagamento chegar depois, o aviso
      da InfinitePay confirma o pedido normalmente.
 ===================================================== */
-const REMINDER_ORDER_AFTER_MS = 30 * 60 * 1000;
-const REMINDER_CART_AFTER_MS = 2 * 60 * 60 * 1000;
 const REMINDER_WINDOW_MS = 24 * 60 * 60 * 1000;
 const PENDING_ORDER_EXPIRE_MS = 2 * 24 * 60 * 60 * 1000;
-// Por lembrete: compras posteriores, estoque, e-mail e marcação = 4 chamadas.
-const REMINDER_CALLS_EACH = 5;
 const PAID_ORDER_STATUSES = ["paid", "processing", "shipped", "delivered"];
 const isEmailAddress = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeString(value));
 const isoAgo = ms => encodeURIComponent(new Date(Date.now() - ms).toISOString());
@@ -7116,146 +7099,10 @@ async function laterOrdersOf(email, since, budget) {
     return Array.isArray(rows) ? rows : [];
 }
 
-async function remindPendingOrders(budget) {
-    spend(budget);
-    const rows = await supabaseRequest(
-        "orders?status=eq.pending&payment_reminder_sent_at=is.null" +
-        "&created_at=lt." + isoAgo(REMINDER_ORDER_AFTER_MS) + "&created_at=gt." + isoAgo(REMINDER_WINDOW_MS) +
-        "&select=id,order_nsu,order_code,customer_name,customer_email,items,payment_method,created_at&order=created_at.asc&limit=5",
-        { method: "GET" }
-    );
-    let sent = 0;
-    for (const order of Array.isArray(rows) ? rows : []) {
-        if (!budget.has(REMINDER_CALLS_EACH)) break;
-        const mark = status => {
-            spend(budget);
-            return supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
-                method: "PATCH",
-                headers: { "Prefer": "return=minimal" },
-                body: JSON.stringify({ payment_reminder_sent_at: new Date().toISOString(), payment_reminder_status: status })
-            });
-        };
-        if (!isEmailAddress(order.customer_email)) { await mark("skipped_invalid_email"); continue; }
-        const later = await laterOrdersOf(order.customer_email, order.created_at, budget);
-        if (later.length) { await mark(later.some(o => PAID_ORDER_STATUSES.includes(o.status)) ? "skipped_paid_later" : "skipped_newer_order"); continue; }
-        spend(budget);
-        const items = await availableReminderItems(order.items);
-        if (!items.length) { await mark("skipped_sold_out"); continue; }
-        const code = formatOrderCode(order.order_code || order.order_nsu);
-        const firstName = reminderFirstName(order.customer_name);
-        const url = cartRestoreUrl(items, "pagamento_pendente");
-        const pix = safeString(order.payment_method).toLowerCase() === "pix";
-        try {
-            spend(budget);
-            await sendReminderEmail({
-                to: safeString(order.customer_email).toLowerCase(),
-                subject: "Seu pedido " + code + " está esperando por você",
-                type: "payment_reminder",
-                idempotencyKey: "monte-payment-reminder-" + order.id,
-                html: reminderEmailHtml({
-                    eyebrow: "PAGAMENTO PENDENTE",
-                    title: "Sua seleção ainda está aqui" + (firstName ? ", " + firstName : "") + ".",
-                    paragraphs: [
-                        "O pagamento do pedido " + code + " não foi concluído" + (pix ? " (o Pix gerado não foi pago)" : "") + ". Se ainda quiser as peças, é só voltar: a sacola já está pronta para você.",
-                        ("As peças não ficam reservadas e o estoque é limitado. " + benefitsSentence(await storeBenefits())).trim()
-                    ],
-                    items,
-                    buttonUrl: url,
-                    buttonText: "FINALIZAR MINHA COMPRA",
-                    footnote: "Se você já pagou, desconsidere este e-mail. Dúvidas? É só responder esta mensagem."
-                }),
-                text: "Seu pedido " + code + " na MONTÊ ainda não foi pago.\n\n" + items.map(i => "- " + i.name + (i.color ? " (" + i.color + ")" : "") + " — " + i.quantity + " × " + formatEmailMoney(i.price)).join("\n") + "\n\nFinalize sua compra: " + url + "\n\nSe você já pagou, desconsidere este e-mail."
-            });
-            await mark("sent");
-            sent++;
-            console.log("✉️ Lembrete de pagamento enviado:", code);
-        } catch (error) {
-            console.error("Lembrete de pagamento —", code, error.message);
-            await mark("error").catch(() => {});
-        }
-    }
-    return sent;
-}
-
 // Primeiro nome para a saudação, só com letras (o nome vem do que foi digitado no site).
 function reminderFirstName(name) {
     const first = safeString(name).trim().split(/\s+/)[0] || "";
     return /^[\p{L}'’-]{1,30}$/u.test(first) ? first : "";
-}
-
-async function cartReminderSentRecently(email, budget) {
-    spend(budget);
-    const rows = await supabaseRequest(
-        "cart_snapshots?customer_email=eq." + encodeURIComponent(safeString(email).trim().toLowerCase()) +
-        "&reminder_status=eq.sent&reminder_sent_at=gt." + isoAgo(7 * 24 * 60 * 60 * 1000) + "&select=id&limit=1",
-        { method: "GET" }
-    );
-    return Array.isArray(rows) && rows.length > 0;
-}
-
-async function remindAbandonedCarts(budget) {
-    spend(budget);
-    const rows = await supabaseRequest(
-        "cart_snapshots?status=eq.active&reminder_sent_at=is.null&customer_email=not.is.null" +
-        "&last_activity_at=lt." + isoAgo(REMINDER_CART_AFTER_MS) + "&last_activity_at=gt." + isoAgo(REMINDER_WINDOW_MS) +
-        "&select=id,customer_name,customer_email,items,created_at&order=last_activity_at.asc&limit=5",
-        { method: "GET" }
-    );
-    let sent = 0;
-    for (const cart of Array.isArray(rows) ? rows : []) {
-        if (!budget.has(REMINDER_CALLS_EACH)) break;
-        const mark = (status, extra = {}) => {
-            spend(budget);
-            return supabaseRequest("cart_snapshots?id=eq." + encodeURIComponent(cart.id), {
-                method: "PATCH",
-                headers: { "Prefer": "return=minimal" },
-                body: JSON.stringify({ reminder_sent_at: new Date().toISOString(), reminder_status: status, ...extra })
-            });
-        };
-        if (!isEmailAddress(cart.customer_email)) { await mark("skipped_invalid_email"); continue; }
-        // Já virou pedido: se foi pago, a sacola conta como convertida; se não, o lembrete do pedido cuida.
-        const orders = await laterOrdersOf(cart.customer_email, cart.created_at, budget);
-        const paid = orders.find(o => PAID_ORDER_STATUSES.includes(o.status));
-        if (paid) { await mark("skipped_purchased", { status: "converted", converted_order_id: paid.id }); continue; }
-        if (orders.length) { await mark("skipped_has_order"); continue; }
-        // Um lembrete de sacola por e-mail a cada 7 dias: a sacola é salva sem login, então
-        // alguém poderia cadastrar o e-mail de outra pessoa várias vezes.
-        if (await cartReminderSentRecently(cart.customer_email, budget)) { await mark("skipped_recent_reminder"); continue; }
-        spend(budget);
-        const items = await availableReminderItems(cart.items);
-        if (!items.length) { await mark("skipped_sold_out"); continue; }
-        const firstName = reminderFirstName(cart.customer_name);
-        const url = cartRestoreUrl(items, "sacola_abandonada");
-        try {
-            spend(budget);
-            await sendReminderEmail({
-                to: safeString(cart.customer_email).toLowerCase(),
-                subject: "Você deixou peças na sacola da MONTÊ",
-                type: "cart_reminder",
-                idempotencyKey: "monte-cart-reminder-" + cart.id,
-                html: reminderEmailHtml({
-                    eyebrow: "SUA SACOLA",
-                    title: "Esqueceu alguma coisa" + (firstName ? ", " + firstName : "") + "?",
-                    paragraphs: [
-                        "Guardamos as peças que você escolheu. Elas ainda estão disponíveis, mas o estoque é limitado.",
-                        benefitsSentence(await storeBenefits())
-                    ].filter(Boolean),
-                    items,
-                    buttonUrl: url,
-                    buttonText: "VOLTAR PARA A SACOLA",
-                    footnote: "Você recebeu este lembrete único porque começou uma compra em oficialmontee.com.br."
-                }),
-                text: "Você deixou peças na sacola da MONTÊ.\n\n" + items.map(i => "- " + i.name + (i.color ? " (" + i.color + ")" : "") + " — " + i.quantity + " × " + formatEmailMoney(i.price)).join("\n") + "\n\nVolte para a sacola: " + url
-            });
-            await mark("sent");
-            sent++;
-            console.log("✉️ Lembrete de sacola enviado.");
-        } catch (error) {
-            console.error("Lembrete de sacola —", error.message);
-            await mark("error").catch(() => {});
-        }
-    }
-    return sent;
 }
 
 /* =====================================================
@@ -7537,13 +7384,11 @@ async function runCustomerUpkeep(calls) {
     const limit = Math.max(0, Math.floor(Number(calls) || 0));
     const budget = createCallBudget(limit);
     const steps = [expireOldPendingOrders];
-    // Sem o Resend configurado não há como enviar: os lembretes esperam (nada é marcado).
-    if (RESEND_API_KEY && RESEND_FROM_EMAIL) steps.push(remindPendingOrders);
+    // A cliente não recebe lembrete por e-mail (pedido da loja): quem chama é a loja, pelo WhatsApp.
     // Aviso para a loja: no WhatsApp dela, ou por e-mail enquanto o WhatsApp não estiver configurado.
     const storeCanBeNotified = Boolean(WHATSAPP_PHONE_NUMBER_ID && WHATSAPP_ACCESS_TOKEN && WHATSAPP_ADMIN_PHONE) ||
         Boolean(RESEND_API_KEY && RESEND_FROM_EMAIL && storeFollowupRecipients().length);
     if (storeCanBeNotified) steps.push(storeFollowupPendingOrders, storeFollowupAbandonedCarts);
-    if (RESEND_API_KEY && RESEND_FROM_EMAIL) steps.push(remindAbandonedCarts);
     for (const step of steps) {
         if (!budget.has(2)) break;
         try {
