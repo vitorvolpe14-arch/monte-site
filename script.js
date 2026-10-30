@@ -2349,6 +2349,9 @@ function setPaymentHelp(visible, paymentMethod) {
     requestAnimationFrame(() => balloon.classList.add("show"));
 }
 
+// E-mail parecido com um erro de digitação que a cliente confirmou tocando de novo em finalizar.
+let emailTypoConfirmed="";
+
 async function checkout() {
     if (!Array.isArray(cart) || cart.length === 0) { showToast("Seu carrinho está vazio."); return; }
     setPaymentHelp(false);
@@ -2369,6 +2372,20 @@ async function checkout() {
     }
     const cpfDigits=cpf.replace(/\D/g,"");
     const whatsappNumber=phoneDigits(phone);
+    // E-mail incompleto ou com erro comum ("…@gmailcom"): mostra a correção em vez de um erro genérico.
+    const suggestedEmail=renderEmailSuggestion();
+    if(!CHECKOUT_RULES.customerEmail(email)){
+        flagCheckoutFields(["customerEmail"]);
+        showToast(suggestedEmail?`Confira seu e-mail: você quis dizer ${suggestedEmail}?`:"Confira seu e-mail. Ex.: nome@gmail.com");
+        return;
+    }
+    // E-mail válido mas parecido com um erro ("gmail.con"): avisa uma vez; tocando de novo, segue.
+    if(suggestedEmail&&emailTypoConfirmed!==email){
+        emailTypoConfirmed=email;
+        flagCheckoutFields(["customerEmail"]);
+        showToast(`Confira seu e-mail: você quis dizer ${suggestedEmail}? Se estiver certo, toque em finalizar de novo.`);
+        return;
+    }
     // A InfinitePay não abre o pagamento com telefone incompleto.
     if(!CHECKOUT_RULES.customerPhone(phone)){flagCheckoutFields(["customerPhone"]);showToast("Informe seu WhatsApp com DDD e 9 dígitos. Ex.: (85) 99999-9999.");return;}
     if(cpfDigits.length!==11){flagCheckoutFields(["customerCpf"]);showToast("Informe um CPF válido com 11 dígitos.");return;}
@@ -2440,6 +2457,8 @@ async function checkout() {
             }
             const failure=new Error(data?.message||"O pagamento não abriu. Tente novamente.");
             failure.paymentUnavailable=data?.payment_unavailable===true||response.status>=500;
+            // Campo recusado pelo servidor (e-mail, WhatsApp, CPF): destaca o campo para corrigir.
+            if(["customerEmail","customerPhone","customerCpf"].includes(data?.field))failure.field=data.field;
             throw failure;
         }
 
@@ -2492,6 +2511,7 @@ async function checkout() {
         // Sem internet o navegador dá "Failed to fetch" / "Load failed": a cliente vê a explicação.
         if(error.paymentUnavailable){hideToast();setPaymentHelp(true,paymentMethod);}
         else showToast(error instanceof TypeError?"Sem conexão. Confira sua internet e tente novamente.":(error.message||"Não foi possível concluir. Tente novamente."));
+        if(error.field)flagCheckoutFields([error.field]);
         if(checkoutButton){checkoutButton.disabled=false;checkoutButton.textContent="FINALIZAR COMPRA";}
     }
 }
@@ -3077,9 +3097,13 @@ function savePrivacyConsent(choice) {
     const before = privacyConsent;
     privacyConsent = { v: 1, analytics: !!choice.analytics, reminders: !!choice.reminders, at: Date.now() };
     try { localStorage.setItem(CONSENT_KEY, JSON.stringify(privacyConsent)); } catch {}
+    // Sem o lembrete, o WhatsApp guardado na sacola também sai.
+    const hadBagPhone = !!savedBagWhatsapp();
+    if (!privacyConsent.reminders) { try { localStorage.removeItem(BAG_WHATSAPP_KEY); } catch {} }
     hideCookieConsent();
     // Permissão retirada: apaga o que já estava guardado e recarrega para parar o que estava rodando.
-    if ((before?.analytics && !privacyConsent.analytics) || (before?.reminders && !privacyConsent.reminders)) {
+    if ((before?.analytics && !privacyConsent.analytics) || (before?.reminders && !privacyConsent.reminders) ||
+        (hadBagPhone && !privacyConsent.reminders && !privacyConsent.analytics)) {
         forgetTrackingData();
         location.reload();
         return;
@@ -3130,10 +3154,12 @@ function startStoreAnalytics() {
     // Páginas, produtos vistos e sacola: só com a permissão de estatísticas.
     const track = (name, extra) => { if (privacyConsent?.analytics) record(name, extra); };
     // A sacola é salva com estatísticas ou lembrete; nome, e-mail e telefone só com o lembrete.
+    // O WhatsApp deixado na própria sacola ("guardar sacola") vale como lembrete só do telefone.
     function saveCart() {
         const items = Array.isArray(cart) ? cart : [];
         if (!items.length) return;
         const reminders = privacyConsent?.reminders === true;
+        const bagPhone = savedBagWhatsapp();
         const shippingPrice = Number(selectedShippingOption?.price || 0);
         const subtotal = items.reduce((s, i) => s + Number(i.price || 0) * Number(i.quantity || 1), 0);
         post("/api/analytics/cart", {
@@ -3142,7 +3168,7 @@ function startStoreAnalytics() {
             subtotal, shipping: shippingPrice, total: subtotal + shippingPrice,
             customer_name: reminders ? document.getElementById("customerName")?.value || "" : "",
             customer_email: reminders ? document.getElementById("customerEmail")?.value || "" : "",
-            customer_phone: reminders ? document.getElementById("customerPhone")?.value || "" : ""
+            customer_phone: (reminders ? document.getElementById("customerPhone")?.value : "") || bagPhone || ""
         });
     }
     window.monteAnalytics = { track, saveCart, record };
@@ -3569,6 +3595,126 @@ const CHECKOUT_RULES = {
     customerState: v => /^[A-Za-z]{2}$/.test(v.trim())
 };
 
+// E-mail com erro comum de digitação ("…@gmailcom", "gmail.con", "hotmial.com"): sugere a
+// correção embaixo do campo. Uma cliente perdeu a compra com "…gmailcom" sem entender o erro.
+const EMAIL_DOMAIN_FIXES = {
+    "gmial.com": "gmail.com", "gamil.com": "gmail.com", "gmal.com": "gmail.com", "gmai.com": "gmail.com",
+    "gnail.com": "gmail.com", "gmaill.com": "gmail.com", "gmail.co": "gmail.com", "gmail.cm": "gmail.com",
+    "gmail.om": "gmail.com", "gmail.com.br": "gmail.com", "gmail.br": "gmail.com",
+    "hotmial.com": "hotmail.com", "hotmal.com": "hotmail.com", "hotmai.com": "hotmail.com", "hotmil.com": "hotmail.com",
+    "hotmail.co": "hotmail.com", "hotmail.cm": "hotmail.com",
+    "outlok.com": "outlook.com", "outllok.com": "outlook.com", "outlook.co": "outlook.com",
+    "iclod.com": "icloud.com", "icoud.com": "icloud.com", "icloud.co": "icloud.com",
+    "yaho.com": "yahoo.com", "yahoo.co": "yahoo.com", "yaho.com.br": "yahoo.com.br"
+};
+
+function emailSuggestion(value) {
+    const email = String(value || "").trim().toLowerCase();
+    const at = email.lastIndexOf("@");
+    if (at < 1 || at === email.length - 1) return "";
+    const user = email.slice(0, at);
+    const typed = email.slice(at + 1);
+    let domain = typed.replace(/,/g, ".").replace(/\.{2,}/g, ".").replace(/^\.+|\.+$/g, "");
+    // Sem nenhum ponto: "gmailcom" → "gmail.com", "uolcombr" → "uol.com.br".
+    if (!domain.includes(".")) {
+        const match = domain.match(/^(.+?)com(br)?$/);
+        if (match && match[1].length > 1) domain = match[1] + ".com" + (match[2] ? ".br" : "");
+    }
+    domain = domain.replace(/\.(con|cmo|comm|coom|cpm|xom|vom|ocm)$/, ".com").replace(/\.(con|cmo|comm)\.br$/, ".com.br").replace(/\.com\.b$/, ".com.br");
+    domain = EMAIL_DOMAIN_FIXES[domain] || domain;
+    return domain && domain !== typed ? user + "@" + domain : "";
+}
+
+// Mostra "Você quis dizer …?" embaixo do e-mail, com um toque para corrigir.
+function renderEmailSuggestion() {
+    const input = document.getElementById("customerEmail");
+    const box = document.getElementById("emailSuggestion");
+    if (!input || !box) return "";
+    const suggestion = emailSuggestion(input.value);
+    box.hidden = !suggestion;
+    if (suggestion) {
+        setHTML(box, 'Você quis dizer <button type="button" class="email-suggestion-fix" data-click="applyEmailSuggestion">' + escapeHTML(suggestion) + "</button>?");
+    }
+    return suggestion;
+}
+
+function applyEmailSuggestion() {
+    const input = document.getElementById("customerEmail");
+    const suggestion = emailSuggestion(input?.value);
+    if (!input || !suggestion) return;
+    input.value = suggestion;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    refreshCheckoutField(input, { strict: true });
+    renderEmailSuggestion();
+}
+
+/* Sacola guardada: o WhatsApp que a cliente deixa na sacola para receber o link dela depois.
+   É o consentimento do lembrete (só para esta sacola); fica neste aparelho até ela remover. */
+const BAG_WHATSAPP_KEY = "monte_bag_whatsapp";
+
+// Sem constantes do arquivo aqui: a sacola pode ser desenhada antes delas existirem.
+function savedBagWhatsapp() {
+    try {
+        const value = localStorage.getItem("monte_bag_whatsapp") || "";
+        return /^[1-9]{2}9\d{8}$/.test(phoneDigits(value)) ? value : "";
+    } catch {
+        return "";
+    }
+}
+
+function formatPhoneTyping(value) {
+    const d = phoneDigits(value).slice(0, 11);
+    return d.length > 10 ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+        : d.length > 6 ? `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+        : d.length > 2 ? `(${d.slice(0, 2)}) ${d.slice(2)}`
+        : d;
+}
+
+function renderBagSave() {
+    const box = document.getElementById("bagSave");
+    if (!box) return;
+    const saved = savedBagWhatsapp();
+    box.hidden = !cart.length;
+    box.classList.toggle("is-saved", !!saved);
+    const text = document.getElementById("bagSaveText");
+    if (text) {
+        setHTML(text, saved
+            ? `Sacola guardada. Se precisar sair, a MONTÊ te manda o link dela no WhatsApp <strong>${escapeHTML(saved)}</strong>.`
+            : "Precisa sair agora? Deixe seu WhatsApp e a MONTÊ te manda o link desta sacola para você finalizar depois.");
+    }
+}
+
+function saveBagWhatsapp() {
+    const input = document.getElementById("bagWhatsapp");
+    const value = formatPhoneTyping(input?.value || "");
+    if (!CHECKOUT_RULES.customerPhone(value)) {
+        input?.closest(".field")?.classList.add("is-invalid");
+        showToast("Informe seu WhatsApp com DDD e 9 dígitos. Ex.: (85) 99999-9999.");
+        input?.focus();
+        return;
+    }
+    try { localStorage.setItem(BAG_WHATSAPP_KEY, value); } catch {}
+    // O mesmo número já fica no checkout.
+    const phone = document.getElementById("customerPhone");
+    if (phone && !phone.value.trim()) {
+        phone.value = value;
+        phone.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    startStoreAnalytics();
+    window.monteAnalytics?.saveCart();
+    renderBagSave();
+    showToast("Sacola guardada. Se precisar sair, mandamos o link no seu WhatsApp.");
+}
+
+function removeBagWhatsapp() {
+    try { localStorage.removeItem(BAG_WHATSAPP_KEY); } catch {}
+    const input = document.getElementById("bagWhatsapp");
+    if (input) input.value = "";
+    // A sacola salva deixa de ter o número (sem o lembrete aceito nos cookies).
+    window.monteAnalytics?.saveCart();
+    renderBagSave();
+}
+
 const CHECKOUT_STEP_FIELDS = {
     data: ["customerName", "customerEmail", "customerPhone", "customerCpf"],
     delivery: ["customerCep", "customerStreet", "customerNumber", "customerNeighborhood", "customerCity", "customerState"]
@@ -3639,6 +3785,8 @@ function renderCheckoutExtras({ subtotal, shipping, pixDiscount, couponDiscount 
         if (perkButton) perkButton.hidden = paymentMethod === "pix";
     }
 
+    renderBagSave();
+
     // Frete grátis em Fortaleza e região a partir de R$ 599: quanto falta, ou o aviso de que
     // ganhou. Some quando o endereço é de outra cidade (lá o frete continua sendo cobrado).
     const freePerk = document.getElementById("freeShippingPerk");
@@ -3688,14 +3836,33 @@ function renderCheckoutExtras({ subtotal, shipping, pixDiscount, couponDiscount 
 
         const phone = document.getElementById("customerPhone");
         if (phone) {
-            phone.addEventListener("input", () => {
-                const d = phoneDigits(phone.value).slice(0, 11);
-                phone.value = d.length > 10 ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
-                    : d.length > 6 ? `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
-                    : d.length > 2 ? `(${d.slice(0, 2)}) ${d.slice(2)}`
-                    : d;
+            phone.addEventListener("input", () => { phone.value = formatPhoneTyping(phone.value); });
+        }
+
+        // "Você quis dizer …@gmail.com?" embaixo do e-mail.
+        const email = document.getElementById("customerEmail");
+        if (email) {
+            email.addEventListener("input", () => {
+                if (!emailSuggestion(email.value)) document.getElementById("emailSuggestion")?.setAttribute("hidden", "");
+            });
+            email.addEventListener("blur", () => renderEmailSuggestion());
+        }
+
+        // WhatsApp para guardar a sacola: mesma máscara do checkout; Enter guarda.
+        const bagPhone = document.getElementById("bagWhatsapp");
+        if (bagPhone) {
+            bagPhone.addEventListener("input", () => {
+                bagPhone.value = formatPhoneTyping(bagPhone.value);
+                bagPhone.closest(".field")?.classList.remove("is-invalid");
+                bagPhone.closest(".field")?.classList.toggle("is-valid", CHECKOUT_RULES.customerPhone(bagPhone.value));
+            });
+            bagPhone.addEventListener("keydown", event => {
+                if (event.key !== "Enter") return;
+                event.preventDefault();
+                saveBagWhatsapp();
             });
         }
+        renderBagSave();
 
         const state = document.getElementById("customerState");
         if (state) state.addEventListener("input", () => { state.value = state.value.replace(/[^a-z]/gi, "").toUpperCase(); });
@@ -3871,8 +4038,12 @@ registerClickActions({
     nextCategoryPage, nextCollectionPage, nextNewPage, nextSalePage, nextSlide, openCart, openSearch,
     openWhatsAppReservation, previousCategoryPage, previousCollectionPage, previousNewPage,
     previousSalePage, previousSlide, removeCoupon, removeFromCart, toggleMobileMenu, updateItemQuantity,
-    acceptCookies, rejectCookies, customizeCookies, saveCookieChoices, openCookiePreferences
+    acceptCookies, rejectCookies, customizeCookies, saveCookieChoices, openCookiePreferences,
+    applyEmailSuggestion, saveBagWhatsapp, removeBagWhatsapp
 });
+
+// Sacola guardada com WhatsApp numa visita anterior: o lembrete continua valendo.
+if (savedBagWhatsapp()) startStoreAnalytics();
 
 document.getElementById("searchInput")?.addEventListener("input", () => searchProducts());
 // Enter no campo do cupom aplica o cupom (sem enviar nada além disso).
