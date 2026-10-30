@@ -988,6 +988,12 @@ async function sendWhatsAppTrackingNotification(order) {
     return { sent: true, status: "sent", message_id: messageId };
 }
 
+// Texto de variável dos modelos do WhatsApp: a Meta recusa quebra de linha, tabulação e
+// mais de 4 espaços seguidos (erro 132018).
+function whatsappParam(value, max = 1000) {
+    return safeString(value).replace(/[\r\n\t]+/g, " · ").replace(/ {2,}/g, " ").trim().slice(0, max) || "-";
+}
+
 function formatWhatsAppCurrency(value) {
     return "R$ " + Number(value || 0).toFixed(2).replace(".", ",");
 }
@@ -1058,13 +1064,13 @@ async function sendWhatsAppAdminNewOrderNotification(order) {
                 components: [{
                     type: "body",
                     parameters: [
-                        { type: "text", text: orderCode },
-                        { type: "text", text: customerName },
-                        { type: "text", text: products },
-                        { type: "text", text: formatWhatsAppPaymentMethod(order.payment_method) },
-                        { type: "text", text: formatWhatsAppCurrency(order.total) },
-                        { type: "text", text: customerData }
-                    ]
+                        orderCode,
+                        customerName,
+                        products,
+                        formatWhatsAppPaymentMethod(order.payment_method),
+                        formatWhatsAppCurrency(order.total),
+                        customerData
+                    ].map(text => ({ type: "text", text: whatsappParam(text) }))
                 }]
             }
         })
@@ -6984,9 +6990,9 @@ if (!IS_WORKERS) app.use(
      um lembrete 30 minutos depois, com um link que refaz a sacola.
    - Sacola abandonada (e-mail preenchido no checkout, sem pedido):
      um lembrete 2 horas depois da última mexida.
-   - Nos mesmos momentos, a loja recebe um e-mail interno com o botão para
-     chamar a cliente no WhatsApp (mensagem pronta e link da sacola): pedido
-     sem pagamento, ou sacola em que a cliente deixou o WhatsApp.
+   - 30 minutos depois de um pedido sem pagamento ou de uma sacola abandonada
+     (com o WhatsApp digitado no checkout), a loja é avisada para chamar a
+     cliente no WhatsApp (veja "AVISO PARA A LOJA CHAMAR A CLIENTE").
    Só pedidos e sacolas das últimas 24 horas, um único e-mail por pedido
    ou sacola, e só com as peças que ainda têm estoque.
    - Pedido aguardando pagamento há mais de 2 dias vira "expired" e sai
@@ -7253,15 +7259,23 @@ async function remindAbandonedCarts(budget) {
 }
 
 /* =====================================================
-   LOJA CHAMA A CLIENTE NO WHATSAPP
-   A API oficial do WhatsApp não está configurada, então a mensagem sai do
-   WhatsApp da própria loja: a loja recebe um e-mail interno com o botão que
-   abre a conversa com a cliente e o texto pronto (com o link da sacola).
-   - Pedido sem pagamento há 30 minutos (o telefone é obrigatório no checkout).
-   - Sacola parada há 2 horas em que a cliente deixou o WhatsApp para o lembrete.
+   AVISO PARA A LOJA CHAMAR A CLIENTE
+   30 minutos depois, a loja é avisada no WhatsApp dela (WHATSAPP_ADMIN_PHONE)
+   com o botão que abre a conversa com a cliente, já com a mensagem e o link
+   da sacola:
+   - sacola abandonada (a cliente digitou o WhatsApp no checkout e aceitou o
+     lembrete nos cookies) parada há 30 minutos, sem pedido;
+   - pedido criado e não pago há 30 minutos.
+   O aviso no WhatsApp usa o modelo WHATSAPP_FOLLOWUP_TEMPLATE_NAME da API oficial
+   do WhatsApp. Enquanto ela não estiver configurada (ou se o envio falhar), o
+   mesmo aviso chega por e-mail (ORDER_NOTIFICATION_EMAILS).
 ===================================================== */
 const STORE_FOLLOWUP_ORDER_AFTER_MS = 30 * 60 * 1000;
-const STORE_FOLLOWUP_CART_AFTER_MS = REMINDER_CART_AFTER_MS;
+const STORE_FOLLOWUP_CART_AFTER_MS = 30 * 60 * 1000;
+// Por aviso: pedidos/compras posteriores, aviso recente, estoque, WhatsApp, e-mail e marcação.
+const STORE_FOLLOWUP_CALLS_EACH = 7;
+const WHATSAPP_FOLLOWUP_TEMPLATE_NAME = safeString(process.env.WHATSAPP_FOLLOWUP_TEMPLATE_NAME || "monte_sacola_abandonada");
+const WHATSAPP_FOLLOWUP_TEMPLATE_LANGUAGE = safeString(process.env.WHATSAPP_FOLLOWUP_TEMPLATE_LANGUAGE || "pt_BR");
 
 function storeFollowupRecipients() {
     return ORDER_NOTIFICATION_EMAILS.split(",").map(v => v.trim().toLowerCase()).filter(Boolean);
@@ -7273,6 +7287,13 @@ function formatBrazilMobile(digits) {
 
 function storeFollowupPieces(items) {
     return items.map(item => item.name + (item.color ? " (" + item.color + ")" : "")).join(", ");
+}
+
+// Conversa com a cliente com o texto pronto. Link longo demais para o modelo do WhatsApp:
+// sai sem o link da sacola (a loja manda depois, se precisar).
+function storeFollowupChatUrl(phone, message, shortMessage) {
+    const full = "https://wa.me/55" + phone + "?text=" + encodeURIComponent(message);
+    return full.length <= 700 ? full : "https://wa.me/55" + phone + "?text=" + encodeURIComponent(shortMessage);
 }
 
 function storeFollowupEmailHtml({ eyebrow, title, details, items, whatsappUrl, message, cartUrl }) {
@@ -7305,6 +7326,54 @@ async function sendStoreFollowupEmail({ subject, html, text, idempotencyKey }) {
     if (!response.ok) throw new Error("Resend API " + response.status + ": " + responseText.slice(0, 300));
 }
 
+// Aviso no WhatsApp da loja, pelo modelo aprovado na Meta:
+// {{1}} situação · {{2}} cliente · {{3}} WhatsApp dela · {{4}} peças · {{5}} valor · {{6}} link da conversa.
+async function sendWhatsAppStoreFollowup({ situation, name, phone, pieces, total, chatUrl }) {
+    if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN || !WHATSAPP_ADMIN_PHONE) {
+        return { sent: false, status: "not_configured" };
+    }
+    let adminPhone = WHATSAPP_ADMIN_PHONE.replace(/\D/g, "");
+    if (adminPhone.length === 10 || adminPhone.length === 11) adminPhone = "55" + adminPhone;
+    if (adminPhone.length < 12) return { sent: false, status: "invalid_admin_phone" };
+    const response = await fetch(`https://graph.facebook.com/${WHATSAPP_API_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + WHATSAPP_ACCESS_TOKEN, "Content-Type": "application/json" },
+        body: JSON.stringify({
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to: adminPhone,
+            type: "template",
+            template: {
+                name: WHATSAPP_FOLLOWUP_TEMPLATE_NAME,
+                language: { code: WHATSAPP_FOLLOWUP_TEMPLATE_LANGUAGE },
+                components: [{
+                    type: "body",
+                    parameters: [situation, name, formatBrazilMobile(phone), pieces, formatEmailMoney(total), chatUrl]
+                        .map(text => ({ type: "text", text: whatsappParam(text, 720) }))
+                }]
+            }
+        })
+    });
+    const responseText = await response.text();
+    if (!response.ok) throw new Error("WhatsApp API " + response.status + ": " + responseText.slice(0, 300));
+    return { sent: true, status: "sent_whatsapp" };
+}
+
+// WhatsApp da loja primeiro; sem ele (ou se falhar), e-mail. Devolve como o aviso saiu.
+async function deliverStoreFollowup({ whatsapp, email }, budget) {
+    try {
+        spend(budget);
+        const result = await sendWhatsAppStoreFollowup(whatsapp);
+        if (result.sent) return result.status;
+    } catch (error) {
+        if (error?.budget) throw error;
+        console.error("Aviso no WhatsApp da loja falhou; vai por e-mail:", error.message);
+    }
+    spend(budget);
+    await sendStoreFollowupEmail(email);
+    return "sent";
+}
+
 async function storeFollowupPendingOrders(budget) {
     spend(budget);
     const rows = await supabaseRequest(
@@ -7315,7 +7384,7 @@ async function storeFollowupPendingOrders(budget) {
     );
     let sent = 0;
     for (const order of Array.isArray(rows) ? rows : []) {
-        if (!budget.has(REMINDER_CALLS_EACH)) break;
+        if (!budget.has(STORE_FOLLOWUP_CALLS_EACH)) break;
         const mark = status => {
             spend(budget);
             return supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
@@ -7334,39 +7403,42 @@ async function storeFollowupPendingOrders(budget) {
         const code = formatOrderCode(order.order_code || order.order_nsu);
         const firstName = reminderFirstName(order.customer_name);
         const cartUrl = cartRestoreUrl(items, "pagamento_pendente", "whatsapp");
-        const message = "Oi" + (firstName ? ", " + firstName : "") + "! Aqui é da MONTÊ. Vi que o pagamento do seu pedido " + code +
-            " (" + storeFollowupPieces(items) + ") não foi concluído. Aconteceu algum problema? Posso te ajudar a finalizar. " +
-            "Sua sacola está pronta neste link: " + cartUrl;
-        const whatsappUrl = "https://wa.me/55" + phone + "?text=" + encodeURIComponent(message);
+        const greeting = "Oi" + (firstName ? ", " + firstName : "") + "! Aqui é da MONTÊ. Vi que o pagamento do seu pedido " + code +
+            " (" + storeFollowupPieces(items) + ") não foi concluído. Aconteceu algum problema? Posso te ajudar a finalizar.";
+        const message = greeting + " Sua sacola está pronta neste link: " + cartUrl;
+        const whatsappUrl = storeFollowupChatUrl(phone, message, greeting);
         const name = safeString(order.customer_name) || "Cliente";
         const pix = safeString(order.payment_method).toLowerCase() === "pix";
         try {
-            spend(budget);
-            await sendStoreFollowupEmail({
-                subject: "Chame no WhatsApp: " + name + " não concluiu o pagamento (" + code + ")",
-                idempotencyKey: "monte-store-followup-order-" + order.id,
-                html: storeFollowupEmailHtml({
-                    eyebrow: "PAGAMENTO PENDENTE HÁ 30 MINUTOS",
-                    title: name + " não concluiu o pagamento",
-                    details: [
-                        "Pedido: " + code,
-                        "WhatsApp: " + formatBrazilMobile(phone),
-                        "Pagamento escolhido: " + (pix ? "Pix" : "Cartão de crédito"),
-                        "Total: " + formatEmailMoney(order.total)
-                    ],
-                    items,
-                    whatsappUrl,
-                    message,
-                    cartUrl
-                }),
-                text: name + " não concluiu o pagamento do pedido " + code + ".\nWhatsApp: " + formatBrazilMobile(phone) +
-                    "\n\nChamar no WhatsApp (mensagem pronta): " + whatsappUrl
-            });
-            await mark("sent");
+            const status = await deliverStoreFollowup({
+                whatsapp: { situation: "pagamento não concluído no pedido " + code, name, phone, pieces: storeFollowupPieces(items), total: order.total, chatUrl: whatsappUrl },
+                email: {
+                    subject: "Chame no WhatsApp: " + name + " não concluiu o pagamento (" + code + ")",
+                    idempotencyKey: "monte-store-followup-order-" + order.id,
+                    html: storeFollowupEmailHtml({
+                        eyebrow: "PAGAMENTO PENDENTE HÁ 30 MINUTOS",
+                        title: name + " não concluiu o pagamento",
+                        details: [
+                            "Pedido: " + code,
+                            "WhatsApp: " + formatBrazilMobile(phone),
+                            "Pagamento escolhido: " + (pix ? "Pix" : "Cartão de crédito"),
+                            "Total: " + formatEmailMoney(order.total)
+                        ],
+                        items,
+                        whatsappUrl,
+                        message,
+                        cartUrl
+                    }),
+                    text: name + " não concluiu o pagamento do pedido " + code + ".\nWhatsApp: " + formatBrazilMobile(phone) +
+                        "\n\nChamar no WhatsApp (mensagem pronta): " + whatsappUrl
+                }
+            }, budget);
+            await mark(status);
             sent++;
-            console.log("📲 Aviso para a loja chamar no WhatsApp (pagamento pendente):", code);
+            console.log("📲 Aviso para a loja chamar a cliente (pagamento pendente):", code, status);
         } catch (error) {
-            console.error("Aviso de WhatsApp para a loja —", code, error.message);
+            if (error?.budget) throw error;
+            console.error("Aviso para a loja (pagamento pendente) —", code, error.message);
             await mark("error").catch(() => {});
         }
     }
@@ -7378,12 +7450,12 @@ async function storeFollowupAbandonedCarts(budget) {
     const rows = await supabaseRequest(
         "cart_snapshots?status=eq.active&store_followup_sent_at=is.null&customer_phone=not.is.null" +
         "&last_activity_at=lt." + isoAgo(STORE_FOLLOWUP_CART_AFTER_MS) + "&last_activity_at=gt." + isoAgo(REMINDER_WINDOW_MS) +
-        "&select=id,customer_name,customer_phone,items,subtotal,created_at&order=last_activity_at.asc&limit=5",
+        "&select=id,customer_name,customer_email,customer_phone,items,subtotal,created_at&order=last_activity_at.asc&limit=5",
         { method: "GET" }
     );
     let sent = 0;
     for (const cart of Array.isArray(rows) ? rows : []) {
-        if (!budget.has(REMINDER_CALLS_EACH)) break;
+        if (!budget.has(STORE_FOLLOWUP_CALLS_EACH)) break;
         const mark = (status, extra = {}) => {
             spend(budget);
             return supabaseRequest("cart_snapshots?id=eq." + encodeURIComponent(cart.id), {
@@ -7405,11 +7477,11 @@ async function storeFollowupAbandonedCarts(budget) {
         const paid = orderList.find(o => PAID_ORDER_STATUSES.includes(o.status));
         if (paid) { await mark("skipped_purchased", { status: "converted", converted_order_id: paid.id }); continue; }
         if (orderList.length) { await mark("skipped_has_order"); continue; }
-        // Um aviso por WhatsApp a cada 7 dias para o mesmo número.
+        // Um aviso a cada 7 dias para o mesmo número.
         spend(budget);
         const recent = await supabaseRequest(
             "cart_snapshots?customer_phone=eq." + encodeURIComponent(formatBrazilMobile(phone)) +
-            "&store_followup_status=eq.sent&store_followup_sent_at=gt." + isoAgo(7 * 24 * 60 * 60 * 1000) + "&select=id&limit=1",
+            "&store_followup_status=in.(sent,sent_whatsapp)&store_followup_sent_at=gt." + isoAgo(7 * 24 * 60 * 60 * 1000) + "&select=id&limit=1",
             { method: "GET" }
         );
         if (Array.isArray(recent) && recent.length) { await mark("skipped_recent_reminder"); continue; }
@@ -7417,37 +7489,43 @@ async function storeFollowupAbandonedCarts(budget) {
         const items = await availableReminderItems(cart.items);
         if (!items.length) { await mark("skipped_sold_out"); continue; }
         const firstName = reminderFirstName(cart.customer_name);
-        const cartUrl = cartRestoreUrl(items, "sacola_guardada", "whatsapp");
-        const message = "Oi" + (firstName ? ", " + firstName : "") + "! Aqui é da MONTÊ. Você guardou sua sacola com " +
-            storeFollowupPieces(items) + ". As peças ainda estão disponíveis, mas o estoque é limitado. " +
-            "Se quiser finalizar, sua sacola está aqui: " + cartUrl;
-        const whatsappUrl = "https://wa.me/55" + phone + "?text=" + encodeURIComponent(message);
+        const cartUrl = cartRestoreUrl(items, "sacola_abandonada", "whatsapp");
+        const greeting = "Oi" + (firstName ? ", " + firstName : "") + "! Aqui é da MONTÊ. Vi que você deixou " +
+            storeFollowupPieces(items) + " na sacola. Ficou alguma dúvida? Posso te ajudar a finalizar.";
+        const message = greeting + " Sua sacola está aqui: " + cartUrl;
+        const whatsappUrl = storeFollowupChatUrl(phone, message, greeting);
         const total = items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0);
+        const name = safeString(cart.customer_name) || "Cliente sem nome";
+        const email = safeString(cart.customer_email);
         try {
-            spend(budget);
-            await sendStoreFollowupEmail({
-                subject: "Chame no WhatsApp: sacola guardada de " + formatEmailMoney(total),
-                idempotencyKey: "monte-store-followup-cart-" + cart.id,
-                html: storeFollowupEmailHtml({
-                    eyebrow: "SACOLA PARADA HÁ 2 HORAS",
-                    title: "Uma cliente deixou o WhatsApp na sacola",
-                    details: [
-                        (safeString(cart.customer_name) ? "Nome: " + safeString(cart.customer_name) : "Nome: não informado"),
-                        "WhatsApp: " + formatBrazilMobile(phone),
-                        "Peças: " + formatEmailMoney(total)
-                    ],
-                    items,
-                    whatsappUrl,
-                    message,
-                    cartUrl
-                }),
-                text: "Sacola guardada com o WhatsApp " + formatBrazilMobile(phone) + " (" + formatEmailMoney(total) + ").\n\nChamar no WhatsApp (mensagem pronta): " + whatsappUrl
-            });
-            await mark("sent");
+            const status = await deliverStoreFollowup({
+                whatsapp: { situation: "sacola abandonada há 30 minutos", name, phone, pieces: storeFollowupPieces(items), total, chatUrl: whatsappUrl },
+                email: {
+                    subject: "Chame no WhatsApp: " + name + " deixou " + formatEmailMoney(total) + " na sacola",
+                    idempotencyKey: "monte-store-followup-cart-" + cart.id,
+                    html: storeFollowupEmailHtml({
+                        eyebrow: "SACOLA ABANDONADA HÁ 30 MINUTOS",
+                        title: name + " deixou peças na sacola",
+                        details: [
+                            "WhatsApp: " + formatBrazilMobile(phone),
+                            ...(email ? ["E-mail: " + email] : []),
+                            "Peças: " + formatEmailMoney(total)
+                        ],
+                        items,
+                        whatsappUrl,
+                        message,
+                        cartUrl
+                    }),
+                    text: name + " deixou " + formatEmailMoney(total) + " na sacola.\nWhatsApp: " + formatBrazilMobile(phone) +
+                        "\n\nChamar no WhatsApp (mensagem pronta): " + whatsappUrl
+                }
+            }, budget);
+            await mark(status);
             sent++;
-            console.log("📲 Aviso para a loja chamar no WhatsApp (sacola guardada).");
+            console.log("📲 Aviso para a loja chamar a cliente (sacola abandonada):", status);
         } catch (error) {
-            console.error("Aviso de WhatsApp para a loja (sacola) —", error.message);
+            if (error?.budget) throw error;
+            console.error("Aviso para a loja (sacola abandonada) —", error.message);
             await mark("error").catch(() => {});
         }
     }
@@ -7461,9 +7539,11 @@ async function runCustomerUpkeep(calls) {
     const steps = [expireOldPendingOrders];
     // Sem o Resend configurado não há como enviar: os lembretes esperam (nada é marcado).
     if (RESEND_API_KEY && RESEND_FROM_EMAIL) steps.push(remindPendingOrders);
-    if (RESEND_API_KEY && RESEND_FROM_EMAIL && storeFollowupRecipients().length) steps.push(storeFollowupPendingOrders);
+    // Aviso para a loja: no WhatsApp dela, ou por e-mail enquanto o WhatsApp não estiver configurado.
+    const storeCanBeNotified = Boolean(WHATSAPP_PHONE_NUMBER_ID && WHATSAPP_ACCESS_TOKEN && WHATSAPP_ADMIN_PHONE) ||
+        Boolean(RESEND_API_KEY && RESEND_FROM_EMAIL && storeFollowupRecipients().length);
+    if (storeCanBeNotified) steps.push(storeFollowupPendingOrders, storeFollowupAbandonedCarts);
     if (RESEND_API_KEY && RESEND_FROM_EMAIL) steps.push(remindAbandonedCarts);
-    if (RESEND_API_KEY && RESEND_FROM_EMAIL && storeFollowupRecipients().length) steps.push(storeFollowupAbandonedCarts);
     for (const step of steps) {
         if (!budget.has(2)) break;
         try {
