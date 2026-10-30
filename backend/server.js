@@ -2067,7 +2067,10 @@ app.post("/api/analytics/cart",analyticsRateLimit,async(req,res)=>{
     const ses=await supabaseRequest("site_sessions?session_id=eq."+encodeURIComponent(session_key)+"&select=id",{method:"GET"});
     const session_id=Array.isArray(ses)?ses[0]?.id:null;
     const subtotal=Math.max(0,Number(b.subtotal||0)),shipping=Math.max(0,Number(b.shipping||0)),total=Math.max(0,Number(b.total||subtotal+shipping));
-    const row={visitor_id,session_id,cart_key:session_key,customer_name:safeString(b.customer_name).slice(0,160)||null,customer_email:safeString(b.customer_email).trim().toLowerCase().slice(0,160)||null,customer_phone:safeString(b.customer_phone).slice(0,60)||null,items:cartSnapshotItems(b.items),subtotal,shipping,total,status:"active",last_activity_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+    // Celular salvo sempre no mesmo formato, (85) 99999-9999: o aviso de WhatsApp da loja procura por ele.
+    const typedPhone=safeString(b.customer_phone).slice(0,60), mobile=brazilMobileDigits(typedPhone);
+    const customer_phone=mobile?"("+mobile.slice(0,2)+") "+mobile.slice(2,7)+"-"+mobile.slice(7):(typedPhone||null);
+    const row={visitor_id,session_id,cart_key:session_key,customer_name:safeString(b.customer_name).slice(0,160)||null,customer_email:safeString(b.customer_email).trim().toLowerCase().slice(0,160)||null,customer_phone,items:cartSnapshotItems(b.items),subtotal,shipping,total,status:"active",last_activity_at:new Date().toISOString(),updated_at:new Date().toISOString()};
     const updated=await supabaseRequest("cart_snapshots?cart_key=eq."+encodeURIComponent(session_key),{method:"PATCH",body:JSON.stringify(row)});
     if(!Array.isArray(updated)||!updated.length) await supabaseRequest("cart_snapshots",{method:"POST",body:JSON.stringify(row)});
     res.status(201).json({success:true});
@@ -4938,6 +4941,98 @@ app.post("/api/newsletter", newsletterRateLimit, async (req, res) => {
     }
 });
 
+/* =====================================================
+   CHECKOUT REPETIDO
+   Antes, cada toque em FINALIZAR criava um pedido novo (uma cliente gerou
+   12 pedidos em 23 minutos). Agora a mesma compra, em até 1 hora, devolve o
+   mesmo pedido e o mesmo link de pagamento. Pedido cujo pagamento não abriu
+   deixa de ficar "aguardando pagamento" (e não recebe lembrete).
+===================================================== */
+const CHECKOUT_REUSE_MS = 60 * 60 * 1000;
+
+// Mesma compra = mesma cliente, endereço, peças, frete, forma de pagamento, cupom e presente.
+// Qualquer mudança (outra cor, outro e-mail, outro endereço) gera um pedido novo.
+function checkoutFingerprint({ customer, items, shippingServiceId, paymentMethod, couponCode, gift }) {
+    const text = value => safeString(value).trim().toLowerCase();
+    const digits = value => String(value ?? "").replace(/\D/g, "");
+    const address = customer?.address || {};
+    const lines = (Array.isArray(items) ? items : [])
+        .filter(item => String(item.sku || "").toUpperCase() !== "FRETE")
+        .map(item => [text(item.id || item.product_id), text(item.variant_id), Number(item.quantity) || 0])
+        .sort((a, b) => (a[0] + "|" + a[1]).localeCompare(b[0] + "|" + b[1]));
+    const data = {
+        name: text(customer?.name),
+        email: text(customer?.email),
+        phone: digits(customer?.phone),
+        cpf: digits(customer?.cpf),
+        address: [digits(address.cep), text(address.street), text(address.number), text(address.complement), text(address.neighborhood), text(address.city), text(address.state)],
+        lines,
+        shipping: text(shippingServiceId),
+        payment: text(paymentMethod),
+        coupon: text(couponCode),
+        gift: gift ? [text(gift.promotion_id), text(gift.product_id), text(gift.variant_id)] : null
+    };
+    return crypto.createHash("sha256").update(JSON.stringify(data)).digest("hex");
+}
+
+// Pedido da mesma compra, ainda aguardando pagamento, com o link da InfinitePay salvo.
+// Se a busca falhar, o checkout segue normalmente (cria um pedido novo).
+async function reusablePendingCheckout(fingerprint) {
+    if (!/^[0-9a-f]{64}$/.test(String(fingerprint || ""))) return null;
+    try {
+        const rows = await supabaseRequest(
+            "orders?checkout_fingerprint=eq." + fingerprint + "&status=eq.pending&checkout_url=not.is.null" +
+            "&created_at=gt." + isoAgo(CHECKOUT_REUSE_MS) +
+            "&select=id,order_nsu,order_code,checkout_url,total&order=created_at.desc&limit=1",
+            { method: "GET" }
+        );
+        const order = Array.isArray(rows) ? rows[0] : null;
+        if (!order || !infinitePayReceiptUrl(order.checkout_url)) return null;
+        return { ...order, checkout_url: infinitePayReceiptUrl(order.checkout_url) };
+    } catch (error) {
+        console.error("Checkout repetido: busca do pedido anterior falhou:", error.message);
+        return null;
+    }
+}
+
+// Guarda o link de pagamento no pedido (para o mesmo toque devolver o mesmo link).
+async function rememberCheckoutUrl(orderId, url) {
+    const checkoutUrl = infinitePayReceiptUrl(url);
+    if (!orderId || !checkoutUrl) return;
+    try {
+        await supabaseRequest("orders?id=eq." + encodeURIComponent(orderId), {
+            method: "PATCH",
+            headers: { "Prefer": "return=minimal" },
+            body: JSON.stringify({ checkout_url: checkoutUrl })
+        });
+    } catch (error) {
+        console.error("Checkout: não foi possível guardar o link de pagamento:", error.message);
+    }
+}
+
+// O pagamento não abriu: o pedido não fica aguardando pagamento nem recebe lembrete.
+async function closeFailedCheckoutOrder(orderId, orderNsu) {
+    if (!orderId) return;
+    const now = new Date().toISOString();
+    try {
+        await supabaseRequest("orders?id=eq." + encodeURIComponent(orderId) + "&status=eq.pending", {
+            method: "PATCH",
+            headers: { "Prefer": "return=minimal" },
+            body: JSON.stringify({
+                status: "expired",
+                cancel_reason: "O pagamento não abriu",
+                payment_reminder_status: "skipped_checkout_failed",
+                payment_reminder_sent_at: now,
+                store_followup_status: "skipped_checkout_failed",
+                store_followup_sent_at: now,
+                updated_at: now
+            })
+        });
+    } catch (error) {
+        console.error("Checkout: não foi possível encerrar o pedido sem pagamento", orderNsu, error.message);
+    }
+}
+
 app.post(
     "/api/criar-checkout",
     checkoutRateLimit,
@@ -4945,6 +5040,8 @@ app.post(
 
         // Pedido com cupom que não chegou ao pagamento: o cupom volta a valer.
         let releaseCoupon = async () => {};
+        // Pedido salvo cujo pagamento não abriu: sai de "aguardando pagamento" (sem lembrete).
+        let closeFailedOrder = async () => {};
 
         try {
 
@@ -5029,9 +5126,17 @@ app.post(
             const customerName = safeString(customer.name);
             const address = customer.address || {};
 
+            // E-mail sem o ponto ("…@gmailcom") ou incompleto: a cliente vê o que corrigir.
+            if (customerEmail.length > 160 || !isEmailAddress(customerEmail)) {
+                return res.status(400).json({
+                    success: false,
+                    field: "customerEmail",
+                    message: "Confira seu e-mail. Ex.: nome@gmail.com"
+                });
+            }
+
             if (
                 customerName.length < 2 || customerName.length > 120 ||
-                customerEmail.length > 160 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail) ||
                 customerPhone.length < 8 || customerPhone.length > 30 ||
                 customerCpf.length !== 11 ||
                 customerWhatsapp.length > 30 ||
@@ -5064,6 +5169,7 @@ app.post(
             if (!phoneDigits) {
                 return res.status(400).json({
                     success: false,
+                    field: "customerPhone",
                     message: "Informe seu WhatsApp com DDD e 9 dígitos. Ex.: (85) 99999-9999."
                 });
             }
@@ -5073,6 +5179,7 @@ app.post(
             if (!isValidCpf(customerCpf)) {
                 return res.status(400).json({
                     success: false,
+                    field: "customerCpf",
                     message: "CPF inválido. Informe os 11 dígitos."
                 });
             }
@@ -5221,6 +5328,36 @@ app.post(
                     .filter(
                         Boolean
                     );
+
+
+            /* =================================================
+               MESMA COMPRA TOCADA DE NOVO: MESMO PEDIDO
+               A cliente voltou do pagamento ou tocou de novo em FINALIZAR com
+               a mesma sacola e os mesmos dados: devolve o pedido e o link de
+               pagamento que já existem, em vez de criar outro pedido.
+            ================================================= */
+            const fingerprint = checkoutFingerprint({
+                customer,
+                items: normalizedItems,
+                shippingServiceId: requestedShippingServiceId,
+                paymentMethod,
+                couponCode,
+                gift: requestedGift
+            });
+            const reusable = await reusablePendingCheckout(fingerprint);
+            if (reusable) {
+                console.log("🔁 Checkout repetido: mesmo pedido e mesmo link de pagamento.", reusable.order_nsu);
+                return res.status(200).json({
+                    success: true,
+                    reused: true,
+                    ...(paymentMethod === "pix" ? { pix_checkout: true } : {}),
+                    url: reusable.checkout_url,
+                    amount: Number(reusable.total),
+                    order_nsu: reusable.order_nsu,
+                    order_code: String(reusable.order_code || ""),
+                    status: "pending"
+                });
+            }
 
 
             /* =================================================
@@ -5487,13 +5624,13 @@ app.post(
 
             // A peça pode ter sido vendida na Olist depois da última sincronização.
             // A conferência usa só as chamadas que sobram na requisição: cada peça já usou
-            // 2 (variação e frete) e o resto do pedido usa umas 10 (preços, cotação do frete,
-            // número do pedido, pedido, itens, InfinitePay e folga) e mais 3 com cupom
-            // (conferência, registro do uso e uma possível liberação).
+            // 2 (variação e frete) e o resto do pedido usa umas 12 (busca de compra repetida,
+            // preços, cotação do frete, número do pedido, pedido, itens, InfinitePay, link
+            // salvo e folga) e mais 3 com cupom (conferência, registro do uso e uma possível liberação).
             // Peças em pré-venda ainda não chegaram: o estoque delas é o do site, não o da Olist.
             const olistShortage = await checkCartAgainstOlistStock(
                 checkedVariants.filter(entry => !entry.item.presale),
-                createCallBudget(WORKER_CALL_LIMIT - (coupon ? 13 : 10) - 2 * checkedVariants.length)
+                createCallBudget(WORKER_CALL_LIMIT - (coupon ? 15 : 12) - 2 * checkedVariants.length)
             );
             if (olistShortage) {
                 const { item, available } = olistShortage;
@@ -5670,12 +5807,14 @@ app.post(
                     payment_method: paymentMethod,
                     whatsapp_tracking_opt_in: customer.whatsapp_updates === true,
                     whatsapp_tracking_status: customer.whatsapp_updates === true ? "pending" : "opted_out",
+                    checkout_fingerprint: fingerprint,
                     ...(coupon ? { coupon_code: coupon.code, coupon_discount: couponCents / 100 } : {}),
                     items: orderLines
                 })
             });
 
             const savedOrder = Array.isArray(savedOrders) ? savedOrders[0] : savedOrders;
+            closeFailedOrder = () => closeFailedCheckoutOrder(savedOrder?.id, orderNsu);
 
             await supabaseRequest("order_items", {
                 method: "POST",
@@ -5801,6 +5940,7 @@ app.post(
                 if (!pixResponse.ok || !pixData?.url) {
                     console.error("PIX — erro ao criar checkout InfinitePay:", pixResponse.status, pixData);
                     await releaseCoupon();
+                    await closeFailedOrder();
                     return res.status(pixResponse.ok ? 502 : pixResponse.status).json({
                         success: false,
                         payment_unavailable: true,
@@ -5808,6 +5948,7 @@ app.post(
                     });
                 }
 
+                await rememberCheckoutUrl(savedOrder.id, pixData.url);
                 console.log("PIX — checkout independente criado:", orderNsu);
 
                 return res.status(200).json({
@@ -6013,6 +6154,7 @@ app.post(
                 );
 
                 await releaseCoupon();
+                await closeFailedOrder();
 
 
                 return res.status(
@@ -6051,6 +6193,7 @@ app.post(
                 );
 
                 await releaseCoupon();
+                await closeFailedOrder();
 
 
                 return res.status(502).json({
@@ -6072,6 +6215,8 @@ app.post(
             /* =================================================
                SUCESSO
             ================================================= */
+
+            await rememberCheckoutUrl(savedOrder.id, data.url);
 
             console.log(
                 "✅ Checkout InfinitePay criado."
@@ -6108,6 +6253,7 @@ app.post(
             );
 
             await releaseCoupon();
+            await closeFailedOrder();
 
 
             return res.status(500).json({
@@ -6835,16 +6981,19 @@ if (!IS_WORKERS) app.use(
 /* =====================================================
    LEMBRETES POR E-MAIL E LIMPEZA DOS PEDIDOS SEM PAGAMENTO
    - Pedido aguardando pagamento (Pix gerado ou cartão não concluído):
-     um lembrete 1 hora depois, com um link que refaz a sacola.
+     um lembrete 30 minutos depois, com um link que refaz a sacola.
    - Sacola abandonada (e-mail preenchido no checkout, sem pedido):
      um lembrete 2 horas depois da última mexida.
+   - Nos mesmos momentos, a loja recebe um e-mail interno com o botão para
+     chamar a cliente no WhatsApp (mensagem pronta e link da sacola): pedido
+     sem pagamento, ou sacola em que a cliente deixou o WhatsApp.
    Só pedidos e sacolas das últimas 24 horas, um único e-mail por pedido
    ou sacola, e só com as peças que ainda têm estoque.
    - Pedido aguardando pagamento há mais de 2 dias vira "expired" e sai
      da lista principal do painel. Se o pagamento chegar depois, o aviso
      da InfinitePay confirma o pedido normalmente.
 ===================================================== */
-const REMINDER_ORDER_AFTER_MS = 60 * 60 * 1000;
+const REMINDER_ORDER_AFTER_MS = 30 * 60 * 1000;
 const REMINDER_CART_AFTER_MS = 2 * 60 * 60 * 1000;
 const REMINDER_WINDOW_MS = 24 * 60 * 60 * 1000;
 const PENDING_ORDER_EXPIRE_MS = 2 * 24 * 60 * 60 * 1000;
@@ -6903,9 +7052,9 @@ async function availableReminderItems(items) {
 }
 
 // Link que refaz a sacola no site: ?sacola=[[produto, variação, quantidade], ...] em base64url.
-function cartRestoreUrl(items, campaign) {
+function cartRestoreUrl(items, campaign, medium = "email") {
     const payload = Buffer.from(JSON.stringify(items.map(item => [item.productId, item.variantId, item.quantity]))).toString("base64url");
-    return PUBLIC_SITE_URL + "/?sacola=" + payload + "&utm_source=lembrete&utm_medium=email&utm_campaign=" + campaign;
+    return PUBLIC_SITE_URL + "/?sacola=" + payload + "&utm_source=lembrete&utm_medium=" + medium + "&utm_campaign=" + campaign;
 }
 
 function formatEmailMoney(value) {
@@ -7103,13 +7252,218 @@ async function remindAbandonedCarts(budget) {
     return sent;
 }
 
+/* =====================================================
+   LOJA CHAMA A CLIENTE NO WHATSAPP
+   A API oficial do WhatsApp não está configurada, então a mensagem sai do
+   WhatsApp da própria loja: a loja recebe um e-mail interno com o botão que
+   abre a conversa com a cliente e o texto pronto (com o link da sacola).
+   - Pedido sem pagamento há 30 minutos (o telefone é obrigatório no checkout).
+   - Sacola parada há 2 horas em que a cliente deixou o WhatsApp para o lembrete.
+===================================================== */
+const STORE_FOLLOWUP_ORDER_AFTER_MS = 30 * 60 * 1000;
+const STORE_FOLLOWUP_CART_AFTER_MS = REMINDER_CART_AFTER_MS;
+
+function storeFollowupRecipients() {
+    return ORDER_NOTIFICATION_EMAILS.split(",").map(v => v.trim().toLowerCase()).filter(Boolean);
+}
+
+function formatBrazilMobile(digits) {
+    return "(" + digits.slice(0, 2) + ") " + digits.slice(2, 7) + "-" + digits.slice(7);
+}
+
+function storeFollowupPieces(items) {
+    return items.map(item => item.name + (item.color ? " (" + item.color + ")" : "")).join(", ");
+}
+
+function storeFollowupEmailHtml({ eyebrow, title, details, items, whatsappUrl, message, cartUrl }) {
+    const rows = items.map(item =>
+        "<li style=\"margin:0 0 6px;\">" + item.quantity + "x " + escapeEmailHtml(item.name) +
+        (item.color ? " (" + escapeEmailHtml(item.color) + ")" : "") + " — " + formatEmailMoney(item.price) + "</li>"
+    ).join("");
+    return "<html><body style=\"margin:0;background:#f7f5f2;font-family:Arial,Helvetica,sans-serif;color:#171717;\">" +
+        "<div style=\"max-width:620px;margin:0 auto;padding:32px 18px;\">" +
+        "<div style=\"background:#111;color:#fff;text-align:center;padding:22px;letter-spacing:6px;font-size:24px;\">MONTÊ</div>" +
+        "<div style=\"background:#fff;padding:30px;\">" +
+        "<p style=\"margin:0 0 8px;font-size:11px;letter-spacing:2px;color:#777;\">" + escapeEmailHtml(eyebrow) + "</p>" +
+        "<h1 style=\"margin:0 0 18px;font-size:26px;font-weight:500;\">" + escapeEmailHtml(title) + "</h1>" +
+        "<p style=\"font-size:14px;line-height:1.7;color:#555;margin:0 0 16px;\">" + details.map(escapeEmailHtml).join("<br>") + "</p>" +
+        "<ul style=\"font-size:14px;line-height:1.6;padding-left:18px;margin:0 0 22px;\">" + rows + "</ul>" +
+        "<div style=\"text-align:center;margin:26px 0 18px;\"><a href=\"" + escapeEmailHtml(whatsappUrl) + "\" style=\"display:inline-block;background:#1f7a4d;color:#fff;text-decoration:none;padding:16px 28px;font-size:13px;letter-spacing:1.5px;border-radius:999px;\">CHAMAR NO WHATSAPP</a></div>" +
+        "<p style=\"font-size:12px;color:#777;margin:0 0 6px;\">Mensagem que já vai escrita (dá para editar antes de enviar):</p>" +
+        "<p style=\"font-size:14px;line-height:1.7;background:#f7f5f2;padding:14px;margin:0 0 18px;\">" + escapeEmailHtml(message) + "</p>" +
+        "<p style=\"font-size:12px;color:#777;margin:0;\">Link da sacola pronta: <a href=\"" + escapeEmailHtml(cartUrl) + "\" style=\"color:#171717;\">abrir</a></p>" +
+        "</div><p style=\"text-align:center;font-size:11px;color:#999;margin:18px 0;\">MONTÊ — Aviso interno para a loja</p></div></body></html>";
+}
+
+async function sendStoreFollowupEmail({ subject, html, text, idempotencyKey }) {
+    const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json", "Accept": "application/json", "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({ from: RESEND_FROM_NAME + " <" + RESEND_FROM_EMAIL + ">", to: storeFollowupRecipients(), subject, text, html, tags: [{ name: "type", value: "store_followup" }] })
+    });
+    const responseText = await response.text();
+    if (!response.ok) throw new Error("Resend API " + response.status + ": " + responseText.slice(0, 300));
+}
+
+async function storeFollowupPendingOrders(budget) {
+    spend(budget);
+    const rows = await supabaseRequest(
+        "orders?status=eq.pending&store_followup_sent_at=is.null" +
+        "&created_at=lt." + isoAgo(STORE_FOLLOWUP_ORDER_AFTER_MS) + "&created_at=gt." + isoAgo(REMINDER_WINDOW_MS) +
+        "&select=id,order_nsu,order_code,customer_name,customer_email,customer_phone,customer_whatsapp,items,total,payment_method,created_at&order=created_at.asc&limit=5",
+        { method: "GET" }
+    );
+    let sent = 0;
+    for (const order of Array.isArray(rows) ? rows : []) {
+        if (!budget.has(REMINDER_CALLS_EACH)) break;
+        const mark = status => {
+            spend(budget);
+            return supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
+                method: "PATCH",
+                headers: { "Prefer": "return=minimal" },
+                body: JSON.stringify({ store_followup_sent_at: new Date().toISOString(), store_followup_status: status })
+            });
+        };
+        const phone = brazilMobileDigits(order.customer_whatsapp) || brazilMobileDigits(order.customer_phone);
+        if (!phone) { await mark("skipped_invalid_phone"); continue; }
+        const later = await laterOrdersOf(order.customer_email, order.created_at, budget);
+        if (later.length) { await mark(later.some(o => PAID_ORDER_STATUSES.includes(o.status)) ? "skipped_paid_later" : "skipped_newer_order"); continue; }
+        spend(budget);
+        const items = await availableReminderItems(order.items);
+        if (!items.length) { await mark("skipped_sold_out"); continue; }
+        const code = formatOrderCode(order.order_code || order.order_nsu);
+        const firstName = reminderFirstName(order.customer_name);
+        const cartUrl = cartRestoreUrl(items, "pagamento_pendente", "whatsapp");
+        const message = "Oi" + (firstName ? ", " + firstName : "") + "! Aqui é da MONTÊ. Vi que o pagamento do seu pedido " + code +
+            " (" + storeFollowupPieces(items) + ") não foi concluído. Aconteceu algum problema? Posso te ajudar a finalizar. " +
+            "Sua sacola está pronta neste link: " + cartUrl;
+        const whatsappUrl = "https://wa.me/55" + phone + "?text=" + encodeURIComponent(message);
+        const name = safeString(order.customer_name) || "Cliente";
+        const pix = safeString(order.payment_method).toLowerCase() === "pix";
+        try {
+            spend(budget);
+            await sendStoreFollowupEmail({
+                subject: "Chame no WhatsApp: " + name + " não concluiu o pagamento (" + code + ")",
+                idempotencyKey: "monte-store-followup-order-" + order.id,
+                html: storeFollowupEmailHtml({
+                    eyebrow: "PAGAMENTO PENDENTE HÁ 30 MINUTOS",
+                    title: name + " não concluiu o pagamento",
+                    details: [
+                        "Pedido: " + code,
+                        "WhatsApp: " + formatBrazilMobile(phone),
+                        "Pagamento escolhido: " + (pix ? "Pix" : "Cartão de crédito"),
+                        "Total: " + formatEmailMoney(order.total)
+                    ],
+                    items,
+                    whatsappUrl,
+                    message,
+                    cartUrl
+                }),
+                text: name + " não concluiu o pagamento do pedido " + code + ".\nWhatsApp: " + formatBrazilMobile(phone) +
+                    "\n\nChamar no WhatsApp (mensagem pronta): " + whatsappUrl
+            });
+            await mark("sent");
+            sent++;
+            console.log("📲 Aviso para a loja chamar no WhatsApp (pagamento pendente):", code);
+        } catch (error) {
+            console.error("Aviso de WhatsApp para a loja —", code, error.message);
+            await mark("error").catch(() => {});
+        }
+    }
+    return sent;
+}
+
+async function storeFollowupAbandonedCarts(budget) {
+    spend(budget);
+    const rows = await supabaseRequest(
+        "cart_snapshots?status=eq.active&store_followup_sent_at=is.null&customer_phone=not.is.null" +
+        "&last_activity_at=lt." + isoAgo(STORE_FOLLOWUP_CART_AFTER_MS) + "&last_activity_at=gt." + isoAgo(REMINDER_WINDOW_MS) +
+        "&select=id,customer_name,customer_phone,items,subtotal,created_at&order=last_activity_at.asc&limit=5",
+        { method: "GET" }
+    );
+    let sent = 0;
+    for (const cart of Array.isArray(rows) ? rows : []) {
+        if (!budget.has(REMINDER_CALLS_EACH)) break;
+        const mark = (status, extra = {}) => {
+            spend(budget);
+            return supabaseRequest("cart_snapshots?id=eq." + encodeURIComponent(cart.id), {
+                method: "PATCH",
+                headers: { "Prefer": "return=minimal" },
+                body: JSON.stringify({ store_followup_sent_at: new Date().toISOString(), store_followup_status: status, ...extra })
+            });
+        };
+        const phone = brazilMobileDigits(cart.customer_phone);
+        if (!phone) { await mark("skipped_invalid_phone"); continue; }
+        // Já virou pedido (o WhatsApp do pedido é o mesmo): pago conta como convertida; sem
+        // pagamento, o aviso do pedido cuida.
+        spend(budget);
+        const orders = await supabaseRequest(
+            "orders?customer_whatsapp=eq." + phone + "&created_at=gt." + encodeURIComponent(cart.created_at) + "&select=id,status&limit=10",
+            { method: "GET" }
+        );
+        const orderList = Array.isArray(orders) ? orders : [];
+        const paid = orderList.find(o => PAID_ORDER_STATUSES.includes(o.status));
+        if (paid) { await mark("skipped_purchased", { status: "converted", converted_order_id: paid.id }); continue; }
+        if (orderList.length) { await mark("skipped_has_order"); continue; }
+        // Um aviso por WhatsApp a cada 7 dias para o mesmo número.
+        spend(budget);
+        const recent = await supabaseRequest(
+            "cart_snapshots?customer_phone=eq." + encodeURIComponent(formatBrazilMobile(phone)) +
+            "&store_followup_status=eq.sent&store_followup_sent_at=gt." + isoAgo(7 * 24 * 60 * 60 * 1000) + "&select=id&limit=1",
+            { method: "GET" }
+        );
+        if (Array.isArray(recent) && recent.length) { await mark("skipped_recent_reminder"); continue; }
+        spend(budget);
+        const items = await availableReminderItems(cart.items);
+        if (!items.length) { await mark("skipped_sold_out"); continue; }
+        const firstName = reminderFirstName(cart.customer_name);
+        const cartUrl = cartRestoreUrl(items, "sacola_guardada", "whatsapp");
+        const message = "Oi" + (firstName ? ", " + firstName : "") + "! Aqui é da MONTÊ. Você guardou sua sacola com " +
+            storeFollowupPieces(items) + ". As peças ainda estão disponíveis, mas o estoque é limitado. " +
+            "Se quiser finalizar, sua sacola está aqui: " + cartUrl;
+        const whatsappUrl = "https://wa.me/55" + phone + "?text=" + encodeURIComponent(message);
+        const total = items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0);
+        try {
+            spend(budget);
+            await sendStoreFollowupEmail({
+                subject: "Chame no WhatsApp: sacola guardada de " + formatEmailMoney(total),
+                idempotencyKey: "monte-store-followup-cart-" + cart.id,
+                html: storeFollowupEmailHtml({
+                    eyebrow: "SACOLA PARADA HÁ 2 HORAS",
+                    title: "Uma cliente deixou o WhatsApp na sacola",
+                    details: [
+                        (safeString(cart.customer_name) ? "Nome: " + safeString(cart.customer_name) : "Nome: não informado"),
+                        "WhatsApp: " + formatBrazilMobile(phone),
+                        "Peças: " + formatEmailMoney(total)
+                    ],
+                    items,
+                    whatsappUrl,
+                    message,
+                    cartUrl
+                }),
+                text: "Sacola guardada com o WhatsApp " + formatBrazilMobile(phone) + " (" + formatEmailMoney(total) + ").\n\nChamar no WhatsApp (mensagem pronta): " + whatsappUrl
+            });
+            await mark("sent");
+            sent++;
+            console.log("📲 Aviso para a loja chamar no WhatsApp (sacola guardada).");
+        } catch (error) {
+            console.error("Aviso de WhatsApp para a loja (sacola) —", error.message);
+            await mark("error").catch(() => {});
+        }
+    }
+    return sent;
+}
+
 // Roda a cada 5 minutos no cron. Devolve quantas chamadas externas usou.
 async function runCustomerUpkeep(calls) {
     const limit = Math.max(0, Math.floor(Number(calls) || 0));
     const budget = createCallBudget(limit);
     const steps = [expireOldPendingOrders];
     // Sem o Resend configurado não há como enviar: os lembretes esperam (nada é marcado).
-    if (RESEND_API_KEY && RESEND_FROM_EMAIL) steps.push(remindPendingOrders, remindAbandonedCarts);
+    if (RESEND_API_KEY && RESEND_FROM_EMAIL) steps.push(remindPendingOrders);
+    if (RESEND_API_KEY && RESEND_FROM_EMAIL && storeFollowupRecipients().length) steps.push(storeFollowupPendingOrders);
+    if (RESEND_API_KEY && RESEND_FROM_EMAIL) steps.push(remindAbandonedCarts);
+    if (RESEND_API_KEY && RESEND_FROM_EMAIL && storeFollowupRecipients().length) steps.push(storeFollowupAbandonedCarts);
     for (const step of steps) {
         if (!budget.has(2)) break;
         try {
