@@ -263,6 +263,8 @@ function createProductCard(product) {
                 ${priceHTML}
             </div>
 
+            ${Number(product.price) > 0 ? `<div class="product-installments">${installmentText(product.price)}</div>` : ""}
+
             ${product.presale && !isOutOfStock ? '<div class="presale-card-cta">Garanta a sua!</div>' : ""}
 
         </div>
@@ -999,6 +1001,13 @@ function openProductModal(productId) {
         priceHTML = '<span class="old-price">' + formatPrice(selectedProduct.oldPrice) + '</span>' +
             '<span class="sale-price">' + formatPrice(selectedProduct.price) + '</span>';
     }
+    // Formas de pagamento logo abaixo do preço: parcelas sem juros e o valor no Pix.
+    const price = Number(selectedProduct.price);
+    if (price > 0) {
+        const pixPrice = (Math.round(price * 100) - pixUnitDiscountCents(Math.round(price * 100))) / 100;
+        priceHTML += '<span class="modal-installments">' + installmentText(price) + ' no cartão' +
+            (PIX_DISCOUNT_PERCENT > 0 ? ' · ou ' + formatPrice(pixPrice) + ' no Pix' : '') + '</span>';
+    }
     setHTML(document.getElementById("modalPrice"), priceHTML);
 
     // Produtos da Sale não acompanham dustbag: o aviso aparece ao abrir qualquer um deles.
@@ -1697,6 +1706,14 @@ function pixUnitDiscountCents(unitCents) {
     return PIX_DISCOUNT_PERCENT > 0 ? unitCents - Math.round(unitCents * (100 - PIX_DISCOUNT_PERCENT) / 100) : 0;
 }
 
+// Cartão na InfinitePay: até 3x sem juros; de 4x a 10x a InfinitePay cobra juros da cliente.
+const INTEREST_FREE_INSTALLMENTS = 3;
+const MAX_INSTALLMENTS = 10;
+// Parcela arredondada para baixo: as 3 parcelas nunca passam do preço. "sem juros" não se
+// separa na quebra de linha da vitrine.
+const installmentText = value =>
+    `${INTEREST_FREE_INSTALLMENTS}x de ${formatPrice(Math.floor(Math.round(Number(value) * 100) / INTEREST_FREE_INSTALLMENTS) / 100)} sem\u00a0juros`;
+
 function shippingPriceFor(option, subtotal = getCartSubtotal()) {
     if (!option) return 0;
     const price = Number(option.price || 0);
@@ -1743,9 +1760,10 @@ const COUPON_MIN_UNIT_CENTS = 100;
 
 // Totais do checkout. Mesmo cálculo do servidor: desconto do Pix por unidade, arredondado em
 // centavos; o cupom vale nas peças (depois do Pix) e o frete fica integral.
-function checkoutTotals(subtotal = getCartSubtotal()) {
+// Com "method", calcula como se a cliente tivesse escolhido essa forma de pagamento.
+function checkoutTotals(subtotal = getCartSubtotal(), method) {
     const shipping = getShippingValue();
-    const paymentMethod =
+    const paymentMethod = method ||
         document.querySelector('input[name="paymentMethod"]:checked')?.value ||
         selectedPaymentMethod ||
         "pix";
@@ -1784,6 +1802,14 @@ function updatePaymentSummary(subtotal = getCartSubtotal()) {
 
     const checkoutElement = document.getElementById("checkoutTotal");
     if (checkoutElement) checkoutElement.textContent = formatPrice(checkoutTotal);
+
+    // Opção Cartão: a parcela sem juros do total no cartão (sem o desconto do Pix).
+    const cardInstallments = document.getElementById("cardInstallments");
+    if (cardInstallments) {
+        const cardTotal = checkoutTotals(subtotal, "credit_card").total;
+        cardInstallments.textContent = (cardTotal > 0 ? installmentText(cardTotal) : `${INTEREST_FREE_INSTALLMENTS}x sem juros`) +
+            ` · até ${MAX_INSTALLMENTS}x`;
+    }
 
     const discountElement = document.getElementById("checkoutDiscount");
     if (discountElement) {
