@@ -6928,6 +6928,7 @@ ${image ? `<meta name="twitter:image" content="${xmlEscape(image)}">` : ""}
 ${image ? `<img src="${xmlEscape(image)}" alt="${xmlEscape(product.name)}">` : ""}
 <p>${xmlEscape(description).replace(/\n/g, "<br>")}</p>
 <p><strong>Preço: R$ ${price.toFixed(2).replace(".", ",")}</strong></p>
+${price > 0 ? `<p>3x de R$ ${(Math.floor(Math.round(price * 100) / 3) / 100).toFixed(2).replace(".", ",")} sem juros no cartão (ou em até 10x)</p>` : ""}
 ${product.is_sale ? '<p class="seo-sale-notice"><strong>Sale:</strong> produtos da Sale não acompanham dustbag.</p>' : ""}
 ${product.is_presale ? '<p class="seo-sale-notice"><strong>Pré-venda — garanta a sua!</strong> Peças em produção com estoque limitado. Garanta a sua antecipadamente. Entrega em ' + PRESALE_MIN_BUSINESS_DAYS + ' dias úteis.</p>' : ""}
 <p>${product.is_presale ? "Disponível na pré-venda." : stockTotal > 0 ? "Disponível para compra." : "Produto esgotado."}</p>
