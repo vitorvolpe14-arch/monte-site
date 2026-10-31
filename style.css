@@ -845,30 +845,6 @@ a {
 }
 
 
-/* Parcelas sem juros abaixo do preço (vitrine e página da bolsa). */
-.product-installments {
-
-    margin-top: 3px;
-
-    font-size: 10px;
-
-    color: #777;
-
-}
-
-.modal-installments {
-
-    display: block;
-
-    margin-top: 6px;
-
-    font-size: 11px;
-
-    color: #666;
-
-}
-
-
 /* =====================================================
    COLEÇÃO
 ===================================================== */

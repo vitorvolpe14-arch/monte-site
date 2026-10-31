@@ -263,8 +263,6 @@ function createProductCard(product) {
                 ${priceHTML}
             </div>
 
-            ${Number(product.price) > 0 ? `<div class="product-installments">${installmentText(product.price)}</div>` : ""}
-
             ${product.presale && !isOutOfStock ? '<div class="presale-card-cta">Garanta a sua!</div>' : ""}
 
         </div>
@@ -1001,13 +999,6 @@ function openProductModal(productId) {
         priceHTML = '<span class="old-price">' + formatPrice(selectedProduct.oldPrice) + '</span>' +
             '<span class="sale-price">' + formatPrice(selectedProduct.price) + '</span>';
     }
-    // Formas de pagamento logo abaixo do preço: parcelas sem juros e o valor no Pix.
-    const price = Number(selectedProduct.price);
-    if (price > 0) {
-        const pixPrice = (Math.round(price * 100) - pixUnitDiscountCents(Math.round(price * 100))) / 100;
-        priceHTML += '<span class="modal-installments">' + installmentText(price) + ' no cartão' +
-            (PIX_DISCOUNT_PERCENT > 0 ? ' · ou ' + formatPrice(pixPrice) + ' no Pix' : '') + '</span>';
-    }
     setHTML(document.getElementById("modalPrice"), priceHTML);
 
     // Produtos da Sale não acompanham dustbag: o aviso aparece ao abrir qualquer um deles.
@@ -1709,8 +1700,7 @@ function pixUnitDiscountCents(unitCents) {
 // Cartão na InfinitePay: até 3x sem juros; de 4x a 10x a InfinitePay cobra juros da cliente.
 const INTEREST_FREE_INSTALLMENTS = 3;
 const MAX_INSTALLMENTS = 10;
-// Parcela arredondada para baixo: as 3 parcelas nunca passam do preço. "sem juros" não se
-// separa na quebra de linha da vitrine.
+// Parcela arredondada para baixo: as 3 parcelas nunca passam do total. Aparece só na sacola.
 const installmentText = value =>
     `${INTEREST_FREE_INSTALLMENTS}x de ${formatPrice(Math.floor(Math.round(Number(value) * 100) / INTEREST_FREE_INSTALLMENTS) / 100)} sem\u00a0juros`;
 
