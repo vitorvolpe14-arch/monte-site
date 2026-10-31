@@ -1774,6 +1774,20 @@ button.secondary:hover,
 .order-table td:nth-child(5){min-width:105px}
 .order-table th:nth-child(6),
 .order-table td:nth-child(6){min-width:78px;text-align:right}
+/* Forma de envio (PAC, SEDEX, Entrega MONTÊ) embaixo do número, na lista de pedidos. */
+.order-table .order-shipping-method{
+    display:block;
+    margin-top:4px;
+    font-size:10px;
+    font-weight:bold;
+    letter-spacing:.06em;
+    color:#191919;
+    white-space:normal;
+}
+.detail-card .shipping-method{
+    font-size:14px;
+    color:#191919;
+}
 .order-table .link-button{
     max-width:100%;
     white-space:normal;

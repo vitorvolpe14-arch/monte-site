@@ -1019,6 +1019,32 @@ function formatWhatsAppAddress(address) {
     return parts.join(", ") || "Não informado";
 }
 
+// Forma de envio escolhida pela cliente (PAC, SEDEX, Entrega MONTÊ...), para a loja saber
+// como mandar o pedido sem precisar deduzir pelo CEP e pelo valor do frete.
+const SHIPPING_SERVICE_NAMES = {
+    "1": "PAC",
+    "2": "SEDEX",
+    "17": "Mini Envios",
+    "monte-fortaleza": "Entrega MONTÊ — Fortaleza",
+    "monte-regiao-metropolitana": "Entrega MONTÊ — Região Metropolitana"
+};
+function formatShippingMethod(order) {
+    return safeString(order?.shipping_service_name) ||
+        SHIPPING_SERVICE_NAMES[safeString(order?.shipping_service_id)] ||
+        "Não informado";
+}
+function formatShippingDays(order) {
+    const days = Number(order?.shipping_delivery_days);
+    return Number.isFinite(days) && days > 0 ? days + (days === 1 ? " dia útil" : " dias úteis") : "";
+}
+// "SEDEX — R$ 26,04 (prazo de 2 dias úteis)" / "Entrega MONTÊ — Fortaleza — grátis".
+function formatShippingSummary(order) {
+    const value = Number(order?.shipping || 0);
+    const days = formatShippingDays(order);
+    return formatShippingMethod(order) + " — " + (value > 0 ? formatWhatsAppCurrency(value) : "grátis") +
+        (days ? " (prazo de " + days + ")" : "");
+}
+
 async function sendWhatsAppAdminNewOrderNotification(order) {
     if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN || !WHATSAPP_ADMIN_PHONE) {
         return { sent: false, status: "not_configured", message_id: null };
@@ -1044,7 +1070,7 @@ async function sendWhatsAppAdminNewOrderNotification(order) {
             return qty + "x " + name + (variant ? " (" + variant + ")" : "") + " — " + (isGiftItem(item) ? "PRESENTE" : formatWhatsAppCurrency(unit));
         }).join("\n")
         : "Consultar itens no painel administrativo.";
-    const customerData = "Tel.: " + customerPhone + "\nCPF: " + cpf + "\nEndereço: " + formatWhatsAppAddress(order.customer_address);
+    const customerData = "Envio: " + formatShippingSummary(order) + "\nTel.: " + customerPhone + "\nCPF: " + cpf + "\nEndereço: " + formatWhatsAppAddress(order.customer_address);
     const apiUrl = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
     const response = await fetch(apiUrl, {
@@ -1188,6 +1214,9 @@ async function sendAdminSaleNotificationEmail(order) {
     const paymentMethod = formatWhatsAppPaymentMethod(order.payment_method);
     const address = formatWhatsAppAddress(order.customer_address);
     const total = Number(order.total || 0);
+    const shippingMethod = formatShippingMethod(order);
+    const shippingValue = Number(order.shipping || 0);
+    const shippingDays = formatShippingDays(order);
     const items = Array.isArray(order.items) && order.items.length
         ? order.items.map(item => {
             const name = safeString(item.name || item.product_name || item.description) || "Produto";
@@ -1206,22 +1235,25 @@ async function sendAdminSaleNotificationEmail(order) {
         "<h1 style=\"margin:0 0 22px;font-size:28px;font-weight:500;\">Pagamento confirmado</h1>" +
         (order.approval_status === "pending" ? "<p style=\"padding:14px;background:#f6efe8;border-left:3px solid #571b29;font-size:14px;line-height:1.6;\"><strong>Pré-venda:</strong> aceite ou recuse este pedido no painel (Pedidos). Recusado, ele é cancelado e o valor precisa ser estornado no app da InfinitePay.</p>" : "") +
         (order.pix_paid_by_card ? "<p style=\"padding:14px;background:#fff4e5;border-left:3px solid #b35c00;font-size:14px;line-height:1.6;\"><strong>Atenção:</strong> este pedido foi feito com o desconto do Pix, mas a cliente pagou com cartão no link da InfinitePay. Confira antes de enviar.</p>" : "") +
-        "<div style=\"padding:18px;background:#f7f5f2;margin-bottom:20px;\"><strong style=\"font-size:20px;\">" + escapeEmailHtml(orderCode) + "</strong><br><span style=\"font-size:14px;color:#555;\">Total: <strong>R$ " + total.toFixed(2).replace(".", ",") + "</strong></span></div>" +
+        "<div style=\"padding:18px;background:#f7f5f2;margin-bottom:20px;\"><strong style=\"font-size:20px;\">" + escapeEmailHtml(orderCode) + "</strong><br><span style=\"font-size:14px;color:#555;\">Total: <strong>R$ " + total.toFixed(2).replace(".", ",") + "</strong></span><br><span style=\"font-size:14px;color:#555;\">Envio: <strong style=\"color:#171717;\">" + escapeEmailHtml(shippingMethod) + "</strong></span></div>" +
         "<h3 style=\"font-size:14px;letter-spacing:1px;\">CLIENTE</h3>" +
         "<p style=\"line-height:1.7;font-size:14px;\">Nome: " + escapeEmailHtml(customerName) + "<br>E-mail: " + escapeEmailHtml(customerEmail) + "<br>Telefone: " + escapeEmailHtml(customerPhone) + "<br>Endereço: " + escapeEmailHtml(address) + "</p>" +
+        "<h3 style=\"font-size:14px;letter-spacing:1px;\">ENVIO</h3>" +
+        "<p style=\"line-height:1.7;font-size:14px;\">Forma de envio: <strong>" + escapeEmailHtml(shippingMethod) + "</strong><br>Frete: " + (shippingValue > 0 ? "R$ " + shippingValue.toFixed(2).replace(".", ",") : "grátis") + (shippingDays ? "<br>Prazo informado à cliente: " + escapeEmailHtml(shippingDays) : "") + "</p>" +
         "<h3 style=\"font-size:14px;letter-spacing:1px;\">PRODUTOS</h3>" +
         "<p style=\"line-height:1.8;font-size:14px;\">" + items + "</p>" +
-        "<p style=\"font-size:14px;line-height:1.7;\"><strong>Pagamento:</strong> " + escapeEmailHtml(paymentMethod) + (order.coupon_code ? "<br><strong>Cupom:</strong> " + escapeEmailHtml(order.coupon_code) + " (-R$ " + Number(order.coupon_discount || 0).toFixed(2).replace(".", ",") + ")" : "") + "<br><strong>Frete:</strong> R$ " + Number(order.shipping || 0).toFixed(2).replace(".", ",") + "<br><strong>Total:</strong> R$ " + total.toFixed(2).replace(".", ",") + "</p>" +
+        "<p style=\"font-size:14px;line-height:1.7;\"><strong>Pagamento:</strong> " + escapeEmailHtml(paymentMethod) + (order.coupon_code ? "<br><strong>Cupom:</strong> " + escapeEmailHtml(order.coupon_code) + " (-R$ " + Number(order.coupon_discount || 0).toFixed(2).replace(".", ",") + ")" : "") + "<br><strong>Frete (" + escapeEmailHtml(shippingMethod) + "):</strong> R$ " + shippingValue.toFixed(2).replace(".", ",") + "<br><strong>Total:</strong> R$ " + total.toFixed(2).replace(".", ",") + "</p>" +
         "</div><p style=\"text-align:center;font-size:11px;color:#999;margin:18px 0;\">MONTÊ — Notificação interna de venda</p></div></body></html>";
     const text =
         "NOVA VENDA MONTÊ\n\nPedido: " + orderCode + "\nCliente: " + customerName +
         "\nE-mail: " + customerEmail + "\nTelefone: " + customerPhone +
         "\nProdutos: " + (Array.isArray(order.items) ? order.items.map(i => (i.quantity || 1) + "x " + (i.name || i.product_name || "Produto")).join("; ") : "Consultar pedido") +
+        "\nEnvio: " + formatShippingSummary(order) +
         "\nPagamento: " + paymentMethod + "\nTotal: R$ " + total.toFixed(2).replace(".", ",");
     const response = await fetch("https://api.resend.com/emails", {
         method:"POST",
         headers:{"Authorization":"Bearer "+RESEND_API_KEY,"Content-Type":"application/json","Accept":"application/json","Idempotency-Key":"monte-admin-sale-"+String(order.order_nsu)},
-        body:JSON.stringify({from:RESEND_FROM_NAME+" <"+RESEND_FROM_EMAIL+">",to:recipients,subject:(order.approval_status==="pending"?"PRÉ-VENDA (ACEITE NO PAINEL) — ":"")+(order.pix_paid_by_card?"⚠️ PIX PAGO NO CARTÃO — ":"")+"MONTÊ — NOVA VENDA "+orderCode+" — R$ "+total.toFixed(2).replace(".", ","),text,html})
+        body:JSON.stringify({from:RESEND_FROM_NAME+" <"+RESEND_FROM_EMAIL+">",to:recipients,subject:(order.approval_status==="pending"?"PRÉ-VENDA (ACEITE NO PAINEL) — ":"")+(order.pix_paid_by_card?"⚠️ PIX PAGO NO CARTÃO — ":"")+"MONTÊ — NOVA VENDA "+orderCode+" — R$ "+total.toFixed(2).replace(".", ",")+" — "+shippingMethod,text,html})
     });
     const responseText=await response.text();
     let data={}; try{data=responseText?JSON.parse(responseText):{}}catch{data={raw:responseText};}
@@ -2079,7 +2111,7 @@ app.get("/api/admin/analytics",requireAdmin,async(req,res)=>{
       supabaseRequest("site_events?created_at=gte."+encodeURIComponent(since)+"&select=*&order=created_at.desc&limit=10000",{method:"GET"}),
       supabaseRequest("site_sessions?last_seen_at=gte."+encodeURIComponent(since)+"&select=*&order=last_seen_at.desc&limit=5000",{method:"GET"}),
       supabaseRequest("cart_snapshots?last_activity_at=gte."+encodeURIComponent(since)+"&select=*&order=last_activity_at.desc&limit=5000",{method:"GET"}),
-      supabaseRequest("orders?created_at=gte."+encodeURIComponent(since)+"&select=id,order_nsu,order_code,customer_name,customer_email,subtotal,shipping,total,status,payment_method,created_at,paid_at,paid_amount&order=created_at.desc",{method:"GET"}),
+      supabaseRequest("orders?created_at=gte."+encodeURIComponent(since)+"&select=id,order_nsu,order_code,customer_name,customer_email,subtotal,shipping,shipping_service_id,shipping_service_name,total,status,payment_method,created_at,paid_at,paid_amount&order=created_at.desc",{method:"GET"}),
       supabaseRequest("order_items?created_at=gte."+encodeURIComponent(since)+"&select=order_id,product_id,product_name,sku,quantity,total_price,created_at&order=created_at.desc&limit=10000",{method:"GET"})
     ]);
     const good=["paid","processing","shipped","delivered"],paid=orders.filter(o=>good.includes(o.status)),paidIds=new Set(paid.map(o=>String(o.id)));
