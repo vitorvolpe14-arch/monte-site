@@ -2479,16 +2479,8 @@ app.delete("/api/admin/products/:id",requireAdmin,async(req,res)=>{
         const productId=safeString(req.params.id);
         if(!/^[0-9a-f-]{36}$/i.test(productId)) return res.status(400).json({success:false,message:"Produto inválido."});
 
-        const orders=await supabaseRequest(
-            "order_items?product_id=eq."+encodeURIComponent(productId)+"&select=id&limit=1"
-        );
-        if(Array.isArray(orders)&&orders.length){
-            return res.status(409).json({
-                success:false,
-                message:"Este produto já está vinculado a um pedido. Para preservar o histórico da venda, use DESATIVAR em vez de excluir."
-            });
-        }
-
+        // Produto com pedido também pode ser excluído: o item do pedido guarda nome, cor, SKU e
+        // valor da venda, então o pedido continua completo no painel (backend/sql/excluir-produto-com-pedido.sql).
         await supabaseRequest(
             "product_variants?product_id=eq."+encodeURIComponent(productId),
             {method:"DELETE",headers:{"Prefer":"return=minimal"}}
@@ -2500,6 +2492,7 @@ app.delete("/api/admin/products/:id",requireAdmin,async(req,res)=>{
         if(!Array.isArray(deleted)||!deleted[0]){
             return res.status(404).json({success:false,message:"Produto não encontrado."});
         }
+        publicCache.delete("catalog");
         return res.json({success:true});
     }catch(e){
         console.error("Admin product DELETE:",e);
