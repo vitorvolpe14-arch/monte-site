@@ -999,6 +999,8 @@ function openProductModal(productId) {
         priceHTML = '<span class="old-price">' + formatPrice(selectedProduct.oldPrice) + '</span>' +
             '<span class="sale-price">' + formatPrice(selectedProduct.price) + '</span>';
     }
+    // Parcela sem juros logo abaixo do preço (a vitrine mostra só o preço).
+    if (Number(selectedProduct.price) > 0) priceHTML += '<span class="modal-installments">' + installmentText(selectedProduct.price) + '</span>';
     setHTML(document.getElementById("modalPrice"), priceHTML);
 
     // Produtos da Sale não acompanham dustbag: o aviso aparece ao abrir qualquer um deles.
@@ -1700,7 +1702,8 @@ function pixUnitDiscountCents(unitCents) {
 // Cartão na InfinitePay: até 3x sem juros; de 4x a 10x a InfinitePay cobra juros da cliente.
 const INTEREST_FREE_INSTALLMENTS = 3;
 const MAX_INSTALLMENTS = 10;
-// Parcela arredondada para baixo: as 3 parcelas nunca passam do total. Aparece só na sacola.
+// Parcela arredondada para baixo: as 3 parcelas nunca passam do total. Aparece na página da
+// bolsa e na sacola.
 const installmentText = value =>
     `${INTEREST_FREE_INSTALLMENTS}x de ${formatPrice(Math.floor(Math.round(Number(value) * 100) / INTEREST_FREE_INSTALLMENTS) / 100)} sem\u00a0juros`;
 

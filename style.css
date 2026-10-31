@@ -845,6 +845,20 @@ a {
 }
 
 
+/* Parcela sem juros abaixo do preço, na página da bolsa. */
+.modal-installments {
+
+    display: block;
+
+    margin-top: 6px;
+
+    font-size: 11px;
+
+    color: #666;
+
+}
+
+
 /* =====================================================
    COLEÇÃO
 ===================================================== */
