@@ -6644,7 +6644,7 @@ html.intro-skipped .header { animation-delay: .5s; }
     margin: 0 0 6px;
     font-size: 9px;
     letter-spacing: .24em;
-    color: var(--co-accent-deep, #666);
+    color: var(--co-accent-deep, #867251);
     text-align: center;
 }
 
@@ -6671,7 +6671,7 @@ html.intro-skipped .header { animation-delay: .5s; }
 
 .order-note-cord path {
     fill: none;
-    stroke: var(--co-accent, #959595);
+    stroke: var(--co-accent, #867251);
     stroke-width: 2.2;
     stroke-linecap: round;
     vector-effect: non-scaling-stroke;
@@ -6750,7 +6750,7 @@ html.intro-skipped .header { animation-delay: .5s; }
     margin: 0;
     font-size: 8.5px;
     letter-spacing: .32em;
-    color: var(--co-accent-deep, #666);
+    color: var(--co-accent-deep, #867251);
 }
 
 .order-note-head span {
@@ -6803,7 +6803,7 @@ html.intro-skipped .header { animation-delay: .5s; }
 }
 
 @keyframes noteInk {
-    from { color: var(--co-accent, #959595); }
+    from { color: var(--co-accent, #867251); }
 }
 
 .order-note-items {
@@ -6881,26 +6881,30 @@ html.intro-skipped .header { animation-delay: .5s; }
     --co-line: #ece8e2;
     --co-field: #e2ddd6;
     --co-soft: #f7f5f2;
-    /* Cinza da campanha de 1 ano no lugar do bordô. O tom fechado (#666) fica para
-       textos pequenos sobre o branco, que no cinza claro ficariam difíceis de ler. */
-    --co-accent: #959595;
-    --co-accent-deep: #666;
+    /* Bege areia da paleta MONTÊ no lugar do cinza da campanha.
+       --co-accent: bege escuro (#867251, o --areia-texto) para detalhes pequenos com
+         branco por cima (ícones, selos, barras de progresso) e textos de destaque.
+       --co-accent-soft: bege areia (#d6ccbb, o --areia) para as superfícies grandes
+         (barra do total e botões de vidro), sempre com texto preto. */
+    --co-accent: #867251;
+    --co-accent-deep: #867251;
+    --co-accent-soft: #d6ccbb;
     /* Vidro líquido dos botões: aro de luz mais forte em cima e embaixo, sombra interna
-       no alto, brilho de refração na base e sombra projetada. Sobre a placa cinza da barra
-       o vidro é transparente; sobre o branco o próprio botão carrega o cinza. */
+       no alto, brilho de refração na base e sombra projetada. Sobre o branco o próprio
+       botão carrega o bege; o Finalizar compra, na barra bege, é preto. */
     --co-lg-rim: linear-gradient(180deg, rgba(255, 255, 255, .95), rgba(255, 255, 255, .3) 26%, rgba(255, 255, 255, .18) 60%, #fff);
     --co-lg-clear:
         radial-gradient(80% 60% at 50% 100%, rgba(255, 255, 255, .34), rgba(255, 255, 255, 0) 72%),
         linear-gradient(180deg, rgba(0, 0, 0, .05), rgba(255, 255, 255, .06) 45%, rgba(255, 255, 255, .14));
-    /* Sobre o branco o botão é o próprio cinza da campanha (#959595). */
+    /* Sobre o branco o botão é o próprio bege areia. */
     --co-lg-tinted:
         radial-gradient(80% 60% at 50% 100%, rgba(255, 255, 255, .34), rgba(255, 255, 255, 0) 72%),
-        var(--co-accent);
+        var(--co-accent-soft);
     --co-lg-shadow:
         inset 0 10px 16px -10px rgba(0, 0, 0, .22),
         inset 0 -8px 14px -8px rgba(255, 255, 255, .6),
-        0 0 0 1px rgba(80, 80, 80, .16),
-        0 14px 24px -12px rgba(0, 0, 0, .38);
+        0 0 0 1px rgba(134, 114, 81, .18),
+        0 14px 24px -12px rgba(60, 48, 30, .34);
     --co-lg-blur: blur(10px) saturate(150%);
     /* Cabeçalho e barra do total: placas de vidro sobre o conteúdo que rola. */
     --co-glass-surface: rgba(255, 255, 255, .58);
@@ -6929,7 +6933,7 @@ html.intro-skipped .header { animation-delay: .5s; }
     align-items: center;
     row-gap: 18px;
     padding: 22px 26px 16px;
-    border-bottom: 1px solid rgba(149, 149, 149, .22);
+    border-bottom: 1px solid rgba(134, 114, 81, .16);
     /* Vidro: as peças passam desfocadas por baixo do cabeçalho fixo. Mais denso embaixo:
        perto da borda o desfoque espelha o conteúdo e ele brigaria com as etapas. */
     background: linear-gradient(180deg, var(--co-glass-surface), rgba(255, 255, 255, .72) 50%, rgba(255, 255, 255, .94) 82%);
@@ -7173,7 +7177,7 @@ html.intro-skipped .header { animation-delay: .5s; }
 }
 
 #cartOverlay .cart-item-remove svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; }
-#cartOverlay .cart-item-remove:hover { background: rgba(149, 149, 149, .16); color: var(--co-ink); }
+#cartOverlay .cart-item-remove:hover { background: rgba(214, 204, 187, .45); color: var(--co-ink); }
 
 /* Sacola vazia */
 #cartOverlay .empty-cart { padding: 72px 24px 48px; text-align: center; color: var(--co-ink); }
@@ -7215,9 +7219,9 @@ html.intro-skipped .header { animation-delay: .5s; }
     gap: 12px;
     margin-bottom: 6px;
     padding: 13px 14px;
-    border: 1px solid #e4e4e4;
+    border: 1px solid #ebe5dc;
     border-radius: 14px;
-    background: linear-gradient(120deg, #f1f1f1, #fafafa);
+    background: linear-gradient(120deg, #f4efe7, #fbf9f6);
 }
 
 .pix-perk[hidden],
@@ -7302,7 +7306,7 @@ html.intro-skipped .header { animation-delay: .5s; }
     width: 0;
     height: 100%;
     border-radius: inherit;
-    background: var(--co-accent, #959595);
+    background: var(--co-accent, #867251);
     transition: width .5s ease;
 }
 
@@ -7451,7 +7455,7 @@ html.intro-skipped .header { animation-delay: .5s; }
     animation: coPop .3s ease both;
 }
 
-#cartOverlay .field.is-invalid input { border-color: var(--co-accent); background: #f8f8f8; box-shadow: 0 0 0 4px rgba(149, 149, 149, .14); }
+#cartOverlay .field.is-invalid input { border-color: var(--co-accent); background: #fbf9f6; box-shadow: 0 0 0 4px rgba(134, 114, 81, .14); }
 .field.is-invalid > span { color: var(--co-accent-deep); }
 .field.is-invalid { animation: coShake .35s ease; }
 
@@ -7561,7 +7565,7 @@ html.intro-skipped .header { animation-delay: .5s; }
     animation: coShimmer 1.2s linear infinite;
 }
 
-#cartOverlay .shipping-error { color: var(--co-accent-deep); background: #f3f3f3; }
+#cartOverlay .shipping-error { color: var(--co-accent-deep); background: #f7f4ef; }
 
 /* Pagamento */
 #cartOverlay .payment-methods {
@@ -7693,17 +7697,17 @@ html.intro-skipped .header { animation-delay: .5s; }
     margin-top: 22px;
     padding: 14px 26px calc(14px + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid rgba(255, 255, 255, .35);
-    /* Placa no cinza da campanha (#959595): é o fundo que faz o vidro do botão aparecer. */
-    background: var(--co-accent);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 -18px 30px -24px rgba(0, 0, 0, .35);
+    /* Placa no bege areia, com o total em preto e o Finalizar compra preto ao lado. */
+    background: var(--co-accent-soft);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), 0 -18px 30px -24px rgba(60, 48, 30, .3);
 }
 
 #cartOverlay .checkout-bar-total span,
-#cartOverlay .checkout-bar-total small { color: #fff; }
+#cartOverlay .checkout-bar-total small { color: #4a443c; }
 
 .checkout-bar-total { display: flex; flex-direction: column; flex: 0 1 auto; min-width: 0; max-width: 50%; }
 .checkout-bar-total span { font-size: 9.5px; letter-spacing: .24em; text-transform: uppercase; color: var(--co-muted); }
-#cartOverlay .checkout-bar-total strong { display: inline-block; margin: 3px 0 2px; color: #fff; font: 400 26px/1.1 "Playfair Display", serif; white-space: nowrap; transform-origin: left center; }
+#cartOverlay .checkout-bar-total strong { display: inline-block; margin: 3px 0 2px; color: var(--co-ink); font: 400 26px/1.1 "Playfair Display", serif; white-space: nowrap; transform-origin: left center; }
 .checkout-bar-total small { overflow: hidden; color: var(--co-muted); font-size: 10.5px; white-space: nowrap; text-overflow: ellipsis; }
 #checkoutTotal.is-bumping { animation: coBump .45s ease; }
 
@@ -7745,14 +7749,23 @@ html.intro-skipped .header { animation-delay: .5s; }
     position: relative;
     border: 0;
     background: var(--co-lg-tinted);
-    color: #f6f6f6;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, .25);
+    color: var(--co-ink);
+    text-shadow: 0 1px 0 rgba(255, 255, 255, .35);
     box-shadow: var(--co-lg-shadow);
     -webkit-backdrop-filter: var(--co-lg-blur);
     backdrop-filter: var(--co-lg-blur);
 }
 
-#cartOverlay .checkout-button { background: var(--co-lg-clear); }
+/* Finalizar compra: preto com letra branca, como o COMPRAR AGORA da janela da bolsa. */
+#cartOverlay .checkout-button {
+    background:
+        radial-gradient(80% 60% at 50% 100%, rgba(255, 255, 255, .14), rgba(255, 255, 255, 0) 72%),
+        var(--co-ink);
+    color: #fff;
+    text-shadow: none;
+}
+
+#cartOverlay .checkout-button::after { opacity: .35; }
 
 #cartOverlay .cart-close::before,
 #cartOverlay .cart-quantity::before,
@@ -7797,7 +7810,7 @@ body.cart-open .toast { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); 
 @keyframes coShake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 @keyframes coBump { 40% { transform: scale(1.07); } }
 @keyframes coShimmer { to { background-position: -200% 0; } }
-@keyframes coPulse { 0% { box-shadow: 0 0 0 0 rgba(149, 149, 149, .45); } 100% { box-shadow: 0 0 0 8px rgba(149, 149, 149, 0); } }
+@keyframes coPulse { 0% { box-shadow: 0 0 0 0 rgba(134, 114, 81, .4); } 100% { box-shadow: 0 0 0 8px rgba(134, 114, 81, 0); } }
 
 @media (max-width: 600px) {
     #cartOverlay .cart-header { padding: 16px 18px 14px; row-gap: 16px; }
@@ -8108,15 +8121,15 @@ html.catalog-pending .footer {
     margin: 4px 0 16px;
 }
 
-/* Na sacola, o aviso de pré-venda segue o cinza do checkout. */
-#cartOverlay .presale-delivery-notice { border-left-color: var(--co-accent); background: #f3f3f3; }
+/* Na sacola, o aviso de pré-venda segue o bege do checkout. */
+#cartOverlay .presale-delivery-notice { border-left-color: var(--co-accent-soft); background: #f7f4ef; }
 #cartOverlay .presale-delivery-notice strong { color: var(--co-accent-deep); }
 
 .cart-item-presale {
     margin-top: 4px;
     font-size: 11px;
     letter-spacing: .02em;
-    color: var(--co-accent-deep, #666);
+    color: var(--co-accent-deep, #867251);
 }
 
 /* =====================================================
@@ -8205,7 +8218,7 @@ html.catalog-pending .footer {
     background: #fcfaf8;
 }
 .gift-perk[hidden], .gift-picker[hidden], .cart-gift-line[hidden] { display: none; }
-.gift-perk.is-active { border-color: #e4e4e4; background: #f6f6f6; }
+.gift-perk.is-active { border-color: #e6ddcf; background: #f7f4ef; }
 
 .gift-perk-head { display: flex; align-items: center; gap: 12px; }
 .gift-perk-icon {
@@ -8215,7 +8228,7 @@ html.catalog-pending .footer {
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: var(--co-accent, #959595);
+    background: var(--co-accent, #867251);
 }
 .gift-perk-icon svg { width: 17px; height: 17px; fill: none; stroke: #fff; stroke-width: 1.4; stroke-linejoin: round; }
 .gift-perk-copy { min-width: 0; }
@@ -8225,11 +8238,11 @@ html.catalog-pending .footer {
 /* Escada: barra com os degraus do cinto e do frete grátis. */
 .gift-ladder { position: relative; height: 38px; margin: 12px 4px 0; }
 .gift-ladder-bar { position: absolute; left: 0; right: 0; top: 6px; height: 4px; border-radius: 999px; background: #ece8e2; overflow: hidden; }
-.gift-ladder-bar i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--co-accent, #959595); transition: width .5s ease; }
+.gift-ladder-bar i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--co-accent, #867251); transition: width .5s ease; }
 .gift-ladder-step { position: absolute; top: 0; display: grid; justify-items: center; transform: translateX(-50%); }
 .gift-ladder-step.is-last { left: 100%; transform: translateX(-100%); justify-items: end; }
 .gift-ladder-step b { width: 16px; height: 16px; box-sizing: border-box; border: 2px solid #d8d2ca; border-radius: 50%; background: #fff; transition: background .3s ease, border-color .3s ease; }
-.gift-ladder-step.is-done b { border-color: var(--co-accent, #959595); background: var(--co-accent, #959595); box-shadow: inset 0 0 0 3px #fff; }
+.gift-ladder-step.is-done b { border-color: var(--co-accent, #867251); background: var(--co-accent, #867251); box-shadow: inset 0 0 0 3px #fff; }
 .gift-ladder-step small { margin-top: 3px; font-size: 9.5px; line-height: 1.2; text-align: center; color: var(--co-muted, #8a847e); white-space: nowrap; }
 .gift-ladder-step.is-last small { text-align: right; }
 .gift-ladder-step.is-done small { color: var(--co-ink, #0d0d0d); font-weight: 600; }
@@ -8259,7 +8272,7 @@ html.catalog-pending .footer {
     .gift-dots { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
     .gift-dots[hidden] { display: none; }
     .gift-dots button { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 999px; background: #dcdcdc; cursor: pointer; transition: width .25s ease, background .25s ease; }
-    .gift-dots button.is-active { width: 18px; background: var(--co-accent, #959595); }
+    .gift-dots button.is-active { width: 18px; background: var(--co-accent, #867251); }
 }
 .gift-card {
     display: block;
@@ -8275,15 +8288,15 @@ html.catalog-pending .footer {
 }
 .gift-card .product-image, .gift-card .product-info, .gift-card .product-name, .gift-card .product-price { display: block; }
 .gift-card .product-image { background: #fff !important; box-shadow: inset 0 0 0 1px var(--co-line, #ece8e2); transition: box-shadow .2s ease; }
-.gift-card .product-badge { background: var(--co-accent, #959595); top: 8px; left: 8px; right: 8px; padding: 5px 4px; font-size: 6.5px; letter-spacing: .5px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gift-card .product-badge { background: var(--co-accent, #867251); top: 8px; left: 8px; right: 8px; padding: 5px 4px; font-size: 6.5px; letter-spacing: .5px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gift-card .product-info { padding-top: 10px; }
 .gift-card .product-name { margin-bottom: 5px; font-size: 11px; }
 .gift-card .product-price { font-size: 11px; }
-.gift-card .sale-price { color: var(--co-accent-deep, #666); font-weight: 600; letter-spacing: .06em; }
+.gift-card .sale-price { color: var(--co-accent-deep, #867251); font-weight: 600; letter-spacing: .06em; }
 .gift-card-colors { display: block; margin-top: 4px; font-size: 10.5px; color: var(--co-muted, #8a847e); }
 .gift-card:focus-visible { outline: none; }
-.gift-card:focus-visible .product-image { box-shadow: inset 0 0 0 2px rgba(149, 149, 149, .5); }
-.gift-card.is-active .product-image { box-shadow: inset 0 0 0 2px var(--co-accent, #959595); }
+.gift-card:focus-visible .product-image { box-shadow: inset 0 0 0 2px rgba(134, 114, 81, .5); }
+.gift-card.is-active .product-image { box-shadow: inset 0 0 0 2px var(--co-accent, #867251); }
 .gift-card.is-selected .product-image::after {
     content: "";
     position: absolute;
@@ -8293,7 +8306,7 @@ html.catalog-pending .footer {
     width: 22px;
     height: 22px;
     border-radius: 50%;
-    background: var(--co-accent, #959595) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12.5l4 4 8-9' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 14px no-repeat;
+    background: var(--co-accent, #867251) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12.5l4 4 8-9' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 14px no-repeat;
 }
 .gift-colors { margin-top: 14px; padding: 12px; border-radius: 12px; background: #fff; box-shadow: inset 0 0 0 1px var(--co-line, #ece8e2); }
 .gift-colors[hidden] { display: none; }
@@ -8305,9 +8318,9 @@ html.catalog-pending .footer {
 /* O presente aparece na sacola, logo abaixo das peças. */
 #cartOverlay #cartGiftLine { padding: 0 26px; }
 @media (max-width: 600px) { #cartOverlay #cartGiftLine { padding: 0 18px; } }
-.cart-gift-tag { display: inline-block; margin-bottom: 4px; padding: 2px 8px; border-radius: 999px; background: var(--co-accent, #959595); color: #fff; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
+.cart-gift-tag { display: inline-block; margin-bottom: 4px; padding: 2px 8px; border-radius: 999px; background: var(--co-accent, #867251); color: #fff; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
 .cart-gift-qty { font-size: 11px; color: var(--co-muted, #8a847e); }
-#cartOverlay .cart-gift-item .cart-item-price { color: var(--co-accent-deep, #666); }
+#cartOverlay .cart-gift-item .cart-item-price { color: var(--co-accent-deep, #867251); }
 
 /* Benefício desligado no painel (frete grátis ou desconto do Pix) some do site. */
 [data-benefit-show][hidden] { display: none !important; }
