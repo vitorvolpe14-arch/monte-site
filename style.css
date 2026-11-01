@@ -7341,7 +7341,17 @@ html.intro-skipped .header { animation-delay: .5s; }
     border-top: 1px solid var(--co-line);
 }
 
-#cartOverlay .checkout-step:first-child { margin-top: 14px; }
+/* Cada etapa num cartão bege bem claro; campos, opções de frete e de pagamento, em
+   branco, saltam por cima. A margem negativa mantém os campos na mesma largura. */
+#cartOverlay .checkout-step {
+    margin: 12px -12px 0;
+    padding: 20px 12px 22px;
+    border: 1px solid #ede6db;
+    border-radius: 18px;
+    background: #f9f6f1;
+}
+
+#cartOverlay .checkout-step:first-child { margin-top: 18px; }
 #cartOverlay.active .checkout-step { animation: coRise .6s cubic-bezier(.2, .8, .2, 1) both; }
 #cartOverlay.active #stepDelivery { animation-delay: .08s; }
 #cartOverlay.active #stepPayment { animation-delay: .16s; }
@@ -7353,8 +7363,9 @@ html.intro-skipped .header { animation-delay: .5s; }
     place-items: center;
     width: 30px;
     height: 30px;
-    border: 1px solid var(--co-ink);
+    /* Número da etapa preenchido de bege; vira preto quando a etapa está completa. */
     border-radius: 50%;
+    background: var(--co-accent-soft, #d6ccbb);
     font: 400 12px/1 "Playfair Display", serif;
     transition: background .35s ease, color .35s ease;
 }
@@ -7697,6 +7708,8 @@ html.intro-skipped .header { animation-delay: .5s; }
     margin-top: 22px;
     padding: 14px 26px calc(14px + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid rgba(255, 255, 255, .35);
+    /* Cantos de cima arredondados: a barra sobe como uma folha sobre a sacola. */
+    border-radius: 20px 20px 0 0;
     /* Placa no bege areia, com o total em preto e o Finalizar compra preto ao lado. */
     background: var(--co-accent-soft);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), 0 -18px 30px -24px rgba(60, 48, 30, .3);
@@ -7818,6 +7831,7 @@ body.cart-open .toast { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); 
     #cartOverlay #cartItems,
     #cartOverlay .cart-footer { padding-left: 18px; padding-right: 18px; }
     #cartOverlay .cart-footer { padding-bottom: 0; }
+    #cartOverlay .checkout-step { margin-left: -10px; margin-right: -10px; padding: 18px 10px 20px; }
     #cartOverlay .cart-item { grid-template-columns: 72px minmax(0, 1fr) auto; gap: 12px; }
     .cart-item-media { width: 72px; height: 90px; }
     #cartOverlay .cart-item img { width: 100%; height: 100%; }
