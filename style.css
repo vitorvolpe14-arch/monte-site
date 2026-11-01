@@ -64,14 +64,17 @@ a {
 
     --white: #ffffff;
 
-    --wine: #651f2b;
-
-    --wine-dark: #46131c;
-
-    /* Bege areia no lugar do bordô na seção Novidades e no selo NOVO, com texto
-       escuro por cima. Da família dos tons quentes do site (#cbc5bd, #ece8e2),
-       mais fechado que o fundo de Cintos & acessórios (#f5f3ef) logo abaixo. */
+    /* Bege areia no lugar do bordô em todo o site (só o selo SALE segue bordô).
+       --areia: fundos (seção Novidades, selo NOVO, botão de comprar, contador da
+         sacola), sempre com texto preto por cima.
+       --areia-hover: o mesmo bege um pouco mais fechado, para o hover dos botões.
+       --areia-texto: o mesmo tom, escurecido, para textos e linhas finas sobre o
+         branco (o bege claro some no branco); contraste 4,6:1. */
     --areia: #d6ccbb;
+
+    --areia-hover: #cdc1ac;
+
+    --areia-texto: #867251;
 
     --gray: #f5f5f3;
 
@@ -189,7 +192,7 @@ a {
 
     height: 1px;
 
-    background: var(--wine);
+    background: var(--areia-texto);
 
     transition: .3s;
 
@@ -280,9 +283,9 @@ a {
 
     border-radius: 50%;
 
-    background: var(--wine);
+    background: var(--areia);
 
-    color: white;
+    color: var(--black);
 
     font-size: 9px;
 
@@ -572,7 +575,7 @@ a {
 
     letter-spacing: 4px;
 
-    color: var(--wine);
+    color: var(--areia-texto);
 
     margin-bottom: 10px;
 
@@ -615,6 +618,14 @@ a {
 #novidades .section-heading > a {
 
     border-color: var(--black);
+
+}
+
+
+/* Preço promocional no fundo bege: em preto (o bege escuro dos textos perderia contraste). */
+#novidades .sale-price {
+
+    color: var(--black);
 
 }
 
@@ -783,6 +794,7 @@ a {
 
     left: 14px;
 
+    /* Bordô do selo SALE: o único bordô que fica no site. */
     background: #8a1f2c;
 
     color: white;
@@ -846,7 +858,7 @@ a {
 
 .sale-price {
 
-    color: var(--wine);
+    color: var(--areia-texto);
 
 }
 
@@ -1486,7 +1498,7 @@ a {
 
     opacity: 1;
 
-    outline: 1px solid var(--wine);
+    outline: 1px solid var(--areia-texto);
 
 }
 
@@ -1500,7 +1512,7 @@ a {
 
 .product-category {
 
-    color: var(--wine);
+    color: var(--areia-texto);
 
     font-size: 9px;
 
@@ -1557,11 +1569,11 @@ a {
 
     padding: 11px 14px;
 
-    border-left: 2px solid #571B29;
+    border-left: 2px solid var(--areia);
 
-    background: #f6f0f1;
+    background: #f7f4ef;
 
-    color: #3a1a22;
+    color: #3d3a36;
 
     font-size: 12px;
 
@@ -1592,7 +1604,7 @@ a {
 
     flex: none;
 
-    color: #571B29;
+    color: var(--areia-texto);
 
     font-size: 10px;
 
@@ -1694,8 +1706,9 @@ a {
 }
 
 .whatsapp-reservation-button:hover {
-    background: var(--wine);
-    border-color: var(--wine);
+    background: var(--areia);
+    border-color: var(--areia);
+    color: var(--black);
 }
 
 .variant-option.unavailable {
@@ -1715,9 +1728,9 @@ a {
 
     width: 100%;
 
-    background: var(--wine);
+    background: var(--areia);
 
-    color: white;
+    color: var(--black);
 
     border: none;
 
@@ -1732,7 +1745,7 @@ a {
 
 .add-cart-large:hover {
 
-    background: var(--wine-dark);
+    background: var(--areia-hover);
 
 }
 
@@ -2012,9 +2025,9 @@ a {
 
     border: none;
 
-    background: var(--wine);
+    background: var(--areia);
 
-    color: white;
+    color: var(--black);
 
     padding: 18px;
 
@@ -3089,7 +3102,7 @@ body.page-locked {
 
 .purchase-error {
     min-height: 17px;
-    color: #8a1f2c;
+    color: var(--areia-texto);
     font-size: 11px;
 }
 
@@ -3147,7 +3160,7 @@ body.page-locked {
     left: 50%;
     width: 0;
     height: 2px;
-    background: var(--wine);
+    background: var(--areia-texto);
     transition: width .2s ease;
 }
 
@@ -3171,8 +3184,8 @@ body.page-locked {
 }
 
 .purchase-timeline .done span {
-    background: var(--wine);
-    color: #fff;
+    background: var(--areia);
+    color: var(--black);
 }
 
 .purchase-timeline small {
@@ -5773,7 +5786,7 @@ canvas {
     letter-spacing: .24em;
     text-transform: uppercase;
     margin: 0 0 16px;
-    color: var(--wine);
+    color: var(--areia-texto);
 }
 
 #novidades .eyebrow {
@@ -5978,8 +5991,8 @@ canvas {
 
 .editorial-button:hover,
 .editorial-button:focus-visible {
-    background: var(--wine);
-    color: var(--white);
+    background: var(--areia);
+    color: var(--black);
     transform: translateY(-2px);
 }
 
@@ -8043,7 +8056,7 @@ html.catalog-pending .footer {
 ===================================================== */
 
 .product-badge.product-badge-presale {
-    background: #571b29;
+    background: var(--areia-texto);
 }
 
 .presale-card-cta {
@@ -8052,7 +8065,7 @@ html.catalog-pending .footer {
     font-weight: 600;
     letter-spacing: .18em;
     text-transform: uppercase;
-    color: #571b29;
+    color: var(--areia-texto);
 }
 
 .modal-presale-notice,
@@ -8060,7 +8073,7 @@ html.catalog-pending .footer {
     margin: 14px 0 0;
     padding: 12px 14px;
     background: #f6efe8;
-    border-left: 3px solid #571b29;
+    border-left: 3px solid var(--areia);
     font-size: 13px;
     line-height: 1.55;
     color: #3d3a36;
@@ -8070,7 +8083,7 @@ html.catalog-pending .footer {
 .presale-delivery-notice strong {
     display: block;
     margin-bottom: 2px;
-    color: #571b29;
+    color: var(--areia-texto);
     letter-spacing: .04em;
 }
 
@@ -8102,7 +8115,7 @@ html.catalog-pending .footer {
 .search-result:hover, .search-result:focus-visible { background: #f7f5f2; outline: none; }
 .search-result img { flex: none; width: 52px; height: 64px; object-fit: cover; background: #f3f3f1; }
 .search-result strong { display: block; font-weight: 500; font-size: 15px; }
-.search-result small { display: block; margin-top: 4px; color: var(--wine); font-size: 13px; }
+.search-result small { display: block; margin-top: 4px; color: var(--areia-texto); font-size: 13px; }
 .search-empty { margin: 0; padding: 14px 4px; color: #6b6b6b; }
 @media (max-width: 600px) {
     .search-overlay { padding-top: 72px; }
@@ -8141,7 +8154,7 @@ html.catalog-pending .footer {
 .institutional-updated { color: #777; font-size: 13px; }
 .institutional-page ul { margin: 0 0 18px; padding-left: 20px; line-height: 1.7; }
 .institutional-page li { margin-bottom: 6px; font-size: 14px; color: #333; }
-.institutional-page a:not(.institutional-back) { color: var(--wine); text-decoration: underline; text-underline-offset: 3px; }
+.institutional-page a:not(.institutional-back) { color: var(--areia-texto); text-decoration: underline; text-underline-offset: 3px; }
 .institutional-table { margin: 0 0 18px; }
 .institutional-table table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.5; }
 .institutional-table th, .institutional-table td { padding: 10px 12px; border-bottom: 1px solid #e8e5e1; text-align: left; vertical-align: top; }

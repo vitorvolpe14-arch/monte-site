@@ -6952,7 +6952,7 @@ ${image ? `<meta property="og:image" content="${xmlEscape(image)}">` : ""}
 <meta name="twitter:description" content="${xmlEscape(description.slice(0, 200))}">
 ${image ? `<meta name="twitter:image" content="${xmlEscape(image)}">` : ""}
 <script type="application/ld+json">${JSON.stringify(schema).replace(/</g, "\\u003c")}</script>
-<link rel="stylesheet" href="/produto-seo.css?v=20261016-comprar">
+<link rel="stylesheet" href="/produto-seo.css?v=20261101-sem-bordo">
 </head>
 <body>
 <main class="seo-product">
