@@ -227,7 +227,7 @@ function createProductCard(product) {
                 :
                 product.newProduct && !product.presale
                 ?
-                `<span class="product-badge">
+                `<span class="product-badge product-badge-new">
                     NOVO
                 </span>`
                 :
