@@ -68,10 +68,10 @@ a {
 
     --wine-dark: #46131c;
 
-    /* Taupe (cinza quente) no lugar do bordô na seção Novidades e no selo NOVO.
-       Mesma família dos cinzas quentes do site (#8a847e, #cbc5bd, #ece8e2);
-       com texto branco o contraste é 4,7:1, legível nos textos pequenos. */
-    --taupe: #7a736c;
+    /* Bege escuro no lugar do bordô na seção Novidades e no selo NOVO.
+       Mesma família dos tons quentes do site (#cbc5bd, #ece8e2) e do caramelo
+       das bolsas; escuro o bastante para o texto branco continuar legível. */
+    --bege: #9a876c;
 
     --gray: #f5f5f3;
 
@@ -399,7 +399,7 @@ a {
 
     min-height: 600px;
 
-    background: var(--taupe);
+    background: var(--bege);
 
 }
 
@@ -414,7 +414,7 @@ a {
 
     overflow: hidden;
 
-    background: var(--taupe);
+    background: var(--bege);
 
 }
 
@@ -592,8 +592,8 @@ a {
 
 #novidades {
 
-    /* Taupe da paleta MONTÊ (antes era o bordô da Bordeaux Collection). */
-    background: var(--taupe);
+    /* Bege escuro da paleta MONTÊ (antes era o bordô da Bordeaux Collection). */
+    background: var(--bege);
 
     color: white;
 
@@ -619,7 +619,7 @@ a {
 }
 
 
-/* Preço promocional no fundo taupe: em branco (o bordô padrão sumia no fundo). */
+/* Preço promocional no fundo bege: em branco (o bordô padrão sumia no fundo). */
 #novidades .sale-price {
 
     color: white;
@@ -806,10 +806,10 @@ a {
 }
 
 
-/* NOVO em taupe, para não se confundir com o SALE (bordô). */
+/* NOVO em bege, para não se confundir com o SALE (bordô). */
 .product-badge.product-badge-new {
 
-    background: var(--taupe);
+    background: var(--bege);
 
 }
 
@@ -1013,7 +1013,7 @@ a {
 
     background: white;
 
-    color: var(--taupe);
+    color: var(--bege);
 
 }
 
@@ -5079,7 +5079,7 @@ img {
     aspect-ratio: auto !important;
     position: relative;
     overflow: hidden;
-    background: var(--taupe);
+    background: var(--bege);
 }
 
 #carouselSlides {
@@ -5844,7 +5844,7 @@ canvas {
     width: 100%;
     aspect-ratio: 2 / 1;
     overflow: hidden;
-    background: var(--taupe);
+    background: var(--bege);
 }
 
 .editorial-slide {
@@ -6224,7 +6224,7 @@ canvas {
    CARROSSEL — CORES FIÉIS ÀS FOTOS
    O carrossel mostra só a foto, sem texto por cima, então a película
    escura antiga (.slide::after) só escurecia o banner. Sem ela, o fundo
-   do carrossel enquanto a foto carrega é o mesmo taupe da seção Novidades.
+   do carrossel enquanto a foto carrega é o mesmo bege da seção Novidades.
 ===================================================== */
 
 #carouselSlides .slide::after {
@@ -6234,7 +6234,7 @@ canvas {
 
 .hero,
 .carousel {
-    background: var(--taupe);
+    background: var(--bege);
 }
 
 
