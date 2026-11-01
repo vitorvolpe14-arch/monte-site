@@ -45,6 +45,10 @@ input {
 
 button {
     cursor: pointer;
+    /* Sem isto o Safari do iPhone pinta de azul o texto e os ícones dos botões
+       sem cor própria (menu, busca, sacola, ×, − e +, cores da bolsa...).
+       O mesmo preto do texto do site; botões com cor própria não mudam. */
+    color: #111;
 }
 
 
