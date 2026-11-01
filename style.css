@@ -68,6 +68,11 @@ a {
 
     --wine-dark: #46131c;
 
+    /* Taupe (cinza quente) no lugar do bordô na seção Novidades e no selo NOVO.
+       Mesma família dos cinzas quentes do site (#8a847e, #cbc5bd, #ece8e2);
+       com texto branco o contraste é 4,7:1, legível nos textos pequenos. */
+    --taupe: #7a736c;
+
     --gray: #f5f5f3;
 
     --border: #ddddda;
@@ -394,7 +399,7 @@ a {
 
     min-height: 600px;
 
-    background: #8a1f2c;
+    background: var(--taupe);
 
 }
 
@@ -409,7 +414,7 @@ a {
 
     overflow: hidden;
 
-    background: #8a1f2c;
+    background: var(--taupe);
 
 }
 
@@ -587,9 +592,8 @@ a {
 
 #novidades {
 
-    /* Mesmo bordô dos banners da Bordeaux Collection (#571B29), logo acima desta
-       seção — ajuste isolado para não alterar o restante do site. */
-    background: #571B29;
+    /* Taupe da paleta MONTÊ (antes era o bordô da Bordeaux Collection). */
+    background: var(--taupe);
 
     color: white;
 
@@ -615,7 +619,7 @@ a {
 }
 
 
-/* Preço promocional no fundo bordô: em branco (o bordô padrão sumia no fundo). */
+/* Preço promocional no fundo taupe: em branco (o bordô padrão sumia no fundo). */
 #novidades .sale-price {
 
     color: white;
@@ -798,6 +802,14 @@ a {
     letter-spacing: 1px;
 
     z-index: 2;
+
+}
+
+
+/* NOVO em taupe, para não se confundir com o SALE (bordô). */
+.product-badge.product-badge-new {
+
+    background: var(--taupe);
 
 }
 
@@ -1001,7 +1013,7 @@ a {
 
     background: white;
 
-    color: var(--wine);
+    color: var(--taupe);
 
 }
 
@@ -5067,7 +5079,7 @@ img {
     aspect-ratio: auto !important;
     position: relative;
     overflow: hidden;
-    background: #8a1f2c;
+    background: var(--taupe);
 }
 
 #carouselSlides {
@@ -5832,7 +5844,7 @@ canvas {
     width: 100%;
     aspect-ratio: 2 / 1;
     overflow: hidden;
-    background: #571B29;
+    background: var(--taupe);
 }
 
 .editorial-slide {
@@ -6211,9 +6223,8 @@ canvas {
 /* =====================================================
    CARROSSEL — CORES FIÉIS ÀS FOTOS
    O carrossel mostra só a foto, sem texto por cima, então a película
-   escura antiga (.slide::after) só escurecia o banner. Sem ela, o bordô
-   do banner fica igual ao da seção Novidades (#6D2234), que também é o
-   fundo do carrossel enquanto a foto carrega.
+   escura antiga (.slide::after) só escurecia o banner. Sem ela, o fundo
+   do carrossel enquanto a foto carrega é o mesmo taupe da seção Novidades.
 ===================================================== */
 
 #carouselSlides .slide::after {
@@ -6223,7 +6234,7 @@ canvas {
 
 .hero,
 .carousel {
-    background: #6D2234;
+    background: var(--taupe);
 }
 
 
