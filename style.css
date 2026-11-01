@@ -68,10 +68,10 @@ a {
 
     --wine-dark: #46131c;
 
-    /* Taupe claro (cinza quente) no lugar do bordô na seção Novidades e no selo
-       NOVO. É o mesmo tom dos textos suaves da sacola (--co-muted) e da família
-       dos tons quentes do site (#cbc5bd, #ece8e2); o texto branco continua legível. */
-    --taupe: #8a847e;
+    /* Bege areia no lugar do bordô na seção Novidades e no selo NOVO, com texto
+       escuro por cima. Da família dos tons quentes do site (#cbc5bd, #ece8e2),
+       mais fechado que o fundo de Cintos & acessórios (#f5f3ef) logo abaixo. */
+    --areia: #c6b8a1;
 
     --gray: #f5f5f3;
 
@@ -399,7 +399,7 @@ a {
 
     min-height: 600px;
 
-    background: var(--taupe);
+    background: var(--areia);
 
 }
 
@@ -414,7 +414,7 @@ a {
 
     overflow: hidden;
 
-    background: var(--taupe);
+    background: var(--areia);
 
 }
 
@@ -592,10 +592,10 @@ a {
 
 #novidades {
 
-    /* Taupe claro da paleta MONTÊ (antes era o bordô da Bordeaux Collection). */
-    background: var(--taupe);
+    /* Bege areia da paleta MONTÊ (antes era o bordô da Bordeaux Collection). */
+    background: var(--areia);
 
-    color: white;
+    color: var(--black);
 
 }
 
@@ -607,22 +607,14 @@ a {
 #novidades .product-name,
 #novidades .product-price {
 
-    color: white;
+    color: var(--black);
 
 }
 
 
 #novidades .section-heading > a {
 
-    border-color: white;
-
-}
-
-
-/* Preço promocional no fundo taupe: em branco (o bordô padrão sumia no fundo). */
-#novidades .sale-price {
-
-    color: white;
+    border-color: var(--black);
 
 }
 
@@ -806,10 +798,12 @@ a {
 }
 
 
-/* NOVO em taupe, para não se confundir com o SALE (bordô). */
+/* NOVO em bege areia (texto escuro), para não se confundir com o SALE (bordô). */
 .product-badge.product-badge-new {
 
-    background: var(--taupe);
+    background: var(--areia);
+
+    color: var(--black);
 
 }
 
@@ -986,11 +980,11 @@ a {
 
     height: 42px;
 
-    border: 1px solid rgba(255,255,255,.7);
+    border: 1px solid #222;
 
     background: transparent;
 
-    color: white;
+    color: #111;
 
     display: flex;
 
@@ -1011,9 +1005,9 @@ a {
 
 .new-carousel-arrow:hover:not(:disabled) {
 
-    background: white;
+    background: #111;
 
-    color: var(--taupe);
+    color: #fff;
 
 }
 
@@ -5079,7 +5073,7 @@ img {
     aspect-ratio: auto !important;
     position: relative;
     overflow: hidden;
-    background: var(--taupe);
+    background: var(--areia);
 }
 
 #carouselSlides {
@@ -5783,7 +5777,7 @@ canvas {
 }
 
 #novidades .eyebrow {
-    color: rgba(255, 255, 255, .7);
+    color: rgba(13, 13, 13, .7);
 }
 
 .section-heading h2,
@@ -5844,7 +5838,7 @@ canvas {
     width: 100%;
     aspect-ratio: 2 / 1;
     overflow: hidden;
-    background: var(--taupe);
+    background: var(--areia);
 }
 
 .editorial-slide {
@@ -6224,7 +6218,7 @@ canvas {
    CARROSSEL — CORES FIÉIS ÀS FOTOS
    O carrossel mostra só a foto, sem texto por cima, então a película
    escura antiga (.slide::after) só escurecia o banner. Sem ela, o fundo
-   do carrossel enquanto a foto carrega é o mesmo taupe da seção Novidades.
+   do carrossel enquanto a foto carrega é o mesmo bege da seção Novidades.
 ===================================================== */
 
 #carouselSlides .slide::after {
@@ -6234,7 +6228,7 @@ canvas {
 
 .hero,
 .carousel {
-    background: var(--taupe);
+    background: var(--areia);
 }
 
 
