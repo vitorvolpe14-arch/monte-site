@@ -31,6 +31,10 @@
       "/media/*",
       "/webhook-infinitepay",
       "/produto/*",
+      // Links curtos das mensagens da loja (/s/<código>) levam à sacola pronta.
+      "/s/*",
+      // Link curto de cada bolsa (/p/<código>), com a foto na prévia.
+      "/p/*",
       "/sitemap.xml",
       "/robots.txt",
       "/",

@@ -988,6 +988,12 @@ async function sendWhatsAppTrackingNotification(order) {
     return { sent: true, status: "sent", message_id: messageId };
 }
 
+// Texto de variável dos modelos do WhatsApp: a Meta recusa quebra de linha, tabulação e
+// mais de 4 espaços seguidos (erro 132018).
+function whatsappParam(value, max = 1000) {
+    return safeString(value).replace(/[\r\n\t]+/g, " · ").replace(/ {2,}/g, " ").trim().slice(0, max) || "-";
+}
+
 function formatWhatsAppCurrency(value) {
     return "R$ " + Number(value || 0).toFixed(2).replace(".", ",");
 }
@@ -1011,6 +1017,32 @@ function formatWhatsAppAddress(address) {
         address.cep ? "CEP " + address.cep : ""
     ].filter(Boolean);
     return parts.join(", ") || "Não informado";
+}
+
+// Forma de envio escolhida pela cliente (PAC, SEDEX, Entrega MONTÊ...), para a loja saber
+// como mandar o pedido sem precisar deduzir pelo CEP e pelo valor do frete.
+const SHIPPING_SERVICE_NAMES = {
+    "1": "PAC",
+    "2": "SEDEX",
+    "17": "Mini Envios",
+    "monte-fortaleza": "Entrega MONTÊ — Fortaleza",
+    "monte-regiao-metropolitana": "Entrega MONTÊ — Região Metropolitana"
+};
+function formatShippingMethod(order) {
+    return safeString(order?.shipping_service_name) ||
+        SHIPPING_SERVICE_NAMES[safeString(order?.shipping_service_id)] ||
+        "Não informado";
+}
+function formatShippingDays(order) {
+    const days = Number(order?.shipping_delivery_days);
+    return Number.isFinite(days) && days > 0 ? days + (days === 1 ? " dia útil" : " dias úteis") : "";
+}
+// "SEDEX — R$ 26,04 (prazo de 2 dias úteis)" / "Entrega MONTÊ — Fortaleza — grátis".
+function formatShippingSummary(order) {
+    const value = Number(order?.shipping || 0);
+    const days = formatShippingDays(order);
+    return formatShippingMethod(order) + " — " + (value > 0 ? formatWhatsAppCurrency(value) : "grátis") +
+        (days ? " (prazo de " + days + ")" : "");
 }
 
 async function sendWhatsAppAdminNewOrderNotification(order) {
@@ -1038,7 +1070,7 @@ async function sendWhatsAppAdminNewOrderNotification(order) {
             return qty + "x " + name + (variant ? " (" + variant + ")" : "") + " — " + (isGiftItem(item) ? "PRESENTE" : formatWhatsAppCurrency(unit));
         }).join("\n")
         : "Consultar itens no painel administrativo.";
-    const customerData = "Tel.: " + customerPhone + "\nCPF: " + cpf + "\nEndereço: " + formatWhatsAppAddress(order.customer_address);
+    const customerData = "Envio: " + formatShippingSummary(order) + "\nTel.: " + customerPhone + "\nCPF: " + cpf + "\nEndereço: " + formatWhatsAppAddress(order.customer_address);
     const apiUrl = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
     const response = await fetch(apiUrl, {
@@ -1058,13 +1090,13 @@ async function sendWhatsAppAdminNewOrderNotification(order) {
                 components: [{
                     type: "body",
                     parameters: [
-                        { type: "text", text: orderCode },
-                        { type: "text", text: customerName },
-                        { type: "text", text: products },
-                        { type: "text", text: formatWhatsAppPaymentMethod(order.payment_method) },
-                        { type: "text", text: formatWhatsAppCurrency(order.total) },
-                        { type: "text", text: customerData }
-                    ]
+                        orderCode,
+                        customerName,
+                        products,
+                        formatWhatsAppPaymentMethod(order.payment_method),
+                        formatWhatsAppCurrency(order.total),
+                        customerData
+                    ].map(text => ({ type: "text", text: whatsappParam(text) }))
                 }]
             }
         })
@@ -1115,6 +1147,7 @@ async function sendOrderConfirmationEmail(order) {
     const total = Number(order.total || 0);
     const purchasesUrl = PUBLIC_SITE_URL + "/minhas-compras.html?order_nsu=" + encodeURIComponent(orderCode);
     const gifts = orderGiftItems(order).map(item => safeString(item.name) + (item.variant_color ? " (" + safeString(item.variant_color) + ")" : "")).join(", ");
+    const giftTerms = [...new Set(orderGiftItems(order).map(item => safeString(item.promotion_terms)).filter(Boolean))].join(" ");
     const html = "<html><body style=\"margin:0;background:#f7f5f2;font-family:Arial,Helvetica,sans-serif;color:#171717;\">" +
       "<div style=\"max-width:620px;margin:0 auto;padding:40px 20px;\"><div style=\"background:#111;color:#fff;text-align:center;padding:24px 20px;letter-spacing:6px;font-size:24px;\">MONTÊ</div>" +
       "<div style=\"background:#fff;padding:38px 30px;\"><p style=\"margin:0 0 12px;font-size:12px;letter-spacing:2px;color:#777;\">COMPRA CONFIRMADA</p>" +
@@ -1122,13 +1155,13 @@ async function sendOrderConfirmationEmail(order) {
       "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Seu pagamento foi confirmado e seu pedido já está registrado na MONTÊ.</p>" +
       "<div style=\"margin:28px 0;padding:20px;background:#f7f5f2;\"><p style=\"margin:0 0 8px;font-size:11px;letter-spacing:1.5px;color:#777;\">NÚMERO DO PEDIDO</p><strong style=\"font-size:20px;\">" + escapeEmailHtml(orderCode) + "</strong><p style=\"margin:14px 0 0;font-size:14px;color:#555;\">Total: <strong>R$ " + total.toFixed(2).replace(".", ",") + "</strong></p></div>" +
       (orderHasPresale(order) ? "<p style=\"font-size:15px;line-height:1.7;color:#555;\"><strong>Pré-venda:</strong> seu pedido tem peça em produção, com estoque limitado. A entrega é em " + PRESALE_MIN_BUSINESS_DAYS + " dias úteis. A MONTÊ confirma o seu pedido em breve; se não for possível atender, o valor pago é devolvido integralmente.</p>" : "") +
-      (gifts ? "<p style=\"font-size:15px;line-height:1.7;color:#555;\"><strong>Seu presente:</strong> " + escapeEmailHtml(gifts) + " vai junto no pedido.</p>" : "") +
+      (gifts ? "<p style=\"font-size:15px;line-height:1.7;color:#555;\"><strong>Seu presente:</strong> " + escapeEmailHtml(gifts) + " vai junto no pedido." + (giftTerms ? " " + escapeEmailHtml(giftTerms) : "") + "</p>" : "") +
       "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Acompanhe o status do seu pedido e novas atualizações pela área <strong>Minhas Compras</strong>.</p>" +
       "<div style=\"text-align:center;margin:30px 0;\"><a href=\"" + purchasesUrl + "\" style=\"display:inline-block;background:#111;color:#fff;text-decoration:none;padding:15px 26px;font-size:13px;letter-spacing:1.5px;\">ACESSAR MINHAS COMPRAS</a></div></div>" +
       "<p style=\"text-align:center;font-size:11px;color:#999;margin:20px 0;\">MONTÊ — Bolsas e acessórios</p></div></body></html>";
     const text = "Compra confirmada na MONTÊ\n\nPedido: " + orderCode + "\nTotal: R$ " + total.toFixed(2).replace(".", ",") +
         (orderHasPresale(order) ? "\n\nPré-venda: a entrega é em " + PRESALE_MIN_BUSINESS_DAYS + " dias úteis." : "") +
-        (gifts ? "\n\nSeu presente: " + gifts + " vai junto no pedido." : "") +
+        (gifts ? "\n\nSeu presente: " + gifts + " vai junto no pedido." + (giftTerms ? " " + giftTerms : "") : "") +
         "\n\nAcesse: " + purchasesUrl;
     const idempotencyKey = "monte-order-confirmation-" + String(order.order_nsu);
     const response = await fetch("https://api.resend.com/emails", {
@@ -1181,6 +1214,9 @@ async function sendAdminSaleNotificationEmail(order) {
     const paymentMethod = formatWhatsAppPaymentMethod(order.payment_method);
     const address = formatWhatsAppAddress(order.customer_address);
     const total = Number(order.total || 0);
+    const shippingMethod = formatShippingMethod(order);
+    const shippingValue = Number(order.shipping || 0);
+    const shippingDays = formatShippingDays(order);
     const items = Array.isArray(order.items) && order.items.length
         ? order.items.map(item => {
             const name = safeString(item.name || item.product_name || item.description) || "Produto";
@@ -1199,22 +1235,25 @@ async function sendAdminSaleNotificationEmail(order) {
         "<h1 style=\"margin:0 0 22px;font-size:28px;font-weight:500;\">Pagamento confirmado</h1>" +
         (order.approval_status === "pending" ? "<p style=\"padding:14px;background:#f6efe8;border-left:3px solid #571b29;font-size:14px;line-height:1.6;\"><strong>Pré-venda:</strong> aceite ou recuse este pedido no painel (Pedidos). Recusado, ele é cancelado e o valor precisa ser estornado no app da InfinitePay.</p>" : "") +
         (order.pix_paid_by_card ? "<p style=\"padding:14px;background:#fff4e5;border-left:3px solid #b35c00;font-size:14px;line-height:1.6;\"><strong>Atenção:</strong> este pedido foi feito com o desconto do Pix, mas a cliente pagou com cartão no link da InfinitePay. Confira antes de enviar.</p>" : "") +
-        "<div style=\"padding:18px;background:#f7f5f2;margin-bottom:20px;\"><strong style=\"font-size:20px;\">" + escapeEmailHtml(orderCode) + "</strong><br><span style=\"font-size:14px;color:#555;\">Total: <strong>R$ " + total.toFixed(2).replace(".", ",") + "</strong></span></div>" +
+        "<div style=\"padding:18px;background:#f7f5f2;margin-bottom:20px;\"><strong style=\"font-size:20px;\">" + escapeEmailHtml(orderCode) + "</strong><br><span style=\"font-size:14px;color:#555;\">Total: <strong>R$ " + total.toFixed(2).replace(".", ",") + "</strong></span><br><span style=\"font-size:14px;color:#555;\">Envio: <strong style=\"color:#171717;\">" + escapeEmailHtml(shippingMethod) + "</strong></span></div>" +
         "<h3 style=\"font-size:14px;letter-spacing:1px;\">CLIENTE</h3>" +
         "<p style=\"line-height:1.7;font-size:14px;\">Nome: " + escapeEmailHtml(customerName) + "<br>E-mail: " + escapeEmailHtml(customerEmail) + "<br>Telefone: " + escapeEmailHtml(customerPhone) + "<br>Endereço: " + escapeEmailHtml(address) + "</p>" +
+        "<h3 style=\"font-size:14px;letter-spacing:1px;\">ENVIO</h3>" +
+        "<p style=\"line-height:1.7;font-size:14px;\">Forma de envio: <strong>" + escapeEmailHtml(shippingMethod) + "</strong><br>Frete: " + (shippingValue > 0 ? "R$ " + shippingValue.toFixed(2).replace(".", ",") : "grátis") + (shippingDays ? "<br>Prazo informado à cliente: " + escapeEmailHtml(shippingDays) : "") + "</p>" +
         "<h3 style=\"font-size:14px;letter-spacing:1px;\">PRODUTOS</h3>" +
         "<p style=\"line-height:1.8;font-size:14px;\">" + items + "</p>" +
-        "<p style=\"font-size:14px;line-height:1.7;\"><strong>Pagamento:</strong> " + escapeEmailHtml(paymentMethod) + (order.coupon_code ? "<br><strong>Cupom:</strong> " + escapeEmailHtml(order.coupon_code) + " (-R$ " + Number(order.coupon_discount || 0).toFixed(2).replace(".", ",") + ")" : "") + "<br><strong>Frete:</strong> R$ " + Number(order.shipping || 0).toFixed(2).replace(".", ",") + "<br><strong>Total:</strong> R$ " + total.toFixed(2).replace(".", ",") + "</p>" +
+        "<p style=\"font-size:14px;line-height:1.7;\"><strong>Pagamento:</strong> " + escapeEmailHtml(paymentMethod) + (order.coupon_code ? "<br><strong>Cupom:</strong> " + escapeEmailHtml(order.coupon_code) + " (-R$ " + Number(order.coupon_discount || 0).toFixed(2).replace(".", ",") + ")" : "") + "<br><strong>Frete (" + escapeEmailHtml(shippingMethod) + "):</strong> R$ " + shippingValue.toFixed(2).replace(".", ",") + "<br><strong>Total:</strong> R$ " + total.toFixed(2).replace(".", ",") + "</p>" +
         "</div><p style=\"text-align:center;font-size:11px;color:#999;margin:18px 0;\">MONTÊ — Notificação interna de venda</p></div></body></html>";
     const text =
         "NOVA VENDA MONTÊ\n\nPedido: " + orderCode + "\nCliente: " + customerName +
         "\nE-mail: " + customerEmail + "\nTelefone: " + customerPhone +
         "\nProdutos: " + (Array.isArray(order.items) ? order.items.map(i => (i.quantity || 1) + "x " + (i.name || i.product_name || "Produto")).join("; ") : "Consultar pedido") +
+        "\nEnvio: " + formatShippingSummary(order) +
         "\nPagamento: " + paymentMethod + "\nTotal: R$ " + total.toFixed(2).replace(".", ",");
     const response = await fetch("https://api.resend.com/emails", {
         method:"POST",
         headers:{"Authorization":"Bearer "+RESEND_API_KEY,"Content-Type":"application/json","Accept":"application/json","Idempotency-Key":"monte-admin-sale-"+String(order.order_nsu)},
-        body:JSON.stringify({from:RESEND_FROM_NAME+" <"+RESEND_FROM_EMAIL+">",to:recipients,subject:(order.approval_status==="pending"?"PRÉ-VENDA (ACEITE NO PAINEL) — ":"")+(order.pix_paid_by_card?"⚠️ PIX PAGO NO CARTÃO — ":"")+"MONTÊ — NOVA VENDA "+orderCode+" — R$ "+total.toFixed(2).replace(".", ","),text,html})
+        body:JSON.stringify({from:RESEND_FROM_NAME+" <"+RESEND_FROM_EMAIL+">",to:recipients,subject:(order.approval_status==="pending"?"PRÉ-VENDA (ACEITE NO PAINEL) — ":"")+(order.pix_paid_by_card?"⚠️ PIX PAGO NO CARTÃO — ":"")+"MONTÊ — NOVA VENDA "+orderCode+" — R$ "+total.toFixed(2).replace(".", ",")+" — "+shippingMethod,text,html})
     });
     const responseText=await response.text();
     let data={}; try{data=responseText?JSON.parse(responseText):{}}catch{data={raw:responseText};}
@@ -1432,16 +1471,6 @@ function shippingChargeFor(option, productsSubtotal, benefits) {
     const price = Number(option?.price || 0);
     const free = benefits?.free_shipping;
     return free?.enabled && FREE_SHIPPING_OPTION_IDS.has(option?.id) && productsSubtotal >= Number(free.min_subtotal) ? 0 : price;
-}
-
-// Frase dos e-mails de lembrete com os benefícios que estão valendo.
-function benefitsSentence(benefits) {
-    const parts = [];
-    if (benefits?.pix_discount?.enabled) parts.push("no Pix, você ganha " + String(benefits.pix_discount.percent).replace(".", ",") + "% de desconto");
-    if (benefits?.free_shipping?.enabled) parts.push("em Fortaleza e região metropolitana o frete é grátis em compras a partir de R$ " + Number(benefits.free_shipping.min_subtotal).toFixed(2).replace(".", ",").replace(",00", ""));
-    if (!parts.length) return "";
-    const text = parts.join(", e ") + ".";
-    return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 // CEPs de Fortaleza e da região metropolitana começam com 60 ou 61 (60000-000 a 61999-999).
@@ -2066,7 +2095,10 @@ app.post("/api/analytics/cart",analyticsRateLimit,async(req,res)=>{
     const ses=await supabaseRequest("site_sessions?session_id=eq."+encodeURIComponent(session_key)+"&select=id",{method:"GET"});
     const session_id=Array.isArray(ses)?ses[0]?.id:null;
     const subtotal=Math.max(0,Number(b.subtotal||0)),shipping=Math.max(0,Number(b.shipping||0)),total=Math.max(0,Number(b.total||subtotal+shipping));
-    const row={visitor_id,session_id,cart_key:session_key,customer_name:safeString(b.customer_name).slice(0,160)||null,customer_email:safeString(b.customer_email).trim().toLowerCase().slice(0,160)||null,customer_phone:safeString(b.customer_phone).slice(0,60)||null,items:cartSnapshotItems(b.items),subtotal,shipping,total,status:"active",last_activity_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+    // Celular salvo sempre no mesmo formato, (85) 99999-9999: o aviso de WhatsApp da loja procura por ele.
+    const typedPhone=safeString(b.customer_phone).slice(0,60), mobile=brazilMobileDigits(typedPhone);
+    const customer_phone=mobile?"("+mobile.slice(0,2)+") "+mobile.slice(2,7)+"-"+mobile.slice(7):(typedPhone||null);
+    const row={visitor_id,session_id,cart_key:session_key,customer_name:safeString(b.customer_name).slice(0,160)||null,customer_email:safeString(b.customer_email).trim().toLowerCase().slice(0,160)||null,customer_phone,items:cartSnapshotItems(b.items),subtotal,shipping,total,status:"active",last_activity_at:new Date().toISOString(),updated_at:new Date().toISOString()};
     const updated=await supabaseRequest("cart_snapshots?cart_key=eq."+encodeURIComponent(session_key),{method:"PATCH",body:JSON.stringify(row)});
     if(!Array.isArray(updated)||!updated.length) await supabaseRequest("cart_snapshots",{method:"POST",body:JSON.stringify(row)});
     res.status(201).json({success:true});
@@ -2079,7 +2111,7 @@ app.get("/api/admin/analytics",requireAdmin,async(req,res)=>{
       supabaseRequest("site_events?created_at=gte."+encodeURIComponent(since)+"&select=*&order=created_at.desc&limit=10000",{method:"GET"}),
       supabaseRequest("site_sessions?last_seen_at=gte."+encodeURIComponent(since)+"&select=*&order=last_seen_at.desc&limit=5000",{method:"GET"}),
       supabaseRequest("cart_snapshots?last_activity_at=gte."+encodeURIComponent(since)+"&select=*&order=last_activity_at.desc&limit=5000",{method:"GET"}),
-      supabaseRequest("orders?created_at=gte."+encodeURIComponent(since)+"&select=id,order_nsu,order_code,customer_name,customer_email,subtotal,shipping,total,status,payment_method,created_at,paid_at,paid_amount&order=created_at.desc",{method:"GET"}),
+      supabaseRequest("orders?created_at=gte."+encodeURIComponent(since)+"&select=id,order_nsu,order_code,customer_name,customer_email,subtotal,shipping,shipping_service_id,shipping_service_name,total,status,payment_method,created_at,paid_at,paid_amount&order=created_at.desc",{method:"GET"}),
       supabaseRequest("order_items?created_at=gte."+encodeURIComponent(since)+"&select=order_id,product_id,product_name,sku,quantity,total_price,created_at&order=created_at.desc&limit=10000",{method:"GET"})
     ]);
     const good=["paid","processing","shipped","delivered"],paid=orders.filter(o=>good.includes(o.status)),paidIds=new Set(paid.map(o=>String(o.id)));
@@ -4288,6 +4320,36 @@ function heroSlidesHtml(slides) {
 
 // Página inicial: o servidor já entrega o banner (com tamanho e prioridade) e os produtos
 // dentro do HTML. A loja aparece sem esperar outras requisições e o banner não empurra a página.
+// Troca a prévia da página inicial (título, descrição e foto) pela da bolsa do link.
+function productSharePreview(page, product, code) {
+    const firstImage = Array.isArray(product.images) ? safeString(product.images[0]) : "";
+    const image = firstImage ? publicImageUrl(smallImageUrl(firstImage) || firstImage) : "";
+    const price = Number(product.is_sale && product.sale_price != null ? product.sale_price : product.price || 0);
+    const title = safeString(product.name) + " | MONTÊ";
+    const description = "R$ " + price.toFixed(2).replace(".", ",") + " · " +
+        (safeString(product.description) || "Bolsas e acessórios MONTÊ.").replace(/\s+/g, " ").slice(0, 150);
+    const url = PUBLIC_SITE_URL + "/?p=" + code;
+    const attr = value => xmlEscape(value);
+    const meta = (pattern, value) => { page = page.replace(pattern, (tag, before) => before + attr(value) + '">'); };
+    page = page.replace(/<title>[^<]*<\/title>/, () => "<title>" + attr(title) + "</title>");
+    meta(/(<meta name="description" content=")[^"]*">/, description);
+    meta(/(<meta property="og:type" content=")[^"]*">/, "product");
+    meta(/(<meta property="og:title" content=")[^"]*">/, title);
+    meta(/(<meta property="og:description" content=")[^"]*">/, description);
+    meta(/(<meta property="og:url" content=")[^"]*">/, url);
+    meta(/(<meta name="twitter:title" content=")[^"]*">/, title);
+    meta(/(<meta name="twitter:description" content=")[^"]*">/, description);
+    if (image) {
+        meta(/(<meta property="og:image" content=")[^"]*">/, image);
+        meta(/(<meta property="og:image:secure_url" content=")[^"]*">/, image);
+        meta(/(<meta property="og:image:alt" content=")[^"]*">/, safeString(product.name));
+        meta(/(<meta name="twitter:image" content=")[^"]*">/, image);
+        // Tamanho e tipo eram os da imagem padrão da loja.
+        page = page.replace(/\s*<meta property="og:image:(type|width|height)" content="[^"]*">/g, "");
+    }
+    return page;
+}
+
 app.get("/", async (req, res) => {
     try {
         const [html, catalog, slides, editorial] = await Promise.all([
@@ -4314,6 +4376,13 @@ app.get("/", async (req, res) => {
         if (Array.isArray(catalog)) {
             page = page.replace("<!-- CATÁLOGO -->", () => '<script id="catalogData" type="application/json">' + jsonForHtml(catalog) + "</script>");
         }
+        // Link de uma bolsa (/?p=<código>, o mesmo do painel e da barra de endereço): a prévia
+        // mostra a foto, o nome e o preço dela; a loja abre com a bolsa aberta.
+        const shareCode = safeString(req.query?.p);
+        const sharedProduct = /^[A-Za-z0-9]{6,12}$/.test(shareCode) && Array.isArray(catalog)
+            ? catalog.find(product => product.short_code === shareCode)
+            : null;
+        if (sharedProduct) page = productSharePreview(page, sharedProduct, shareCode);
         res.setHeader("Cache-Control", "no-cache");
         return res.status(200).type("html").send(page);
     } catch (error) {
@@ -4594,7 +4663,7 @@ const orderGiftItems = order => (Array.isArray(order?.items) ? order.items : [])
 async function loadPromotions() {
     const rows = await supabaseRequest(
         "promotions?active=eq.true&ends_at=gt." + encodeURIComponent(new Date().toISOString()) +
-        "&select=id,name,min_subtotal,gift_category,starts_at,ends_at,banner_text&order=min_subtotal.asc",
+        "&select=id,name,min_subtotal,gift_category,starts_at,ends_at,banner_text,terms_text&order=min_subtotal.asc",
         { method: "GET" }
     );
     return Array.isArray(rows) ? rows : [];
@@ -4626,7 +4695,8 @@ app.get("/api/promocoes", async (req, res) => {
                 min_subtotal: Number(promotion.min_subtotal),
                 gift_category: promotion.gift_category,
                 ends_at: promotion.ends_at,
-                banner_text: promotion.banner_text || null
+                banner_text: promotion.banner_text || null,
+                terms_text: promotion.terms_text || null
             }))
         });
     } catch (error) {
@@ -4662,7 +4732,8 @@ async function loadGiftProduct(promotion, productId, variantId) {
             presale: false,
             gift: true,
             promotion_id: promotion.id,
-            promotion_name: promotion.name
+            promotion_name: promotion.name,
+            promotion_terms: promotion.terms_text || null
         },
         variant
     };
@@ -4701,6 +4772,11 @@ function sanitizePromotionPayload(body, { partial = false } = {}) {
         const banner = safeString(b.banner_text);
         if (banner.length > 90) return { error: "O aviso da barra do topo vai até 90 letras." };
         promotion.banner_text = banner || null;
+    }
+    if (!partial || has("terms_text")) {
+        const terms = safeString(b.terms_text);
+        if (terms.length > 200) return { error: "O aviso sobre o presente vai até 200 letras." };
+        promotion.terms_text = terms || null;
     }
     if (!partial || has("active")) promotion.active = b.active === undefined ? true : b.active === true;
     return { promotion };
@@ -4930,6 +5006,98 @@ app.post("/api/newsletter", newsletterRateLimit, async (req, res) => {
     }
 });
 
+/* =====================================================
+   CHECKOUT REPETIDO
+   Antes, cada toque em FINALIZAR criava um pedido novo (uma cliente gerou
+   12 pedidos em 23 minutos). Agora a mesma compra, em até 1 hora, devolve o
+   mesmo pedido e o mesmo link de pagamento. Pedido cujo pagamento não abriu
+   deixa de ficar "aguardando pagamento" (e não recebe lembrete).
+===================================================== */
+const CHECKOUT_REUSE_MS = 60 * 60 * 1000;
+
+// Mesma compra = mesma cliente, endereço, peças, frete, forma de pagamento, cupom e presente.
+// Qualquer mudança (outra cor, outro e-mail, outro endereço) gera um pedido novo.
+function checkoutFingerprint({ customer, items, shippingServiceId, paymentMethod, couponCode, gift }) {
+    const text = value => safeString(value).trim().toLowerCase();
+    const digits = value => String(value ?? "").replace(/\D/g, "");
+    const address = customer?.address || {};
+    const lines = (Array.isArray(items) ? items : [])
+        .filter(item => String(item.sku || "").toUpperCase() !== "FRETE")
+        .map(item => [text(item.id || item.product_id), text(item.variant_id), Number(item.quantity) || 0])
+        .sort((a, b) => (a[0] + "|" + a[1]).localeCompare(b[0] + "|" + b[1]));
+    const data = {
+        name: text(customer?.name),
+        email: text(customer?.email),
+        phone: digits(customer?.phone),
+        cpf: digits(customer?.cpf),
+        address: [digits(address.cep), text(address.street), text(address.number), text(address.complement), text(address.neighborhood), text(address.city), text(address.state)],
+        lines,
+        shipping: text(shippingServiceId),
+        payment: text(paymentMethod),
+        coupon: text(couponCode),
+        gift: gift ? [text(gift.promotion_id), text(gift.product_id), text(gift.variant_id)] : null
+    };
+    return crypto.createHash("sha256").update(JSON.stringify(data)).digest("hex");
+}
+
+// Pedido da mesma compra, ainda aguardando pagamento, com o link da InfinitePay salvo.
+// Se a busca falhar, o checkout segue normalmente (cria um pedido novo).
+async function reusablePendingCheckout(fingerprint) {
+    if (!/^[0-9a-f]{64}$/.test(String(fingerprint || ""))) return null;
+    try {
+        const rows = await supabaseRequest(
+            "orders?checkout_fingerprint=eq." + fingerprint + "&status=eq.pending&checkout_url=not.is.null" +
+            "&created_at=gt." + isoAgo(CHECKOUT_REUSE_MS) +
+            "&select=id,order_nsu,order_code,checkout_url,total&order=created_at.desc&limit=1",
+            { method: "GET" }
+        );
+        const order = Array.isArray(rows) ? rows[0] : null;
+        if (!order || !infinitePayReceiptUrl(order.checkout_url)) return null;
+        return { ...order, checkout_url: infinitePayReceiptUrl(order.checkout_url) };
+    } catch (error) {
+        console.error("Checkout repetido: busca do pedido anterior falhou:", error.message);
+        return null;
+    }
+}
+
+// Guarda o link de pagamento no pedido (para o mesmo toque devolver o mesmo link).
+async function rememberCheckoutUrl(orderId, url) {
+    const checkoutUrl = infinitePayReceiptUrl(url);
+    if (!orderId || !checkoutUrl) return;
+    try {
+        await supabaseRequest("orders?id=eq." + encodeURIComponent(orderId), {
+            method: "PATCH",
+            headers: { "Prefer": "return=minimal" },
+            body: JSON.stringify({ checkout_url: checkoutUrl })
+        });
+    } catch (error) {
+        console.error("Checkout: não foi possível guardar o link de pagamento:", error.message);
+    }
+}
+
+// O pagamento não abriu: o pedido não fica aguardando pagamento nem recebe lembrete.
+async function closeFailedCheckoutOrder(orderId, orderNsu) {
+    if (!orderId) return;
+    const now = new Date().toISOString();
+    try {
+        await supabaseRequest("orders?id=eq." + encodeURIComponent(orderId) + "&status=eq.pending", {
+            method: "PATCH",
+            headers: { "Prefer": "return=minimal" },
+            body: JSON.stringify({
+                status: "expired",
+                cancel_reason: "O pagamento não abriu",
+                payment_reminder_status: "skipped_checkout_failed",
+                payment_reminder_sent_at: now,
+                store_followup_status: "skipped_checkout_failed",
+                store_followup_sent_at: now,
+                updated_at: now
+            })
+        });
+    } catch (error) {
+        console.error("Checkout: não foi possível encerrar o pedido sem pagamento", orderNsu, error.message);
+    }
+}
+
 app.post(
     "/api/criar-checkout",
     checkoutRateLimit,
@@ -4937,6 +5105,8 @@ app.post(
 
         // Pedido com cupom que não chegou ao pagamento: o cupom volta a valer.
         let releaseCoupon = async () => {};
+        // Pedido salvo cujo pagamento não abriu: sai de "aguardando pagamento" (sem lembrete).
+        let closeFailedOrder = async () => {};
 
         try {
 
@@ -5021,9 +5191,17 @@ app.post(
             const customerName = safeString(customer.name);
             const address = customer.address || {};
 
+            // E-mail sem o ponto ("…@gmailcom") ou incompleto: a cliente vê o que corrigir.
+            if (customerEmail.length > 160 || !isEmailAddress(customerEmail)) {
+                return res.status(400).json({
+                    success: false,
+                    field: "customerEmail",
+                    message: "Confira seu e-mail. Ex.: nome@gmail.com"
+                });
+            }
+
             if (
                 customerName.length < 2 || customerName.length > 120 ||
-                customerEmail.length > 160 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail) ||
                 customerPhone.length < 8 || customerPhone.length > 30 ||
                 customerCpf.length !== 11 ||
                 customerWhatsapp.length > 30 ||
@@ -5056,6 +5234,7 @@ app.post(
             if (!phoneDigits) {
                 return res.status(400).json({
                     success: false,
+                    field: "customerPhone",
                     message: "Informe seu WhatsApp com DDD e 9 dígitos. Ex.: (85) 99999-9999."
                 });
             }
@@ -5065,6 +5244,7 @@ app.post(
             if (!isValidCpf(customerCpf)) {
                 return res.status(400).json({
                     success: false,
+                    field: "customerCpf",
                     message: "CPF inválido. Informe os 11 dígitos."
                 });
             }
@@ -5213,6 +5393,36 @@ app.post(
                     .filter(
                         Boolean
                     );
+
+
+            /* =================================================
+               MESMA COMPRA TOCADA DE NOVO: MESMO PEDIDO
+               A cliente voltou do pagamento ou tocou de novo em FINALIZAR com
+               a mesma sacola e os mesmos dados: devolve o pedido e o link de
+               pagamento que já existem, em vez de criar outro pedido.
+            ================================================= */
+            const fingerprint = checkoutFingerprint({
+                customer,
+                items: normalizedItems,
+                shippingServiceId: requestedShippingServiceId,
+                paymentMethod,
+                couponCode,
+                gift: requestedGift
+            });
+            const reusable = await reusablePendingCheckout(fingerprint);
+            if (reusable) {
+                console.log("🔁 Checkout repetido: mesmo pedido e mesmo link de pagamento.", reusable.order_nsu);
+                return res.status(200).json({
+                    success: true,
+                    reused: true,
+                    ...(paymentMethod === "pix" ? { pix_checkout: true } : {}),
+                    url: reusable.checkout_url,
+                    amount: Number(reusable.total),
+                    order_nsu: reusable.order_nsu,
+                    order_code: String(reusable.order_code || ""),
+                    status: "pending"
+                });
+            }
 
 
             /* =================================================
@@ -5479,13 +5689,13 @@ app.post(
 
             // A peça pode ter sido vendida na Olist depois da última sincronização.
             // A conferência usa só as chamadas que sobram na requisição: cada peça já usou
-            // 2 (variação e frete) e o resto do pedido usa umas 10 (preços, cotação do frete,
-            // número do pedido, pedido, itens, InfinitePay e folga) e mais 3 com cupom
-            // (conferência, registro do uso e uma possível liberação).
+            // 2 (variação e frete) e o resto do pedido usa umas 12 (busca de compra repetida,
+            // preços, cotação do frete, número do pedido, pedido, itens, InfinitePay, link
+            // salvo e folga) e mais 3 com cupom (conferência, registro do uso e uma possível liberação).
             // Peças em pré-venda ainda não chegaram: o estoque delas é o do site, não o da Olist.
             const olistShortage = await checkCartAgainstOlistStock(
                 checkedVariants.filter(entry => !entry.item.presale),
-                createCallBudget(WORKER_CALL_LIMIT - (coupon ? 13 : 10) - 2 * checkedVariants.length)
+                createCallBudget(WORKER_CALL_LIMIT - (coupon ? 15 : 12) - 2 * checkedVariants.length)
             );
             if (olistShortage) {
                 const { item, available } = olistShortage;
@@ -5662,12 +5872,14 @@ app.post(
                     payment_method: paymentMethod,
                     whatsapp_tracking_opt_in: customer.whatsapp_updates === true,
                     whatsapp_tracking_status: customer.whatsapp_updates === true ? "pending" : "opted_out",
+                    checkout_fingerprint: fingerprint,
                     ...(coupon ? { coupon_code: coupon.code, coupon_discount: couponCents / 100 } : {}),
                     items: orderLines
                 })
             });
 
             const savedOrder = Array.isArray(savedOrders) ? savedOrders[0] : savedOrders;
+            closeFailedOrder = () => closeFailedCheckoutOrder(savedOrder?.id, orderNsu);
 
             await supabaseRequest("order_items", {
                 method: "POST",
@@ -5793,6 +6005,7 @@ app.post(
                 if (!pixResponse.ok || !pixData?.url) {
                     console.error("PIX — erro ao criar checkout InfinitePay:", pixResponse.status, pixData);
                     await releaseCoupon();
+                    await closeFailedOrder();
                     return res.status(pixResponse.ok ? 502 : pixResponse.status).json({
                         success: false,
                         payment_unavailable: true,
@@ -5800,6 +6013,7 @@ app.post(
                     });
                 }
 
+                await rememberCheckoutUrl(savedOrder.id, pixData.url);
                 console.log("PIX — checkout independente criado:", orderNsu);
 
                 return res.status(200).json({
@@ -6005,6 +6219,7 @@ app.post(
                 );
 
                 await releaseCoupon();
+                await closeFailedOrder();
 
 
                 return res.status(
@@ -6043,6 +6258,7 @@ app.post(
                 );
 
                 await releaseCoupon();
+                await closeFailedOrder();
 
 
                 return res.status(502).json({
@@ -6064,6 +6280,8 @@ app.post(
             /* =================================================
                SUCESSO
             ================================================= */
+
+            await rememberCheckoutUrl(savedOrder.id, data.url);
 
             console.log(
                 "✅ Checkout InfinitePay criado."
@@ -6100,6 +6318,7 @@ app.post(
             );
 
             await releaseCoupon();
+            await closeFailedOrder();
 
 
             return res.status(500).json({
@@ -6663,6 +6882,32 @@ function productSchema(product) {
     };
 }
 
+// /p/<código> leva ao link da bolsa, /?p=<código> (quem digitar o link no formato de pasta).
+app.get("/p/:code", (req, res) => {
+    const code = safeString(req.params.code);
+    return res.redirect(301, /^[A-Za-z0-9]{6,12}$/.test(code) ? "/?p=" + code : "/");
+});
+
+// Link curto das mensagens da loja: leva à sacola pronta no site (só endereços do próprio site).
+const shortLinkRateLimit = createRateLimiter({ windowMs: 60 * 1000, max: 30 });
+app.get("/s/:code", shortLinkRateLimit, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("X-Robots-Tag", "noindex");
+    const code = safeString(req.params.code);
+    if (!/^[A-Za-z0-9]{6,12}$/.test(code)) return res.redirect(302, "/");
+    try {
+        const rows = await supabaseRequest(
+            "short_links?code=eq." + code + "&expires_at=gt." + encodeURIComponent(new Date().toISOString()) + "&select=target&limit=1",
+            { method: "GET" }
+        );
+        const target = safeString(Array.isArray(rows) ? rows[0]?.target : "");
+        return res.redirect(302, target.startsWith("/?") ? target : "/");
+    } catch (error) {
+        console.error("Link curto:", error.message);
+        return res.redirect(302, "/");
+    }
+});
+
 app.get("/produto/:id/:slug", async (req, res) => {
     try {
         const id = safeString(req.params.id);
@@ -6825,23 +7070,19 @@ if (!IS_WORKERS) app.use(
 
 
 /* =====================================================
-   LEMBRETES POR E-MAIL E LIMPEZA DOS PEDIDOS SEM PAGAMENTO
-   - Pedido aguardando pagamento (Pix gerado ou cartão não concluído):
-     um lembrete 1 hora depois, com um link que refaz a sacola.
-   - Sacola abandonada (e-mail preenchido no checkout, sem pedido):
-     um lembrete 2 horas depois da última mexida.
-   Só pedidos e sacolas das últimas 24 horas, um único e-mail por pedido
-   ou sacola, e só com as peças que ainda têm estoque.
+   PEDIDOS SEM PAGAMENTO E SACOLAS ABANDONADAS
+   - A cliente não recebe lembrete automático por e-mail (decisão da loja):
+     30 minutos depois de um pedido sem pagamento ou de uma sacola abandonada
+     (com o WhatsApp digitado no checkout), a loja é avisada para chamar a
+     cliente no WhatsApp (veja "AVISO PARA A LOJA CHAMAR A CLIENTE").
+     Só pedidos e sacolas das últimas 24 horas, um aviso por pedido ou sacola,
+     e só com as peças que ainda têm estoque.
    - Pedido aguardando pagamento há mais de 2 dias vira "expired" e sai
      da lista principal do painel. Se o pagamento chegar depois, o aviso
      da InfinitePay confirma o pedido normalmente.
 ===================================================== */
-const REMINDER_ORDER_AFTER_MS = 60 * 60 * 1000;
-const REMINDER_CART_AFTER_MS = 2 * 60 * 60 * 1000;
 const REMINDER_WINDOW_MS = 24 * 60 * 60 * 1000;
 const PENDING_ORDER_EXPIRE_MS = 2 * 24 * 60 * 60 * 1000;
-// Por lembrete: compras posteriores, estoque, e-mail e marcação = 4 chamadas.
-const REMINDER_CALLS_EACH = 5;
 const PAID_ORDER_STATUSES = ["paid", "processing", "shipped", "delivered"];
 const isEmailAddress = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeString(value));
 const isoAgo = ms => encodeURIComponent(new Date(Date.now() - ms).toISOString());
@@ -6895,9 +7136,42 @@ async function availableReminderItems(items) {
 }
 
 // Link que refaz a sacola no site: ?sacola=[[produto, variação, quantidade], ...] em base64url.
-function cartRestoreUrl(items, campaign) {
+function cartRestoreUrl(items, campaign, medium = "email") {
     const payload = Buffer.from(JSON.stringify(items.map(item => [item.productId, item.variantId, item.quantity]))).toString("base64url");
-    return PUBLIC_SITE_URL + "/?sacola=" + payload + "&utm_source=lembrete&utm_medium=email&utm_campaign=" + campaign;
+    return PUBLIC_SITE_URL + "/?sacola=" + payload + "&utm_source=lembrete&utm_medium=" + medium + "&utm_campaign=" + campaign;
+}
+
+// Link curto da loja (oficialmontee.com.br/s/Ab3dE9x) no lugar do link longo da sacola: a
+// mensagem do WhatsApp fica legível. Vale 30 dias. Se não der para criar, vai o link longo.
+const SHORT_LINK_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+// Sem 0/O, 1/l/I: fácil de ler se alguém precisar digitar.
+const SHORT_LINK_ALPHABET = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+function shortLinkCode(length = 7) {
+    let code = "";
+    for (const byte of crypto.randomBytes(length)) code += SHORT_LINK_ALPHABET[byte % SHORT_LINK_ALPHABET.length];
+    return code;
+}
+
+async function shortSiteUrl(longUrl, budget) {
+    const target = safeString(longUrl).startsWith(PUBLIC_SITE_URL + "/") ? safeString(longUrl).slice(PUBLIC_SITE_URL.length) : "";
+    if (!target.startsWith("/?") || target.length > 2000) return longUrl;
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const code = shortLinkCode();
+        try {
+            spend(budget);
+            await supabaseRequest("short_links", {
+                method: "POST",
+                headers: { "Prefer": "return=minimal" },
+                body: JSON.stringify({ code, target, expires_at: new Date(Date.now() + SHORT_LINK_TTL_MS).toISOString() })
+            });
+            return PUBLIC_SITE_URL + "/s/" + code;
+        } catch (error) {
+            if (error?.budget) throw error;
+            console.error("Link curto não criado:", error.message);
+        }
+    }
+    return longUrl;
 }
 
 function formatEmailMoney(value) {
@@ -6953,26 +7227,150 @@ async function laterOrdersOf(email, since, budget) {
     return Array.isArray(rows) ? rows : [];
 }
 
-async function remindPendingOrders(budget) {
+// Primeiro nome para a saudação, só com letras (o nome vem do que foi digitado no site).
+function reminderFirstName(name) {
+    const first = safeString(name).trim().split(/\s+/)[0] || "";
+    return /^[\p{L}'’-]{1,30}$/u.test(first) ? first : "";
+}
+
+/* =====================================================
+   AVISO PARA A LOJA CHAMAR A CLIENTE
+   30 minutos depois, a loja é avisada no WhatsApp dela (WHATSAPP_ADMIN_PHONE)
+   com o botão que abre a conversa com a cliente, já com a mensagem e o link
+   da sacola:
+   - sacola abandonada (a cliente digitou o WhatsApp no checkout e aceitou o
+     lembrete nos cookies) parada há 30 minutos, sem pedido;
+   - pedido criado e não pago há 30 minutos.
+   O aviso no WhatsApp usa o modelo WHATSAPP_FOLLOWUP_TEMPLATE_NAME da API oficial
+   do WhatsApp. Enquanto ela não estiver configurada (ou se o envio falhar), o
+   mesmo aviso chega por e-mail (ORDER_NOTIFICATION_EMAILS).
+===================================================== */
+const STORE_FOLLOWUP_ORDER_AFTER_MS = 30 * 60 * 1000;
+const STORE_FOLLOWUP_CART_AFTER_MS = 30 * 60 * 1000;
+// Por aviso: pedidos/compras posteriores, aviso recente, estoque, link curto (até 2), WhatsApp,
+// e-mail e marcação.
+const STORE_FOLLOWUP_CALLS_EACH = 9;
+const WHATSAPP_FOLLOWUP_TEMPLATE_NAME = safeString(process.env.WHATSAPP_FOLLOWUP_TEMPLATE_NAME || "monte_sacola_abandonada");
+const WHATSAPP_FOLLOWUP_TEMPLATE_LANGUAGE = safeString(process.env.WHATSAPP_FOLLOWUP_TEMPLATE_LANGUAGE || "pt_BR");
+
+function storeFollowupRecipients() {
+    return ORDER_NOTIFICATION_EMAILS.split(",").map(v => v.trim().toLowerCase()).filter(Boolean);
+}
+
+function formatBrazilMobile(digits) {
+    return "(" + digits.slice(0, 2) + ") " + digits.slice(2, 7) + "-" + digits.slice(7);
+}
+
+function storeFollowupPieces(items) {
+    return items.map(item => item.name + (item.color ? " (" + item.color + ")" : "")).join(", ");
+}
+
+// Conversa com a cliente com o texto pronto. Link longo demais para o modelo do WhatsApp:
+// sai sem o link da sacola (a loja manda depois, se precisar).
+function storeFollowupChatUrl(phone, message, shortMessage) {
+    const full = "https://wa.me/55" + phone + "?text=" + encodeURIComponent(message);
+    return full.length <= 700 ? full : "https://wa.me/55" + phone + "?text=" + encodeURIComponent(shortMessage);
+}
+
+function storeFollowupEmailHtml({ eyebrow, title, details, items, whatsappUrl, message, cartUrl }) {
+    const rows = items.map(item =>
+        "<li style=\"margin:0 0 6px;\">" + item.quantity + "x " + escapeEmailHtml(item.name) +
+        (item.color ? " (" + escapeEmailHtml(item.color) + ")" : "") + " — " + formatEmailMoney(item.price) + "</li>"
+    ).join("");
+    return "<html><body style=\"margin:0;background:#f7f5f2;font-family:Arial,Helvetica,sans-serif;color:#171717;\">" +
+        "<div style=\"max-width:620px;margin:0 auto;padding:32px 18px;\">" +
+        "<div style=\"background:#111;color:#fff;text-align:center;padding:22px;letter-spacing:6px;font-size:24px;\">MONTÊ</div>" +
+        "<div style=\"background:#fff;padding:30px;\">" +
+        "<p style=\"margin:0 0 8px;font-size:11px;letter-spacing:2px;color:#777;\">" + escapeEmailHtml(eyebrow) + "</p>" +
+        "<h1 style=\"margin:0 0 18px;font-size:26px;font-weight:500;\">" + escapeEmailHtml(title) + "</h1>" +
+        "<p style=\"font-size:14px;line-height:1.7;color:#555;margin:0 0 16px;\">" + details.map(escapeEmailHtml).join("<br>") + "</p>" +
+        "<ul style=\"font-size:14px;line-height:1.6;padding-left:18px;margin:0 0 22px;\">" + rows + "</ul>" +
+        "<div style=\"text-align:center;margin:26px 0 18px;\"><a href=\"" + escapeEmailHtml(whatsappUrl) + "\" style=\"display:inline-block;background:#1f7a4d;color:#fff;text-decoration:none;padding:16px 28px;font-size:13px;letter-spacing:1.5px;border-radius:999px;\">CHAMAR NO WHATSAPP</a></div>" +
+        "<p style=\"font-size:12px;color:#777;margin:0 0 6px;\">Mensagem que já vai escrita (dá para editar antes de enviar):</p>" +
+        "<p style=\"font-size:14px;line-height:1.7;background:#f7f5f2;padding:14px;margin:0 0 18px;\">" + escapeEmailHtml(message) + "</p>" +
+        "<p style=\"font-size:12px;color:#777;margin:0;\">Link da sacola pronta: <a href=\"" + escapeEmailHtml(cartUrl) + "\" style=\"color:#171717;\">abrir</a></p>" +
+        "</div><p style=\"text-align:center;font-size:11px;color:#999;margin:18px 0;\">MONTÊ — Aviso interno para a loja</p></div></body></html>";
+}
+
+async function sendStoreFollowupEmail({ subject, html, text, idempotencyKey }) {
+    const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json", "Accept": "application/json", "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({ from: RESEND_FROM_NAME + " <" + RESEND_FROM_EMAIL + ">", to: storeFollowupRecipients(), subject, text, html, tags: [{ name: "type", value: "store_followup" }] })
+    });
+    const responseText = await response.text();
+    if (!response.ok) throw new Error("Resend API " + response.status + ": " + responseText.slice(0, 300));
+}
+
+// Aviso no WhatsApp da loja, pelo modelo aprovado na Meta:
+// {{1}} situação · {{2}} cliente · {{3}} WhatsApp dela · {{4}} peças · {{5}} valor · {{6}} link da conversa.
+async function sendWhatsAppStoreFollowup({ situation, name, phone, pieces, total, chatUrl }) {
+    if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN || !WHATSAPP_ADMIN_PHONE) {
+        return { sent: false, status: "not_configured" };
+    }
+    let adminPhone = WHATSAPP_ADMIN_PHONE.replace(/\D/g, "");
+    if (adminPhone.length === 10 || adminPhone.length === 11) adminPhone = "55" + adminPhone;
+    if (adminPhone.length < 12) return { sent: false, status: "invalid_admin_phone" };
+    const response = await fetch(`https://graph.facebook.com/${WHATSAPP_API_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + WHATSAPP_ACCESS_TOKEN, "Content-Type": "application/json" },
+        body: JSON.stringify({
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to: adminPhone,
+            type: "template",
+            template: {
+                name: WHATSAPP_FOLLOWUP_TEMPLATE_NAME,
+                language: { code: WHATSAPP_FOLLOWUP_TEMPLATE_LANGUAGE },
+                components: [{
+                    type: "body",
+                    parameters: [situation, name, formatBrazilMobile(phone), pieces, formatEmailMoney(total), chatUrl]
+                        .map(text => ({ type: "text", text: whatsappParam(text, 720) }))
+                }]
+            }
+        })
+    });
+    const responseText = await response.text();
+    if (!response.ok) throw new Error("WhatsApp API " + response.status + ": " + responseText.slice(0, 300));
+    return { sent: true, status: "sent_whatsapp" };
+}
+
+// WhatsApp da loja primeiro; sem ele (ou se falhar), e-mail. Devolve como o aviso saiu.
+async function deliverStoreFollowup({ whatsapp, email }, budget) {
+    try {
+        spend(budget);
+        const result = await sendWhatsAppStoreFollowup(whatsapp);
+        if (result.sent) return result.status;
+    } catch (error) {
+        if (error?.budget) throw error;
+        console.error("Aviso no WhatsApp da loja falhou; vai por e-mail:", error.message);
+    }
+    spend(budget);
+    await sendStoreFollowupEmail(email);
+    return "sent";
+}
+
+async function storeFollowupPendingOrders(budget) {
     spend(budget);
     const rows = await supabaseRequest(
-        "orders?status=eq.pending&payment_reminder_sent_at=is.null" +
-        "&created_at=lt." + isoAgo(REMINDER_ORDER_AFTER_MS) + "&created_at=gt." + isoAgo(REMINDER_WINDOW_MS) +
-        "&select=id,order_nsu,order_code,customer_name,customer_email,items,payment_method,created_at&order=created_at.asc&limit=5",
+        "orders?status=eq.pending&store_followup_sent_at=is.null" +
+        "&created_at=lt." + isoAgo(STORE_FOLLOWUP_ORDER_AFTER_MS) + "&created_at=gt." + isoAgo(REMINDER_WINDOW_MS) +
+        "&select=id,order_nsu,order_code,customer_name,customer_email,customer_phone,customer_whatsapp,items,total,payment_method,created_at&order=created_at.asc&limit=5",
         { method: "GET" }
     );
     let sent = 0;
     for (const order of Array.isArray(rows) ? rows : []) {
-        if (!budget.has(REMINDER_CALLS_EACH)) break;
+        if (!budget.has(STORE_FOLLOWUP_CALLS_EACH)) break;
         const mark = status => {
             spend(budget);
             return supabaseRequest("orders?id=eq." + encodeURIComponent(order.id), {
                 method: "PATCH",
                 headers: { "Prefer": "return=minimal" },
-                body: JSON.stringify({ payment_reminder_sent_at: new Date().toISOString(), payment_reminder_status: status })
+                body: JSON.stringify({ store_followup_sent_at: new Date().toISOString(), store_followup_status: status })
             });
         };
-        if (!isEmailAddress(order.customer_email)) { await mark("skipped_invalid_email"); continue; }
+        const phone = brazilMobileDigits(order.customer_whatsapp) || brazilMobileDigits(order.customer_phone);
+        if (!phone) { await mark("skipped_invalid_phone"); continue; }
         const later = await laterOrdersOf(order.customer_email, order.created_at, budget);
         if (later.length) { await mark(later.some(o => PAID_ORDER_STATUSES.includes(o.status)) ? "skipped_paid_later" : "skipped_newer_order"); continue; }
         spend(budget);
@@ -6980,115 +7378,130 @@ async function remindPendingOrders(budget) {
         if (!items.length) { await mark("skipped_sold_out"); continue; }
         const code = formatOrderCode(order.order_code || order.order_nsu);
         const firstName = reminderFirstName(order.customer_name);
-        const url = cartRestoreUrl(items, "pagamento_pendente");
+        const cartUrl = await shortSiteUrl(cartRestoreUrl(items, "pagamento_pendente", "whatsapp"), budget);
+        const greeting = "Oi" + (firstName ? ", " + firstName : "") + "! Aqui é da MONTÊ. Vi que o pagamento do seu pedido " + code +
+            " (" + storeFollowupPieces(items) + ") não foi concluído. Aconteceu algum problema? Posso te ajudar a finalizar.";
+        const message = greeting + " Sua sacola está pronta neste link: " + cartUrl;
+        const whatsappUrl = storeFollowupChatUrl(phone, message, greeting);
+        const name = safeString(order.customer_name) || "Cliente";
         const pix = safeString(order.payment_method).toLowerCase() === "pix";
         try {
-            spend(budget);
-            await sendReminderEmail({
-                to: safeString(order.customer_email).toLowerCase(),
-                subject: "Seu pedido " + code + " está esperando por você",
-                type: "payment_reminder",
-                idempotencyKey: "monte-payment-reminder-" + order.id,
-                html: reminderEmailHtml({
-                    eyebrow: "PAGAMENTO PENDENTE",
-                    title: "Sua seleção ainda está aqui" + (firstName ? ", " + firstName : "") + ".",
-                    paragraphs: [
-                        "O pagamento do pedido " + code + " não foi concluído" + (pix ? " (o Pix gerado não foi pago)" : "") + ". Se ainda quiser as peças, é só voltar: a sacola já está pronta para você.",
-                        ("As peças não ficam reservadas e o estoque é limitado. " + benefitsSentence(await storeBenefits())).trim()
-                    ],
-                    items,
-                    buttonUrl: url,
-                    buttonText: "FINALIZAR MINHA COMPRA",
-                    footnote: "Se você já pagou, desconsidere este e-mail. Dúvidas? É só responder esta mensagem."
-                }),
-                text: "Seu pedido " + code + " na MONTÊ ainda não foi pago.\n\n" + items.map(i => "- " + i.name + (i.color ? " (" + i.color + ")" : "") + " — " + i.quantity + " × " + formatEmailMoney(i.price)).join("\n") + "\n\nFinalize sua compra: " + url + "\n\nSe você já pagou, desconsidere este e-mail."
-            });
-            await mark("sent");
+            const status = await deliverStoreFollowup({
+                whatsapp: { situation: "pagamento não concluído no pedido " + code, name, phone, pieces: storeFollowupPieces(items), total: order.total, chatUrl: whatsappUrl },
+                email: {
+                    subject: "Chame no WhatsApp: " + name + " não concluiu o pagamento (" + code + ")",
+                    idempotencyKey: "monte-store-followup-order-" + order.id,
+                    html: storeFollowupEmailHtml({
+                        eyebrow: "PAGAMENTO PENDENTE HÁ 30 MINUTOS",
+                        title: name + " não concluiu o pagamento",
+                        details: [
+                            "Pedido: " + code,
+                            "WhatsApp: " + formatBrazilMobile(phone),
+                            "Pagamento escolhido: " + (pix ? "Pix" : "Cartão de crédito"),
+                            "Total: " + formatEmailMoney(order.total)
+                        ],
+                        items,
+                        whatsappUrl,
+                        message,
+                        cartUrl
+                    }),
+                    text: name + " não concluiu o pagamento do pedido " + code + ".\nWhatsApp: " + formatBrazilMobile(phone) +
+                        "\n\nChamar no WhatsApp (mensagem pronta): " + whatsappUrl
+                }
+            }, budget);
+            await mark(status);
             sent++;
-            console.log("✉️ Lembrete de pagamento enviado:", code);
+            console.log("📲 Aviso para a loja chamar a cliente (pagamento pendente):", code, status);
         } catch (error) {
-            console.error("Lembrete de pagamento —", code, error.message);
+            if (error?.budget) throw error;
+            console.error("Aviso para a loja (pagamento pendente) —", code, error.message);
             await mark("error").catch(() => {});
         }
     }
     return sent;
 }
 
-// Primeiro nome para a saudação, só com letras (o nome vem do que foi digitado no site).
-function reminderFirstName(name) {
-    const first = safeString(name).trim().split(/\s+/)[0] || "";
-    return /^[\p{L}'’-]{1,30}$/u.test(first) ? first : "";
-}
-
-async function cartReminderSentRecently(email, budget) {
+async function storeFollowupAbandonedCarts(budget) {
     spend(budget);
     const rows = await supabaseRequest(
-        "cart_snapshots?customer_email=eq." + encodeURIComponent(safeString(email).trim().toLowerCase()) +
-        "&reminder_status=eq.sent&reminder_sent_at=gt." + isoAgo(7 * 24 * 60 * 60 * 1000) + "&select=id&limit=1",
-        { method: "GET" }
-    );
-    return Array.isArray(rows) && rows.length > 0;
-}
-
-async function remindAbandonedCarts(budget) {
-    spend(budget);
-    const rows = await supabaseRequest(
-        "cart_snapshots?status=eq.active&reminder_sent_at=is.null&customer_email=not.is.null" +
-        "&last_activity_at=lt." + isoAgo(REMINDER_CART_AFTER_MS) + "&last_activity_at=gt." + isoAgo(REMINDER_WINDOW_MS) +
-        "&select=id,customer_name,customer_email,items,created_at&order=last_activity_at.asc&limit=5",
+        "cart_snapshots?status=eq.active&store_followup_sent_at=is.null&customer_phone=not.is.null" +
+        "&last_activity_at=lt." + isoAgo(STORE_FOLLOWUP_CART_AFTER_MS) + "&last_activity_at=gt." + isoAgo(REMINDER_WINDOW_MS) +
+        "&select=id,customer_name,customer_email,customer_phone,items,subtotal,created_at&order=last_activity_at.asc&limit=5",
         { method: "GET" }
     );
     let sent = 0;
     for (const cart of Array.isArray(rows) ? rows : []) {
-        if (!budget.has(REMINDER_CALLS_EACH)) break;
+        if (!budget.has(STORE_FOLLOWUP_CALLS_EACH)) break;
         const mark = (status, extra = {}) => {
             spend(budget);
             return supabaseRequest("cart_snapshots?id=eq." + encodeURIComponent(cart.id), {
                 method: "PATCH",
                 headers: { "Prefer": "return=minimal" },
-                body: JSON.stringify({ reminder_sent_at: new Date().toISOString(), reminder_status: status, ...extra })
+                body: JSON.stringify({ store_followup_sent_at: new Date().toISOString(), store_followup_status: status, ...extra })
             });
         };
-        if (!isEmailAddress(cart.customer_email)) { await mark("skipped_invalid_email"); continue; }
-        // Já virou pedido: se foi pago, a sacola conta como convertida; se não, o lembrete do pedido cuida.
-        const orders = await laterOrdersOf(cart.customer_email, cart.created_at, budget);
-        const paid = orders.find(o => PAID_ORDER_STATUSES.includes(o.status));
+        const phone = brazilMobileDigits(cart.customer_phone);
+        if (!phone) { await mark("skipped_invalid_phone"); continue; }
+        // Já virou pedido (o WhatsApp do pedido é o mesmo): pago conta como convertida; sem
+        // pagamento, o aviso do pedido cuida.
+        spend(budget);
+        const orders = await supabaseRequest(
+            "orders?customer_whatsapp=eq." + phone + "&created_at=gt." + encodeURIComponent(cart.created_at) + "&select=id,status&limit=10",
+            { method: "GET" }
+        );
+        const orderList = Array.isArray(orders) ? orders : [];
+        const paid = orderList.find(o => PAID_ORDER_STATUSES.includes(o.status));
         if (paid) { await mark("skipped_purchased", { status: "converted", converted_order_id: paid.id }); continue; }
-        if (orders.length) { await mark("skipped_has_order"); continue; }
-        // Um lembrete de sacola por e-mail a cada 7 dias: a sacola é salva sem login, então
-        // alguém poderia cadastrar o e-mail de outra pessoa várias vezes.
-        if (await cartReminderSentRecently(cart.customer_email, budget)) { await mark("skipped_recent_reminder"); continue; }
+        if (orderList.length) { await mark("skipped_has_order"); continue; }
+        // Um aviso a cada 7 dias para o mesmo número.
+        spend(budget);
+        const recent = await supabaseRequest(
+            "cart_snapshots?customer_phone=eq." + encodeURIComponent(formatBrazilMobile(phone)) +
+            "&store_followup_status=in.(sent,sent_whatsapp)&store_followup_sent_at=gt." + isoAgo(7 * 24 * 60 * 60 * 1000) + "&select=id&limit=1",
+            { method: "GET" }
+        );
+        if (Array.isArray(recent) && recent.length) { await mark("skipped_recent_reminder"); continue; }
         spend(budget);
         const items = await availableReminderItems(cart.items);
         if (!items.length) { await mark("skipped_sold_out"); continue; }
         const firstName = reminderFirstName(cart.customer_name);
-        const url = cartRestoreUrl(items, "sacola_abandonada");
+        const cartUrl = await shortSiteUrl(cartRestoreUrl(items, "sacola_abandonada", "whatsapp"), budget);
+        const greeting = "Oi" + (firstName ? ", " + firstName : "") + "! Aqui é da MONTÊ. Vi que você deixou " +
+            storeFollowupPieces(items) + " na sacola. Ficou alguma dúvida? Posso te ajudar a finalizar.";
+        const message = greeting + " Sua sacola está aqui: " + cartUrl;
+        const whatsappUrl = storeFollowupChatUrl(phone, message, greeting);
+        const total = items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0);
+        const name = safeString(cart.customer_name) || "Cliente sem nome";
+        const email = safeString(cart.customer_email);
         try {
-            spend(budget);
-            await sendReminderEmail({
-                to: safeString(cart.customer_email).toLowerCase(),
-                subject: "Você deixou peças na sacola da MONTÊ",
-                type: "cart_reminder",
-                idempotencyKey: "monte-cart-reminder-" + cart.id,
-                html: reminderEmailHtml({
-                    eyebrow: "SUA SACOLA",
-                    title: "Esqueceu alguma coisa" + (firstName ? ", " + firstName : "") + "?",
-                    paragraphs: [
-                        "Guardamos as peças que você escolheu. Elas ainda estão disponíveis, mas o estoque é limitado.",
-                        benefitsSentence(await storeBenefits())
-                    ].filter(Boolean),
-                    items,
-                    buttonUrl: url,
-                    buttonText: "VOLTAR PARA A SACOLA",
-                    footnote: "Você recebeu este lembrete único porque começou uma compra em oficialmontee.com.br."
-                }),
-                text: "Você deixou peças na sacola da MONTÊ.\n\n" + items.map(i => "- " + i.name + (i.color ? " (" + i.color + ")" : "") + " — " + i.quantity + " × " + formatEmailMoney(i.price)).join("\n") + "\n\nVolte para a sacola: " + url
-            });
-            await mark("sent");
+            const status = await deliverStoreFollowup({
+                whatsapp: { situation: "sacola abandonada há 30 minutos", name, phone, pieces: storeFollowupPieces(items), total, chatUrl: whatsappUrl },
+                email: {
+                    subject: "Chame no WhatsApp: " + name + " deixou " + formatEmailMoney(total) + " na sacola",
+                    idempotencyKey: "monte-store-followup-cart-" + cart.id,
+                    html: storeFollowupEmailHtml({
+                        eyebrow: "SACOLA ABANDONADA HÁ 30 MINUTOS",
+                        title: name + " deixou peças na sacola",
+                        details: [
+                            "WhatsApp: " + formatBrazilMobile(phone),
+                            ...(email ? ["E-mail: " + email] : []),
+                            "Peças: " + formatEmailMoney(total)
+                        ],
+                        items,
+                        whatsappUrl,
+                        message,
+                        cartUrl
+                    }),
+                    text: name + " deixou " + formatEmailMoney(total) + " na sacola.\nWhatsApp: " + formatBrazilMobile(phone) +
+                        "\n\nChamar no WhatsApp (mensagem pronta): " + whatsappUrl
+                }
+            }, budget);
+            await mark(status);
             sent++;
-            console.log("✉️ Lembrete de sacola enviado.");
+            console.log("📲 Aviso para a loja chamar a cliente (sacola abandonada):", status);
         } catch (error) {
-            console.error("Lembrete de sacola —", error.message);
+            if (error?.budget) throw error;
+            console.error("Aviso para a loja (sacola abandonada) —", error.message);
             await mark("error").catch(() => {});
         }
     }
@@ -7100,8 +7513,11 @@ async function runCustomerUpkeep(calls) {
     const limit = Math.max(0, Math.floor(Number(calls) || 0));
     const budget = createCallBudget(limit);
     const steps = [expireOldPendingOrders];
-    // Sem o Resend configurado não há como enviar: os lembretes esperam (nada é marcado).
-    if (RESEND_API_KEY && RESEND_FROM_EMAIL) steps.push(remindPendingOrders, remindAbandonedCarts);
+    // A cliente não recebe lembrete por e-mail (pedido da loja): quem chama é a loja, pelo WhatsApp.
+    // Aviso para a loja: no WhatsApp dela, ou por e-mail enquanto o WhatsApp não estiver configurado.
+    const storeCanBeNotified = Boolean(WHATSAPP_PHONE_NUMBER_ID && WHATSAPP_ACCESS_TOKEN && WHATSAPP_ADMIN_PHONE) ||
+        Boolean(RESEND_API_KEY && RESEND_FROM_EMAIL && storeFollowupRecipients().length);
+    if (storeCanBeNotified) steps.push(storeFollowupPendingOrders, storeFollowupAbandonedCarts);
     for (const step of steps) {
         if (!budget.has(2)) break;
         try {
@@ -7144,6 +7560,7 @@ async function purgeExpiredAnalytics() {
     const minimal = { method: "DELETE", headers: { Prefer: "return=minimal" } };
     await supabaseRequest("cart_snapshots?updated_at=lt." + isoAgo(CART_SNAPSHOT_RETENTION_MS), minimal);
     await supabaseRequest("site_sessions?last_seen_at=lt." + isoAgo(ANALYTICS_RETENTION_MS), minimal);
+    await supabaseRequest("short_links?expires_at=lt." + encodeURIComponent(new Date().toISOString()), minimal);
 }
 
 async function runScheduledTask(cron) {

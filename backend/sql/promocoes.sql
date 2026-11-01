@@ -36,3 +36,9 @@ values (
   '2026-12-01 00:00:00-03',
   'NOVEMBRO: GANHE UM CINTO NAS COMPRAS A PARTIR DE R$ 499'
 );
+
+-- Aviso para a cliente sobre o presente (migração "monte_promotions_terms"), por exemplo
+-- "Durante a ação, não fazemos troca do brinde." Aparece na escolha do presente, na
+-- sacola e no e-mail de confirmação.
+alter table public.promotions
+  add column terms_text text check (terms_text is null or char_length(terms_text) <= 200);

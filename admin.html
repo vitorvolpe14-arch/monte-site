@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20261028-banner-meio">
+<link rel="stylesheet" href="admin.css?v=20261031-envio">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -145,7 +145,7 @@
     <section id="promotionsSection" class="section hidden">
       <div class="section-actions"><div><p class="eyebrow">VENDAS</p><h2>Promoções</h2></div><button id="refreshPromotions" class="secondary">ATUALIZAR</button></div>
       <div class="panel benefits-panel">
-        <div class="panel-head"><div><h2>Benefícios da loja</h2><p class="field-help">Valem o tempo todo, até você desligar. O site, a sacola, a barra do topo e os e-mails de lembrete mostram os valores daqui.</p></div></div>
+        <div class="panel-head"><div><h2>Benefícios da loja</h2><p class="field-help">Valem o tempo todo, até você desligar. O site, a sacola e a barra do topo mostram os valores daqui.</p></div></div>
         <form id="benefitsForm" class="benefits-grid" autocomplete="off">
           <div class="benefit-card">
             <label class="benefit-toggle"><input id="benefitShippingOn" type="checkbox"> <strong>Frete grátis</strong></label>
@@ -172,6 +172,7 @@
             <label>Começa em<input id="promoStartsAt" type="datetime-local" required></label>
             <label>Termina em<input id="promoEndsAt" type="datetime-local" required></label>
             <label class="full-width">Aviso na barra do topo do site (opcional)<input id="promoBanner" maxlength="90" placeholder="Ex.: NOVEMBRO: GANHE UM CINTO NAS COMPRAS A PARTIR DE R$ 499"></label>
+            <label class="full-width">Regra do presente para a cliente (opcional)<input id="promoTerms" maxlength="200" placeholder="Ex.: Não fazemos troca de brinde."></label>
           </div>
           <div class="checks"><label><input id="promoActive" type="checkbox" checked> Promoção ativa (desmarque para pausar sem apagar)</label></div>
           <div id="promoFormError" class="error"></div>
@@ -254,7 +255,7 @@
 </div></div>
 
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="admin.js?v=20261028-banner-meio"></script>
+<script src="admin.js?v=20261031-envio"></script>
 <script src="admin-carousel.js?v=20261028-banner-meio"></script>
 </body>
 </html>

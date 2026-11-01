@@ -845,6 +845,20 @@ a {
 }
 
 
+/* Parcela sem juros abaixo do preço, na página da bolsa. */
+.modal-installments {
+
+    display: block;
+
+    margin-top: 6px;
+
+    font-size: 11px;
+
+    color: #666;
+
+}
+
+
 /* =====================================================
    COLEÇÃO
 ===================================================== */
@@ -7266,6 +7280,21 @@ html.intro-skipped .header { animation-delay: .5s; }
 .free-shipping-perk.is-active .free-shipping-perk-icon { background: #2f6b45; }
 .free-shipping-perk.is-active .free-shipping-perk-bar i { background: #2f6b45; }
 
+/* "Você quis dizer …@gmail.com?" embaixo do e-mail do checkout. */
+.email-suggestion { grid-column: 1 / -1; margin: -2px 2px 2px; font-size: 12px; line-height: 1.5; color: var(--co-ink, #0d0d0d); }
+.email-suggestion[hidden] { display: none; }
+.email-suggestion-fix {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+
 /* Opção de frete grátis: preço original riscado. */
 .shipping-option-price s { margin-right: 4px; color: var(--co-muted, #8a847e); font-weight: 400; }
 .shipping-option.is-free .shipping-option-price { color: #2f6b45; }
@@ -8252,3 +8281,8 @@ html.catalog-pending .footer {
 
 /* Benefício desligado no painel (frete grátis ou desconto do Pix) some do site. */
 [data-benefit-show][hidden] { display: none !important; }
+
+/* Regra da promoção para o presente (ex.: sem troca de brinde): aviso discreto. */
+.gift-terms { margin: -6px 0 12px; font-size: 10.5px; line-height: 1.4; color: #a39d97; }
+.gift-terms[hidden] { display: none; }
+.cart-gift-terms { margin: 1px 0 3px; font-size: 10.5px; line-height: 1.35; color: #a39d97; }

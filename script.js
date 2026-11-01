@@ -953,9 +953,34 @@ function updateProductAvailabilityUI() {
     }
 }
 
+// Bolsa aberta: a barra de endereço mostra o link curto dela (/?p=código), o mesmo do painel,
+// para copiar e mandar (a prévia no WhatsApp mostra a foto). Ao fechar, a barra volta ao que era.
+let addressBeforeProduct = null;
+function showProductAddress(product) {
+    const code = String(product?.short_code || "");
+    if (!/^[A-Za-z0-9]{6,12}$/.test(code) || location.pathname !== "/") return;
+    try {
+        if (addressBeforeProduct === null) addressBeforeProduct = location.search + location.hash;
+        history.replaceState(history.state, "", "/?p=" + code);
+    } catch {}
+}
+
+function restoreAddressAfterProduct() {
+    if (addressBeforeProduct === null) return;
+    const before = addressBeforeProduct;
+    addressBeforeProduct = null;
+    const hashAt = before.indexOf("#");
+    const params = new URLSearchParams(hashAt >= 0 ? before.slice(0, hashAt) : before);
+    params.delete("p");
+    params.delete("produto");
+    const query = params.toString();
+    try { history.replaceState(history.state, "", "/" + (query ? "?" + query : "") + (hashAt >= 0 ? before.slice(hashAt) : "")); } catch {}
+}
+
 function openProductModal(productId) {
     selectedProduct = products.find(product => product.id === productId);
     if (!selectedProduct) return;
+    showProductAddress(selectedProduct);
 
     selectedVariant = null;
     selectedQuantity = 1;
@@ -974,6 +999,8 @@ function openProductModal(productId) {
         priceHTML = '<span class="old-price">' + formatPrice(selectedProduct.oldPrice) + '</span>' +
             '<span class="sale-price">' + formatPrice(selectedProduct.price) + '</span>';
     }
+    // Parcela sem juros logo abaixo do preço (a vitrine mostra só o preço).
+    if (Number(selectedProduct.price) > 0) priceHTML += '<span class="modal-installments">' + installmentText(selectedProduct.price) + '</span>';
     setHTML(document.getElementById("modalPrice"), priceHTML);
 
     // Produtos da Sale não acompanham dustbag: o aviso aparece ao abrir qualquer um deles.
@@ -1210,6 +1237,8 @@ function closeProductModal() {
     document
         .getElementById("productModal")
         .classList.remove("active");
+
+    restoreAddressAfterProduct();
 
 
     document.body.style.overflow = "";
@@ -1670,6 +1699,14 @@ function pixUnitDiscountCents(unitCents) {
     return PIX_DISCOUNT_PERCENT > 0 ? unitCents - Math.round(unitCents * (100 - PIX_DISCOUNT_PERCENT) / 100) : 0;
 }
 
+// Cartão na InfinitePay: até 3x sem juros; de 4x a 10x a InfinitePay cobra juros da cliente.
+const INTEREST_FREE_INSTALLMENTS = 3;
+const MAX_INSTALLMENTS = 10;
+// Parcela arredondada para baixo: as 3 parcelas nunca passam do total. Aparece na página da
+// bolsa e na sacola.
+const installmentText = value =>
+    `${INTEREST_FREE_INSTALLMENTS}x de ${formatPrice(Math.floor(Math.round(Number(value) * 100) / INTEREST_FREE_INSTALLMENTS) / 100)} sem\u00a0juros`;
+
 function shippingPriceFor(option, subtotal = getCartSubtotal()) {
     if (!option) return 0;
     const price = Number(option.price || 0);
@@ -1716,9 +1753,10 @@ const COUPON_MIN_UNIT_CENTS = 100;
 
 // Totais do checkout. Mesmo cálculo do servidor: desconto do Pix por unidade, arredondado em
 // centavos; o cupom vale nas peças (depois do Pix) e o frete fica integral.
-function checkoutTotals(subtotal = getCartSubtotal()) {
+// Com "method", calcula como se a cliente tivesse escolhido essa forma de pagamento.
+function checkoutTotals(subtotal = getCartSubtotal(), method) {
     const shipping = getShippingValue();
-    const paymentMethod =
+    const paymentMethod = method ||
         document.querySelector('input[name="paymentMethod"]:checked')?.value ||
         selectedPaymentMethod ||
         "pix";
@@ -1757,6 +1795,14 @@ function updatePaymentSummary(subtotal = getCartSubtotal()) {
 
     const checkoutElement = document.getElementById("checkoutTotal");
     if (checkoutElement) checkoutElement.textContent = formatPrice(checkoutTotal);
+
+    // Opção Cartão: a parcela sem juros do total no cartão (sem o desconto do Pix).
+    const cardInstallments = document.getElementById("cardInstallments");
+    if (cardInstallments) {
+        const cardTotal = checkoutTotals(subtotal, "credit_card").total;
+        cardInstallments.textContent = (cardTotal > 0 ? installmentText(cardTotal) : `${INTEREST_FREE_INSTALLMENTS}x sem juros`) +
+            ` · até ${MAX_INSTALLMENTS}x`;
+    }
 
     const discountElement = document.getElementById("checkoutDiscount");
     if (discountElement) {
@@ -2081,6 +2127,12 @@ function renderGiftPerk({ subtotal, freeShippingApplies }) {
     if (selectedGift && !chosen) saveSelectedGift(null);
     const words = giftWords(reached.promotion);
     setHTML(document.getElementById("giftPickerTitle"), escapeHTML("Escolha " + words.mine + " de presente"));
+    // Regra da promoção para o presente (ex.: "Durante a ação, não fazemos troca do brinde.").
+    const terms = document.getElementById("giftTerms");
+    if (terms) {
+        terms.hidden = !reached.promotion.terms_text;
+        terms.textContent = reached.promotion.terms_text || "";
+    }
     // Um card por modelo, igual aos da loja; as cores aparecem ao tocar no modelo.
     const groups = [];
     reached.options.forEach(option => {
@@ -2141,6 +2193,7 @@ function renderGiftPerk({ subtotal, freeShippingApplies }) {
                 <span class="cart-gift-tag">Presente</span>
                 <div class="cart-item-name">${escapeHTML(chosen.product.name)}</div>
                 <div class="cart-item-variant">${escapeHTML(chosen.color || "Cor única")}</div>
+                ${chosen.promotion.terms_text ? `<div class="cart-gift-terms">${escapeHTML(chosen.promotion.terms_text)}</div>` : ""}
                 <div class="cart-item-row"><span class="cart-gift-qty">1 unidade</span><div class="cart-item-price"><s>${formatPrice(chosen.product.price)}</s> Grátis</div></div>
             </div>
         </div>`);
@@ -2342,6 +2395,9 @@ function setPaymentHelp(visible, paymentMethod) {
     requestAnimationFrame(() => balloon.classList.add("show"));
 }
 
+// E-mail parecido com um erro de digitação que a cliente confirmou tocando de novo em finalizar.
+let emailTypoConfirmed="";
+
 async function checkout() {
     if (!Array.isArray(cart) || cart.length === 0) { showToast("Seu carrinho está vazio."); return; }
     setPaymentHelp(false);
@@ -2362,6 +2418,20 @@ async function checkout() {
     }
     const cpfDigits=cpf.replace(/\D/g,"");
     const whatsappNumber=phoneDigits(phone);
+    // E-mail incompleto ou com erro comum ("…@gmailcom"): mostra a correção em vez de um erro genérico.
+    const suggestedEmail=renderEmailSuggestion();
+    if(!CHECKOUT_RULES.customerEmail(email)){
+        flagCheckoutFields(["customerEmail"]);
+        showToast(suggestedEmail?`Confira seu e-mail: você quis dizer ${suggestedEmail}?`:"Confira seu e-mail. Ex.: nome@gmail.com");
+        return;
+    }
+    // E-mail válido mas parecido com um erro ("gmail.con"): avisa uma vez; tocando de novo, segue.
+    if(suggestedEmail&&emailTypoConfirmed!==email){
+        emailTypoConfirmed=email;
+        flagCheckoutFields(["customerEmail"]);
+        showToast(`Confira seu e-mail: você quis dizer ${suggestedEmail}? Se estiver certo, toque em finalizar de novo.`);
+        return;
+    }
     // A InfinitePay não abre o pagamento com telefone incompleto.
     if(!CHECKOUT_RULES.customerPhone(phone)){flagCheckoutFields(["customerPhone"]);showToast("Informe seu WhatsApp com DDD e 9 dígitos. Ex.: (85) 99999-9999.");return;}
     if(cpfDigits.length!==11){flagCheckoutFields(["customerCpf"]);showToast("Informe um CPF válido com 11 dígitos.");return;}
@@ -2433,6 +2503,8 @@ async function checkout() {
             }
             const failure=new Error(data?.message||"O pagamento não abriu. Tente novamente.");
             failure.paymentUnavailable=data?.payment_unavailable===true||response.status>=500;
+            // Campo recusado pelo servidor (e-mail, WhatsApp, CPF): destaca o campo para corrigir.
+            if(["customerEmail","customerPhone","customerCpf"].includes(data?.field))failure.field=data.field;
             throw failure;
         }
 
@@ -2485,6 +2557,7 @@ async function checkout() {
         // Sem internet o navegador dá "Failed to fetch" / "Load failed": a cliente vê a explicação.
         if(error.paymentUnavailable){hideToast();setPaymentHelp(true,paymentMethod);}
         else showToast(error instanceof TypeError?"Sem conexão. Confira sua internet e tente novamente.":(error.message||"Não foi possível concluir. Tente novamente."));
+        if(error.field)flagCheckoutFields([error.field]);
         if(checkoutButton){checkoutButton.disabled=false;checkoutButton.textContent="FINALIZAR COMPRA";}
     }
 }
@@ -2880,16 +2953,24 @@ function restoreCartFromLink() {
 
 /* =====================================================
    LINK DIRETO PARA UM PRODUTO
+   /?p=código (link curto do painel e da barra de endereço) ou
    /?produto=ID abre a vitrine com o produto já aberto, depois da
    animação de abertura.
 ===================================================== */
 
 function openProductFromLink() {
     let productId = "";
-    try { productId = new URLSearchParams(location.search).get("produto") || ""; } catch { return; }
+    try {
+        const params = new URLSearchParams(location.search);
+        const code = params.get("p") || "";
+        productId = code ? (products.find(p => p.short_code === code)?.id || "") : (params.get("produto") || "");
+    } catch { return; }
     if (!productId) return;
 
-    if (!products.some(p => p.id === productId)) return;
+    const linked = products.find(p => p.id === productId);
+    if (!linked) return;
+    // Bolsa aberta pelo link compartilhado também conta como produto visto.
+    window.monteAnalytics?.track("view_product", { product_id: linked.id, product_name: linked.name });
 
     const root = document.documentElement;
     let done = false;
@@ -3578,7 +3659,7 @@ function renderCheckoutNote(summary) {
             ? cart.map(item => `<div class="order-note-item"><span>${escapeHTML(item.name)}</span><span>${formatPrice(Number(item.price || 0) * Number(item.quantity || 0))}</span><small>${escapeHTML(colorLabel(item.variant_color, item.name) || "Cor única")} · ${Number(item.quantity || 0)} un.</small></div>`).join("")
             : '<div class="order-note-item"><span class="is-empty">Nenhuma peça na sacola</span></div>');
         const gift = currentGift();
-        if (gift) appendHTML(itemsBox, `<div class="order-note-item"><span>${escapeHTML(gift.product.name)}</span><span>Presente</span><small>${escapeHTML(gift.color || "Cor única")} · 1 un.</small></div>`);
+        if (gift) appendHTML(itemsBox, `<div class="order-note-item"><span>${escapeHTML(gift.product.name)}</span><span>Presente</span><small>${escapeHTML(gift.color || "Cor única")} · 1 un.${gift.promotion.terms_text ? " · " + escapeHTML(gift.promotion.terms_text) : ""}</small></div>`);
     }
 
     setNoteText("noteShipping", selectedShippingOption ? `${selectedShippingOption.name} · ${shippingPriceLabel(selectedShippingOption)}` : "");
@@ -3685,6 +3766,68 @@ const CHECKOUT_RULES = {
     customerCity: v => v.trim().length > 1,
     customerState: v => /^[A-Za-z]{2}$/.test(v.trim())
 };
+
+// E-mail com erro comum de digitação ("…@gmailcom", "gmail.con", "hotmial.com"): sugere a
+// correção embaixo do campo. Uma cliente perdeu a compra com "…gmailcom" sem entender o erro.
+const EMAIL_DOMAIN_FIXES = {
+    "gmial.com": "gmail.com", "gamil.com": "gmail.com", "gmal.com": "gmail.com", "gmai.com": "gmail.com",
+    "gnail.com": "gmail.com", "gmaill.com": "gmail.com", "gmail.co": "gmail.com", "gmail.cm": "gmail.com",
+    "gmail.om": "gmail.com", "gmail.com.br": "gmail.com", "gmail.br": "gmail.com",
+    "hotmial.com": "hotmail.com", "hotmal.com": "hotmail.com", "hotmai.com": "hotmail.com", "hotmil.com": "hotmail.com",
+    "hotmail.co": "hotmail.com", "hotmail.cm": "hotmail.com",
+    "outlok.com": "outlook.com", "outllok.com": "outlook.com", "outlook.co": "outlook.com",
+    "iclod.com": "icloud.com", "icoud.com": "icloud.com", "icloud.co": "icloud.com",
+    "yaho.com": "yahoo.com", "yahoo.co": "yahoo.com", "yaho.com.br": "yahoo.com.br"
+};
+
+function emailSuggestion(value) {
+    const email = String(value || "").trim().toLowerCase();
+    const at = email.lastIndexOf("@");
+    if (at < 1 || at === email.length - 1) return "";
+    const user = email.slice(0, at);
+    const typed = email.slice(at + 1);
+    let domain = typed.replace(/,/g, ".").replace(/\.{2,}/g, ".").replace(/^\.+|\.+$/g, "");
+    // Sem nenhum ponto: "gmailcom" → "gmail.com", "uolcombr" → "uol.com.br".
+    if (!domain.includes(".")) {
+        const match = domain.match(/^(.+?)com(br)?$/);
+        if (match && match[1].length > 1) domain = match[1] + ".com" + (match[2] ? ".br" : "");
+    }
+    domain = domain.replace(/\.(con|cmo|comm|coom|cpm|xom|vom|ocm)$/, ".com").replace(/\.(con|cmo|comm)\.br$/, ".com.br").replace(/\.com\.b$/, ".com.br");
+    domain = EMAIL_DOMAIN_FIXES[domain] || domain;
+    return domain && domain !== typed ? user + "@" + domain : "";
+}
+
+// Mostra "Você quis dizer …?" embaixo do e-mail, com um toque para corrigir.
+function renderEmailSuggestion() {
+    const input = document.getElementById("customerEmail");
+    const box = document.getElementById("emailSuggestion");
+    if (!input || !box) return "";
+    const suggestion = emailSuggestion(input.value);
+    box.hidden = !suggestion;
+    if (suggestion) {
+        setHTML(box, 'Você quis dizer <button type="button" class="email-suggestion-fix" data-click="applyEmailSuggestion">' + escapeHTML(suggestion) + "</button>?");
+    }
+    return suggestion;
+}
+
+function applyEmailSuggestion() {
+    const input = document.getElementById("customerEmail");
+    const suggestion = emailSuggestion(input?.value);
+    if (!input || !suggestion) return;
+    input.value = suggestion;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    refreshCheckoutField(input, { strict: true });
+    renderEmailSuggestion();
+}
+
+// Máscara do WhatsApp enquanto a cliente digita: (85) 99999-9999.
+function formatPhoneTyping(value) {
+    const d = phoneDigits(value).slice(0, 11);
+    return d.length > 10 ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+        : d.length > 6 ? `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+        : d.length > 2 ? `(${d.slice(0, 2)}) ${d.slice(2)}`
+        : d;
+}
 
 const CHECKOUT_STEP_FIELDS = {
     data: ["customerName", "customerEmail", "customerPhone", "customerCpf"],
@@ -3805,13 +3948,16 @@ function renderCheckoutExtras({ subtotal, shipping, pixDiscount, couponDiscount 
 
         const phone = document.getElementById("customerPhone");
         if (phone) {
-            phone.addEventListener("input", () => {
-                const d = phoneDigits(phone.value).slice(0, 11);
-                phone.value = d.length > 10 ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
-                    : d.length > 6 ? `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
-                    : d.length > 2 ? `(${d.slice(0, 2)}) ${d.slice(2)}`
-                    : d;
+            phone.addEventListener("input", () => { phone.value = formatPhoneTyping(phone.value); });
+        }
+
+        // "Você quis dizer …@gmail.com?" embaixo do e-mail.
+        const email = document.getElementById("customerEmail");
+        if (email) {
+            email.addEventListener("input", () => {
+                if (!emailSuggestion(email.value)) document.getElementById("emailSuggestion")?.setAttribute("hidden", "");
             });
+            email.addEventListener("blur", () => renderEmailSuggestion());
         }
 
         const state = document.getElementById("customerState");
@@ -3988,8 +4134,12 @@ registerClickActions({
     nextCategoryPage, nextCollectionPage, nextNewPage, nextSalePage, nextSlide, openCart, openSearch,
     openWhatsAppReservation, previousCategoryPage, previousCollectionPage, previousNewPage,
     previousSalePage, previousSlide, removeCoupon, removeFromCart, toggleMobileMenu, updateItemQuantity,
-    acceptCookies, rejectCookies, customizeCookies, saveCookieChoices, openCookiePreferences
+    acceptCookies, rejectCookies, customizeCookies, saveCookieChoices, openCookiePreferences,
+    applyEmailSuggestion
 });
+
+// A caixa "Guardar sacola" saiu do site: apaga o número que ela tinha guardado neste aparelho.
+try { localStorage.removeItem("monte_bag_whatsapp"); } catch {}
 
 document.getElementById("searchInput")?.addEventListener("input", () => searchProducts());
 // Enter no campo do cupom aplica o cupom (sem enviar nada além disso).
