@@ -1738,6 +1738,9 @@ a {
 
     font-size: 10px;
 
+    /* Letra um pouco mais forte para o texto dos botões ficar em evidência. */
+    font-weight: 600;
+
     letter-spacing: 2px;
 
 }
@@ -1750,12 +1753,15 @@ a {
 }
 
 
-/* COMPRAR AGORA: logo abaixo de "Adicionar ao carrinho", em preto. */
+/* COMPRAR AGORA: logo abaixo de "Adicionar ao carrinho", em preto com letra
+   branca (o botão também tem a classe add-cart-large, que usa letra preta). */
 .buy-now-large {
 
     margin-top: 10px;
 
     background: var(--black);
+
+    color: var(--white);
 
 }
 
@@ -1763,6 +1769,8 @@ a {
 .buy-now-large:hover {
 
     background: #2b2523;
+
+    color: var(--white);
 
 }
 
