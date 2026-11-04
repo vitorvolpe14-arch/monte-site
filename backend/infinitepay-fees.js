@@ -6,13 +6,17 @@
    (amount), o valor pago pela cliente (paid_amount), a forma e as parcelas. O líquido
    sai da tabela de taxas dela para o checkout do site (link de pagamento):
 
-       líquido = valor pago pela cliente × (1 − taxa da forma e das parcelas)
+       líquido = valor pago pela cliente − taxa
+       taxa    = valor pago × taxa da forma e das parcelas, com os centavos cortados
 
    Fonte: https://www.infinitepay.io/taxas, "Link de Pagamento & Venda Online",
    em 1 dia útil (antecipado), Visa, Mastercard, Elo e Amex.
    Conferido com as vendas do site de out/2026: nas vendas em 5x, 10x e 12x a cliente
    pagou os juros e a loja recebeu exatamente valor da venda × (1 − 7,01%), a taxa de 3x
    (o parcelamento sem juros da loja vai até 3x).
+
+   Conferido também com o app da InfinitePay (nov/2026): R$ 977,60 em 3x → taxa R$ 68,52
+   (7,01% = 68,5298: os centavos são cortados, não arredondados) e líquido R$ 909,08.
 
    A InfinitePay mudou a taxa, ou a loja mudou o prazo de recebimento no app? Acrescente
    uma tabela no fim da lista com a data de início: as vendas anteriores ficam com a taxa
@@ -30,6 +34,12 @@ const INFINITEPAY_FEE_TABLES = [
 ];
 
 const SALE_STATUSES = ["paid", "processing", "shipped", "delivered"];
+
+// Taxa em centavos como o app da InfinitePay: valor × percentual, com os centavos cortados.
+function feeCents(paidCents, percent) {
+    const basisPoints = Math.round(Number(percent || 0) * 100); // 7,01% → 701
+    return Math.floor(paidCents * basisPoints / 10000);
+}
 
 function cents(value) {
     const n = Number(value);
@@ -66,7 +76,7 @@ function infinitePayNet(order) {
 
     const table = infinitePayFeeTable(order.paid_at || payment?.created_at || order.created_at);
     const percent = method === "pix" ? table.pix : table.credit[installments - 1];
-    const fee = Math.round(paid * percent / 100);
+    const fee = feeCents(paid, percent);
     const net = paid - fee;
 
     return {
@@ -90,16 +100,20 @@ function currentInfinitePayFees() {
 }
 
 /* =====================================================
-   VENDAS DA LOJA (OLIST) NA MAQUININHA DA INFINITEPAY — ESTIMATIVA
+   VENDAS DA LOJA (OLIST) NA INFINITEPAY
    As vendas da loja chegam da Olist com o nome do pagamento ("INFINITY PIX",
-   "INFINITY CREDITO-DEBITO"...) e, quando a loja preenche, o meio, a condição e as
-   parcelas (olist_sales.pagamento_info). Daí sai a taxa:
+   "INFINITY CREDITO-DEBITO"...) e o meio, a condição e as parcelas
+   (olist_sales.pagamento_info). Daí sai a taxa:
    - Pix: grátis. Dinheiro, boleto, transferência: sem taxa (não passam pela InfinitePay).
-   - Débito: taxa de débito. Crédito: taxa das parcelas (à vista quando não diz).
-   - Cartão sem dizer se foi débito ou crédito: crédito à vista (o mais comum).
-   A faixa sai do faturamento em cartão do mês anterior (site + loja; o Pix não conta),
-   como a InfinitePay faz. Bandeira: Visa e Mastercard (Elo e Amex pagam um pouco mais).
-   Fonte: https://www.infinitepay.io/taxas, "Maquininha & InfiniteTap", em 1 dia útil.
+   - Crédito: a loja cobra pelo link de pagamento da InfinitePay (conferido no app: vendas
+     de 16/10 a 04/11 em 2x, 3x, 5x e 10x), então vale a mesma tabela do site, pelas
+     parcelas. O valor da Olist já é o que a cliente pagou (com os juros, se houver).
+   - Débito: só existe na maquininha; taxa de débito da faixa (estimada).
+   - Cartão sem dizer se foi débito ou crédito, ou ainda sem o detalhe: crédito à vista
+     (estimado).
+   A faixa da maquininha sai do faturamento em cartão do mês anterior (site + loja; o Pix
+   não conta), como a InfinitePay faz. Bandeira: Visa e Mastercard.
+   Fonte: https://www.infinitepay.io/taxas.
 ===================================================== */
 
 const INFINITEPAY_MACHINE_TABLES = [
@@ -185,11 +199,12 @@ function olistStoreNet(sale, cardBillingByMonth = {}) {
     const billing = Object.prototype.hasOwnProperty.call(cardBillingByMonth, prev) ? cardBillingByMonth[prev] : cardBillingByMonth[month];
     const table = machineTable(sale.data);
     const tier = machineTier(table, billing);
+    const link = infinitePayFeeTable(sale.data);
     const payment = olistPaymentKind(sale);
     const percent = payment.kind === "pix" || payment.kind === "other" ? 0
         : payment.kind === "debit" ? tier.debit
-        : tier.credit[payment.installments - 1];
-    const fee = Math.round(sale_ * percent / 100);
+        : link.credit[payment.installments - 1];
+    const fee = feeCents(sale_, percent);
     return {
         method: payment.kind,
         installments: payment.installments,
@@ -201,9 +216,11 @@ function olistStoreNet(sale, cardBillingByMonth = {}) {
         fee: fee / 100,
         net: (sale_ - fee) / 100,
         cost: fee / 100,
-        estimated: percent > 0 || payment.kind === "unknown",
-        tier: tier.label,
-        plan: table.plan
+        // Exato quando a Olist diz que foi Pix ou crédito em N vezes; estimado no débito
+        // (faixa da maquininha) e quando não diz a forma.
+        estimated: payment.kind === "debit" || payment.kind === "card" || payment.kind === "unknown",
+        tier: payment.kind === "debit" ? tier.label : null,
+        plan: payment.kind === "debit" ? table.plan : link.plan
     };
 }
 
