@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20261104-barra-topo">
+<link rel="stylesheet" href="admin.css?v=20261104-avisos">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -145,11 +145,12 @@
     <section id="promotionsSection" class="section hidden">
       <div class="section-actions"><div><p class="eyebrow">VENDAS</p><h2>Promoções</h2></div><button id="refreshPromotions" class="secondary">ATUALIZAR</button></div>
       <div class="panel top-bar-panel">
-        <div class="panel-head"><div><h2>Barra do topo do site</h2><p class="field-help">A faixa preta no alto da loja. No computador, o aviso aparece ao lado do frete grátis e do Pix; no celular, só ele. Deixe em branco para a barra voltar ao automático: o aviso da promoção de presente no ar (se houver) ou o frete grátis e o Pix.</p></div></div>
+        <div class="panel-head"><div><h2>Barra do topo do site</h2><p class="field-help">A faixa preta no alto da loja. Coloque um ou mais avisos: com mais de um, eles se alternam no site a cada 4 segundos. No computador, os avisos aparecem ao lado do frete grátis e do Pix; no celular, só eles. Sem nenhum aviso, a barra volta ao automático: os avisos das promoções de presente no ar (se houver) ou o frete grátis e o Pix.</p></div></div>
         <form id="topBarForm" class="top-bar-form" autocomplete="off">
           <div class="top-bar-preview" aria-live="polite"><span class="top-bar-preview-label" id="topBarPreviewNote">Como aparece no site</span><div class="top-bar-preview-strip"><span id="topBarPreview"></span></div></div>
-          <label>Aviso da barra<input id="topBarText" maxlength="90" placeholder="Ex.: BLACK FRIDAY: 15% OFF EM TODA A LOJA"></label>
-          <div class="top-bar-actions"><span id="topBarCount" class="field-help">0/90</span><span id="topBarMessage" class="field-help"></span><button type="button" id="clearTopBarButton" class="secondary">DEIXAR AUTOMÁTICO</button><button type="submit" id="saveTopBarButton">SALVAR BARRA DO TOPO</button></div>
+          <div id="topBarList" class="top-bar-list"></div>
+          <button type="button" id="addTopBarButton" class="secondary top-bar-add">+ ADICIONAR AVISO</button>
+          <div class="top-bar-actions"><span id="topBarMessage" class="field-help"></span><button type="button" id="clearTopBarButton" class="secondary">DEIXAR AUTOMÁTICO</button><button type="submit" id="saveTopBarButton">SALVAR BARRA DO TOPO</button></div>
         </form>
       </div>
       <div class="panel benefits-panel">
@@ -263,7 +264,7 @@
 </div></div>
 
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="admin.js?v=20261104-previa-link"></script>
+<script src="admin.js?v=20261104-avisos"></script>
 <script src="admin-carousel.js?v=20261104-previa-link"></script>
 </body>
 </html>

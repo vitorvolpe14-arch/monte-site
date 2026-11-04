@@ -1930,30 +1930,55 @@ const GIFT_CATEGORY_WORDS = {
 const giftWords = promotion => GIFT_CATEGORY_WORDS[promotion?.gift_category] || { one: "um presente", mine: "seu presente" };
 
 async function loadStorePromotions() {
-    let barMessage = null;
+    let barMessages = null;
     try {
         const response = await fetch("/api/promocoes", { headers: { "Accept": "application/json" } });
         const body = await response.json();
         storePromotions = Array.isArray(body?.promotions) ? body.promotions : [];
         if (body?.benefits) applyStoreBenefits(body.benefits);
-        // A barra do topo anuncia o aviso escrito no painel ou, sem ele, o da promoção no ar
-        // (mesma escolha do servidor, que já entrega a página com o aviso).
-        barMessage = body?.top_bar?.text || storePromotions.find(promotion => promotion.banner_text)?.banner_text || "";
+        // A barra do topo anuncia os avisos escritos no painel ou, sem eles, os das promoções no ar
+        // (mesma escolha do servidor, que já entrega a página com o primeiro aviso).
+        const panelMessages = Array.isArray(body?.top_bar?.messages) ? body.top_bar.messages
+            : (body?.top_bar?.text ? [body.top_bar.text] : []);
+        barMessages = panelMessages.length ? panelMessages
+            : [...new Set(storePromotions.map(promotion => String(promotion.banner_text || "").trim()).filter(Boolean))];
     } catch {
         storePromotions = [];
     }
-    if (barMessage !== null) showTopBarMessage(barMessage);
+    if (barMessages !== null) showTopBarMessages(barMessages);
     if (cart.length) updatePaymentSummary();
 }
 
-// Aviso da barra do topo: no computador, ao lado do frete grátis e do Pix; em telas menores,
-// só ele. Sem aviso, a barra mostra só o frete grátis e o Pix.
-function showTopBarMessage(text) {
+// Avisos da barra do topo: no computador, ao lado do frete grátis e do Pix; em telas menores,
+// só eles. Com mais de um, trocam a cada TOP_BAR_INTERVAL_MS. Sem aviso, a barra mostra só o
+// frete grátis e o Pix.
+const TOP_BAR_INTERVAL_MS = 4000;
+let topBarTimer = null;
+function showTopBarMessages(messages) {
     const message = document.getElementById("shippingBarPromo");
     if (!message) return;
-    message.textContent = text;
-    document.querySelectorAll(".shipping-bar-promo").forEach(el => { el.hidden = !text; });
-    document.querySelector(".shipping-bar")?.classList.toggle("has-promo", Boolean(text));
+    const list = (Array.isArray(messages) ? messages : []).map(text => String(text || "").trim()).filter(Boolean);
+    clearInterval(topBarTimer);
+    topBarTimer = null;
+    message.classList.remove("is-swapping");
+    // Continua no aviso que já está na tela (o servidor entrega a página com o primeiro).
+    let index = Math.max(0, list.indexOf(message.textContent.trim()));
+    message.textContent = list[index] || "";
+    document.querySelectorAll(".shipping-bar-promo").forEach(el => { el.hidden = !list.length; });
+    document.querySelector(".shipping-bar")?.classList.toggle("has-promo", list.length > 0);
+    if (list.length < 2) return;
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    topBarTimer = setInterval(() => {
+        // Aba em segundo plano: não troca (volta a trocar quando a cliente voltar).
+        if (document.hidden) return;
+        index = (index + 1) % list.length;
+        if (reduceMotion) { message.textContent = list[index]; return; }
+        message.classList.add("is-swapping");
+        setTimeout(() => {
+            message.textContent = list[index];
+            message.classList.remove("is-swapping");
+        }, 350);
+    }, TOP_BAR_INTERVAL_MS);
 }
 
 function plainColor(value) {
@@ -2487,6 +2512,7 @@ async function checkout() {
             method:"POST",
             headers:{"Content-Type":"application/json","Accept":"application/json"},
             body:JSON.stringify({items,shipping_service_id:shippingServiceId,payment_method:paymentMethod,
+                profile_token:[email,phone,number,complement].some(isHiddenValue)?customerProfileToken||undefined:undefined,
                 coupon_code:appliedCoupon?.code||undefined,
                 gift:gift?{promotion_id:gift.promotion.id,product_id:gift.product.id,variant_id:gift.variant.id}:undefined,
                 customer:{name,email,phone,whatsapp_phone:whatsappNumber,whatsapp_updates:true,cpf:cpfDigits,
@@ -2514,12 +2540,15 @@ async function checkout() {
             const failure=new Error(data?.message||"O pagamento não abriu. Tente novamente.");
             failure.paymentUnavailable=data?.payment_unavailable===true||response.status>=500;
             // Campo recusado pelo servidor (e-mail, WhatsApp, CPF): destaca o campo para corrigir.
-            if(["customerEmail","customerPhone","customerCpf"].includes(data?.field))failure.field=data.field;
+            if(["customerEmail","customerPhone","customerCpf","customerNumber","customerComplement"].includes(data?.field))failure.field=data.field;
             throw failure;
         }
 
-        // Pedido criado: este aparelho guarda os dados para a próxima compra vir preenchida.
-        rememberCheckoutProfile({name,email,phone:whatsappNumber,cpf:cpfDigits,address:{cep:cep.replace(/\D/g,""),street,number,complement:complement||"",neighborhood,city,state}});
+        // Pedido criado: este aparelho guarda os dados para a próxima compra vir preenchida
+        // (campos escondidos ficam escondidos, com a chave do cadastro).
+        const usesSavedProfile=[email,phone,number,complement].some(isHiddenValue);
+        rememberCheckoutProfile({name,email,phone:isHiddenValue(phone)?phone:whatsappNumber,cpf:cpfDigits,token:usesSavedProfile?customerProfileToken:"",
+            address:{cep:cep.replace(/\D/g,""),street,number,complement:complement||"",neighborhood,city,state}});
 
         if(paymentMethod==="pix"&&data?.pix_checkout&&data?.url){
             closeCart();
@@ -2570,6 +2599,9 @@ async function checkout() {
         // Sem internet o navegador dá "Failed to fetch" / "Load failed": a cliente vê a explicação.
         if(error.paymentUnavailable){hideToast();setPaymentHelp(true,paymentMethod);}
         else showToast(error instanceof TypeError?"Sem conexão. Confira sua internet e tente novamente.":(error.message||"Não foi possível concluir. Tente novamente."));
+        // Dados escondidos que o servidor não conseguiu completar (cadastro trocado ou chave
+        // vencida): esvazia os campos escondidos para a cliente digitar.
+        if(error.field&&isHiddenValue(document.getElementById(error.field)?.value))clearHiddenProfileFields();
         if(error.field)flagCheckoutFields([error.field]);
         if(checkoutButton){checkoutButton.disabled=false;checkoutButton.textContent="FINALIZAR COMPRA";}
     }
@@ -3125,10 +3157,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (input) input.addEventListener("input", () => updateShipping());
     });
 
-    const cpfInput = document.getElementById("customerCpf");
-    if (cpfInput) {
-        cpfInput.addEventListener("input", () => { cpfInput.value = formatCpfTyping(cpfInput.value); });
-    }
+    // A máscara do CPF e a busca do cadastro ficam em setupReturningCustomer.
 });
 
 /* =====================================================
@@ -3222,8 +3251,9 @@ function startStoreAnalytics() {
             items: items.map(i => ({ id: i.id, product_id: i.id, product_name: i.name, sku: i.sku, variant_id: i.variant_id || null, variant_color: i.variant_color || i.color || null, quantity: i.quantity, unit_price: i.price, total_price: Number(i.price || 0) * Number(i.quantity || 1) })),
             subtotal, shipping: shippingPrice, total: subtotal + shippingPrice,
             customer_name: reminders ? document.getElementById("customerName")?.value || "" : "",
-            customer_email: reminders ? document.getElementById("customerEmail")?.value || "" : "",
-            customer_phone: reminders ? document.getElementById("customerPhone")?.value || "" : ""
+            // Valor escondido (cliente preenchida pelo CPF) não serve para o lembrete.
+            customer_email: reminders && !isHiddenValue(document.getElementById("customerEmail")?.value) ? document.getElementById("customerEmail")?.value || "" : "",
+            customer_phone: reminders && !isHiddenValue(document.getElementById("customerPhone")?.value) ? document.getElementById("customerPhone")?.value || "" : ""
         });
     }
     window.monteAnalytics = { track, saveCart, record };
@@ -3764,17 +3794,15 @@ function phoneDigits(value) {
 const CHECKOUT_RULES = {
     customerName: v => v.trim().split(/\s+/).filter(Boolean).length >= 2,
     customerEmail: v => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim()),
-    customerPhone: v => /^[1-9]{2}9\d{8}$/.test(phoneDigits(v)),
+    // WhatsApp escondido do cadastro ("(85) •••••-3305"): o servidor completa no checkout.
+    customerPhone: v => /^\(\d{2}\) •{5}-\d{4}$/.test(v.trim()) || /^[1-9]{2}9\d{8}$/.test(phoneDigits(v)),
     customerCpf: v => v.replace(/\D/g, "").length === 11,
     customerCep: v => v.replace(/\D/g, "").length === 8,
     customerStreet: v => v.trim().length > 1,
     customerNumber: v => v.trim().length > 0,
     customerNeighborhood: v => v.trim().length > 1,
     customerCity: v => v.trim().length > 1,
-    customerState: v => /^[A-Za-z]{2}$/.test(v.trim()),
-    // "Já comprou na MONTÊ?": CPF e código (não entram nas etapas do checkout).
-    returningCpf: v => v.replace(/\D/g, "").length === 11,
-    returningCode: v => v.replace(/\D/g, "").length === 6
+    customerState: v => /^[A-Za-z]{2}$/.test(v.trim())
 };
 
 // E-mail com erro comum de digitação ("…@gmailcom", "gmail.con", "hotmial.com"): sugere a
@@ -4139,19 +4167,25 @@ function browseNovidades() {
 }
 
 /* =====================================================
-   CLIENTE QUE JÁ COMPROU — DADOS PREENCHIDOS NA SACOLA
-   1) Neste aparelho: depois de uma compra (ou do código abaixo), os
-      dados ficam guardados aqui e a sacola abre já preenchida.
-   2) Em outro aparelho: a cliente informa o CPF, recebe um código no
-      e-mail do cadastro (última compra paga no site ou contato da Olist)
-      e, com ele, os dados são preenchidos. Sem o código, nada aparece.
+   CLIENTE QUE JÁ COMPROU — DADOS PREENCHIDOS PELO CPF
+   O CPF é o primeiro campo da sacola. Se a cliente já comprou (no site
+   ou tem cadastro na Olist), o resto é preenchido na hora, sem código.
+   E-mail, WhatsApp e número/complemento do endereço chegam escondidos
+   (vi•••••@gmail.com, (85) •••••-3305, •••): quem digitar o CPF de outra
+   pessoa não vê os dados dela. O pedido vai com os dados completos (o
+   servidor troca os campos escondidos pelo cadastro, com o profile_token).
+   Para mudar um campo escondido, é só tocar nele e digitar de novo.
+   Depois de uma compra, este aparelho lembra os dados e a sacola já abre
+   preenchida. "Não é você?" apaga.
 ===================================================== */
 const CHECKOUT_PROFILE_KEY = "monte_checkout_profile";
 const CHECKOUT_PROFILE_MAX_AGE = 365 * 24 * 60 * 60 * 1000;
+const HIDDEN_MARK = "•";
+const isHiddenValue = value => String(value || "").includes(HIDDEN_MARK);
 const PROFILE_FIELDS = {
     customerName: p => p.name,
     customerEmail: p => p.email,
-    customerPhone: p => p.phone ? formatPhoneTyping(p.phone) : "",
+    customerPhone: p => isHiddenValue(p.phone) ? p.phone : (p.phone ? formatPhoneTyping(p.phone) : ""),
     customerCpf: p => formatCpfTyping(p.cpf),
     customerCep: p => { const d = String(p.address?.cep || "").replace(/\D/g, ""); return d.length === 8 ? d.slice(0, 5) + "-" + d.slice(5) : d; },
     customerStreet: p => p.address?.street,
@@ -4161,13 +4195,27 @@ const PROFILE_FIELDS = {
     customerCity: p => p.address?.city,
     customerState: p => String(p.address?.state || "").toUpperCase()
 };
-let returningCpfDigits = "";
+// Chave do cadastro usado para preencher (vem com os dados escondidos; o checkout envia).
+let customerProfileToken = "";
+let lastLookedUpCpf = "";
 
 function formatCpfTyping(value) {
     return String(value || "").replace(/\D/g, "").slice(0, 11)
         .replace(/(\d{3})(\d)/, "$1.$2")
         .replace(/(\d{3})(\d)/, "$1.$2")
         .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+}
+
+function cpfIsValid(value) {
+    const cpf = String(value || "").replace(/\D/g, "");
+    if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+    const digit = length => {
+        let sum = 0;
+        for (let i = 0; i < length; i++) sum += Number(cpf[i]) * (length + 1 - i);
+        const rest = (sum * 10) % 11;
+        return rest === 10 ? 0 : rest;
+    };
+    return digit(9) === Number(cpf[9]) && digit(10) === Number(cpf[10]);
 }
 
 function readCheckoutProfile() {
@@ -4182,26 +4230,19 @@ function rememberCheckoutProfile(profile) {
     try { localStorage.setItem(CHECKOUT_PROFILE_KEY, JSON.stringify({ v: 1, saved_at: Date.now(), ...profile })); } catch {}
 }
 
-function setReturningView(view, text) {
-    ["returningAsk", "returningCodeBox", "returningDone"].forEach(id => {
-        const box = document.getElementById(id);
-        if (box) box.hidden = id !== view;
-    });
-    if (view === "returningDone") {
-        const done = document.getElementById("returningDoneText");
-        if (done) done.textContent = text || "";
-    }
-    if (view === "returningCodeBox") {
-        const codeText = document.getElementById("returningCodeText");
-        if (codeText) codeText.textContent = text || "";
-    }
-}
-
-function setReturningStatus(message = "", error = false) {
+// Mensagem embaixo do CPF ("Olá, Vitória! …" com o link "Não é você?").
+function setReturningStatus(html) {
     const status = document.getElementById("returningStatus");
     if (!status) return;
-    status.textContent = message;
-    status.classList.toggle("is-error", !!error);
+    status.hidden = !html;
+    setHTML(status, html || "");
+}
+
+function greetReturningCustomer(name, text) {
+    const firstName = String(name || "").trim().split(/\s+/)[0];
+    setReturningStatus('<span class="returning-customer-check" aria-hidden="true"></span><span>' +
+        escapeHTML((firstName ? `Olá, ${firstName}! ` : "") + text) +
+        ' <button type="button" data-click="forgetReturningCustomer">Não é você?</button></span>');
 }
 
 // Preenche os campos (só os vazios, a não ser com overwrite) e recalcula o frete.
@@ -4215,7 +4256,6 @@ function fillCheckoutProfile(profile, { overwrite = false } = {}) {
         refreshCheckoutField(input);
         filled++;
     });
-    renderEmailSuggestion();
     if (filled) updateShipping();
     updateCheckoutProgress();
     return filled;
@@ -4230,128 +4270,89 @@ function fillSavedCheckoutProfile() {
     const profile = readCheckoutProfile();
     if (!profile || !cart.length || !checkoutFieldsEmpty()) return;
     if (!fillCheckoutProfile(profile)) return;
-    const firstName = String(profile.name || "").trim().split(/\s+/)[0];
-    setReturningView("returningDone", (firstName ? `Olá, ${firstName}! ` : "") + "Preenchemos com os dados da sua última compra. Confira antes de finalizar.");
-    setReturningStatus("");
+    customerProfileToken = profile.token || "";
+    lastLookedUpCpf = String(profile.cpf || "").replace(/\D/g, "");
+    greetReturningCustomer(profile.name, "Preenchemos com os dados da sua última compra. Confira antes de finalizar.");
 }
 
-async function requestReturningCode(resend = false) {
-    const input = document.getElementById("returningCpf");
-    const button = document.getElementById("returningCpfButton");
-    const digits = resend === true ? returningCpfDigits : String(input?.value || "").replace(/\D/g, "");
-    if (digits.length !== 11) {
-        input?.closest(".field")?.classList.add("is-invalid");
-        setReturningStatus("Digite os 11 números do seu CPF.", true);
-        input?.focus();
-        return;
-    }
-    returningCpfDigits = digits;
-    if (button) button.disabled = true;
-    setReturningStatus(resend === true ? "Reenviando o código..." : "Procurando seu cadastro...");
+// CPF completo: procura o cadastro e preenche os campos que ainda estão vazios.
+async function lookupCustomerByCpf() {
+    const input = document.getElementById("customerCpf");
+    const cpf = String(input?.value || "").replace(/\D/g, "");
+    if (!cpfIsValid(cpf) || cpf === lastLookedUpCpf) return;
+    lastLookedUpCpf = cpf;
     try {
-        const response = await fetch("/api/clientes/codigo", {
+        const response = await fetch("/api/clientes/buscar", {
             method: "POST",
             headers: { "Content-Type": "application/json", "Accept": "application/json" },
-            body: JSON.stringify({ cpf: digits })
+            body: JSON.stringify({ cpf })
         });
         const data = await response.json().catch(() => ({}));
-        if (!response.ok || !data.success) throw new Error(data.message || "Não foi possível buscar agora. Preencha seus dados abaixo.");
-        if (!data.found) {
-            setReturningStatus("Não encontramos compras com este CPF. É só preencher seus dados abaixo.");
-            const cpfField = document.getElementById("customerCpf");
-            if (cpfField && !cpfField.value.trim()) { cpfField.value = formatCpfTyping(digits); refreshCheckoutField(cpfField); updateCheckoutProgress(); }
-            return;
-        }
-        if (!data.sent) {
-            setReturningStatus("Encontramos seu cadastro, mas ele não tem e-mail para confirmarmos que é você. Preencha seus dados abaixo.");
-            return;
-        }
-        setReturningView("returningCodeBox", `Enviamos um código de 6 números para ${data.email_hint}. Confira também a caixa de spam.`);
-        setReturningStatus("");
-        const code = document.getElementById("returningCode");
-        if (code) { code.value = ""; code.focus(); }
-    } catch (error) {
-        setReturningStatus(error.message || "Sem conexão. Confira sua internet e tente novamente.", true);
-    } finally {
-        if (button) button.disabled = false;
+        // A cliente trocou o CPF enquanto a busca acontecia.
+        if (String(input.value || "").replace(/\D/g, "") !== cpf) return;
+        if (!response.ok || !data.success || !data.found || !data.customer) return;
+        customerProfileToken = data.profile_token || "";
+        if (!fillCheckoutProfile(data.customer)) return;
+        greetReturningCustomer(data.customer.name, "Preenchemos com os dados da sua última compra. Por segurança, parte deles fica escondida.");
+    } catch {
+        // Sem resposta: a cliente preenche os dados normalmente.
     }
 }
 
-function resendReturningCode() {
-    return requestReturningCode(true);
-}
-
-async function confirmReturningCode() {
-    const input = document.getElementById("returningCode");
-    const button = document.getElementById("returningCodeButton");
-    const code = String(input?.value || "").replace(/\D/g, "");
-    if (code.length !== 6) {
-        setReturningStatus("Digite o código de 6 números que chegou no seu e-mail.", true);
-        input?.focus();
-        return;
-    }
-    if (button) button.disabled = true;
-    setReturningStatus("Conferindo...");
-    try {
-        const response = await fetch("/api/clientes/confirmar", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Accept": "application/json" },
-            body: JSON.stringify({ cpf: returningCpfDigits, code })
-        });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok || !data.success || !data.customer) throw new Error(data.message || "Não foi possível confirmar agora.");
-        fillCheckoutProfile(data.customer, { overwrite: true });
-        rememberCheckoutProfile(data.customer);
-        const firstName = String(data.customer.name || "").trim().split(/\s+/)[0];
-        setReturningView("returningDone", (firstName ? `Pronto, ${firstName}! ` : "Pronto! ") + "Preenchemos seus dados. Confira antes de finalizar.");
-        setReturningStatus("");
-    } catch (error) {
-        setReturningStatus(error.message || "Sem conexão. Confira sua internet e tente novamente.", true);
-        if (input) { input.value = ""; input.focus(); }
-    } finally {
-        if (button) button.disabled = false;
-    }
-}
-
-function resetReturningCustomer() {
-    returningCpfDigits = "";
-    const cpf = document.getElementById("returningCpf");
-    if (cpf) { cpf.value = ""; cpf.closest(".field")?.classList.remove("is-valid", "is-invalid"); }
-    setReturningView("returningAsk");
-    setReturningStatus("");
-    cpf?.focus();
+function clearHiddenProfileFields() {
+    customerProfileToken = "";
+    ["customerEmail", "customerPhone", "customerNumber", "customerComplement"].forEach(id => {
+        const input = document.getElementById(id);
+        if (!input || !isHiddenValue(input.value)) return;
+        input.value = "";
+        input.closest(".field")?.classList.remove("is-valid");
+    });
+    updateCheckoutProgress();
 }
 
 // "Não é você?": apaga os dados deste aparelho e limpa os campos.
 function forgetReturningCustomer() {
     try { localStorage.removeItem(CHECKOUT_PROFILE_KEY); } catch {}
+    customerProfileToken = "";
+    lastLookedUpCpf = "";
     Object.keys(PROFILE_FIELDS).forEach(id => {
         const input = document.getElementById(id);
         if (!input) return;
         input.value = "";
         input.closest(".field")?.classList.remove("is-valid", "is-invalid");
     });
+    setReturningStatus("");
     updateShipping();
     updateCheckoutProgress();
-    resetReturningCustomer();
-    setReturningStatus("Dados apagados deste aparelho.");
+    document.getElementById("customerCpf")?.focus();
 }
 
 (function setupReturningCustomer() {
     const start = () => {
-        const cpf = document.getElementById("returningCpf");
-        const code = document.getElementById("returningCode");
-        cpf?.addEventListener("input", () => { cpf.value = formatCpfTyping(cpf.value); setReturningStatus(""); });
-        code?.addEventListener("input", () => {
-            code.value = code.value.replace(/\D/g, "").slice(0, 6);
-            // Código colado ou digitado por inteiro: confere sozinho.
-            if (code.value.length === 6) confirmReturningCode();
+        const cpf = document.getElementById("customerCpf");
+        cpf?.addEventListener("input", () => {
+            cpf.value = formatCpfTyping(cpf.value);
+            if (cpfIsValid(cpf.value)) lookupCustomerByCpf();
         });
-        [[cpf, requestReturningCode], [code, confirmReturningCode]].forEach(([input, action]) => {
-            input?.addEventListener("keydown", event => {
-                if (event.key !== "Enter") return;
-                event.preventDefault();
-                action();
+        cpf?.addEventListener("blur", lookupCustomerByCpf);
+        // Campo escondido (•••): ao tocar, fica vazio para a cliente digitar outro valor; se ela
+        // sair sem digitar nada, o valor escondido volta (e o pedido usa o do cadastro).
+        ["customerEmail", "customerPhone", "customerNumber", "customerComplement"].forEach(id => {
+            const input = document.getElementById(id);
+            if (!input) return;
+            input.addEventListener("focus", () => {
+                if (!isHiddenValue(input.value)) return;
+                input.dataset.hiddenValue = input.value;
+                input.value = "";
+                refreshCheckoutField(input);
+            });
+            input.addEventListener("blur", () => {
+                if (!input.value.trim() && input.dataset.hiddenValue) {
+                    input.value = input.dataset.hiddenValue;
+                    refreshCheckoutField(input);
+                    updateCheckoutProgress();
+                }
+                delete input.dataset.hiddenValue;
             });
         });
     };
@@ -4366,8 +4367,7 @@ registerClickActions({
     openWhatsAppReservation, previousCategoryPage, previousCollectionPage, previousNewPage,
     previousSalePage, previousSlide, removeCoupon, removeFromCart, toggleMobileMenu, updateItemQuantity,
     acceptCookies, rejectCookies, customizeCookies, saveCookieChoices, openCookiePreferences,
-    applyEmailSuggestion, requestReturningCode, resendReturningCode, confirmReturningCode,
-    resetReturningCustomer, forgetReturningCustomer
+    applyEmailSuggestion, forgetReturningCustomer
 });
 
 // A caixa "Guardar sacola" saiu do site: apaga o número que ela tinha guardado neste aparelho.

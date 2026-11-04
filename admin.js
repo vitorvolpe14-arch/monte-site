@@ -70,7 +70,8 @@ async function init(){
   const promoForm=$("promoForm"); if(promoForm) promoForm.onsubmit=savePromotion;
   const benefitsForm=$("benefitsForm"); if(benefitsForm) benefitsForm.onsubmit=saveBenefits;
   const topBarForm=$("topBarForm"); if(topBarForm) topBarForm.onsubmit=saveTopBar;
-  const topBarInput=$("topBarText"); if(topBarInput) topBarInput.oninput=updateTopBarPreview;
+  const addTopBarButton=$("addTopBarButton"); if(addTopBarButton) addTopBarButton.onclick=addTopBarMessage;
+  if($("topBarList")) renderTopBarList([]);
   const clearTopBarButton=$("clearTopBarButton"); if(clearTopBarButton) clearTopBarButton.onclick=clearTopBar;
   const cancelPromoEdit=$("cancelPromoEdit"); if(cancelPromoEdit) cancelPromoEdit.onclick=resetPromotionForm;
   const refreshPromotions=$("refreshPromotions"); if(refreshPromotions) refreshPromotions.onclick=loadPromotions;
@@ -519,12 +520,36 @@ function promotionState(p){const now=Date.now();if(!p.active)return["PAUSADA","e
 async function loadPromotions(){try{$("promotionsError").textContent="";const d=await api("/api/admin/promotions");promotions=d.promotions||[];promotionsLoaded=true;renderBenefits(d.benefits);renderTopBar(d.top_bar);renderPromotions()}catch(e){$("promotionsError").textContent=e.message}}
 // Barra do topo do site: o aviso escrito aqui ou, em branco, o automático (aviso da promoção
 // de presente no ar, ou o frete grátis e o Pix), como o site escolhe.
-const TOP_BAR_MAX=90;
-function renderTopBar(t){if(!t)return;$("topBarText").value=t.text||"";$("topBarMessage").textContent="";updateTopBarPreview()}
-function topBarAutomatic(){const now=Date.now();const p=promotions.filter(x=>x.active&&x.banner_text&&Date.parse(x.starts_at)<=now&&now<Date.parse(x.ends_at)).sort((a,b)=>Number(a.min_subtotal)-Number(b.min_subtotal))[0];if(p)return{text:p.banner_text,note:`Como aparece no site (automático: aviso da promoção “${p.name}”)`};const b=storeBenefitsData,parts=[];if(b?.free_shipping?.enabled)parts.push(`FRETE GRÁTIS EM FORTALEZA E REGIÃO A PARTIR DE ${money(b.free_shipping.min_subtotal).replace(",00","")}`);if(b?.pix_discount?.enabled)parts.push(`${String(Number(b.pix_discount.percent)).replace(".",",")}% OFF NO PIX`);return{text:parts.join(" · "),note:parts.length?"Como aparece no site (automático: frete grátis e Pix)":"Como aparece no site (automático: barra vazia)"}}
-function updateTopBarPreview(){const input=$("topBarText");if(!input)return;const typed=input.value.replace(/\s+/g," ").trim();const auto=typed?null:topBarAutomatic();$("topBarPreview").textContent=typed||auto.text;$("topBarPreviewNote").textContent=typed?"Como aparece no site":auto.note;$("topBarCount").textContent=`${input.value.length}/${TOP_BAR_MAX}`}
-async function saveTopBar(e){e?.preventDefault();const button=$("saveTopBarButton");button.disabled=true;$("clearTopBarButton").disabled=true;$("topBarMessage").textContent="";try{const d=await api("/api/admin/top-bar",{method:"PUT",body:JSON.stringify({text:$("topBarText").value.trim()})});renderTopBar(d.top_bar);$("topBarMessage").textContent=d.top_bar?.text?"Salvo. O site atualiza em até 1 minuto.":"Salvo: a barra voltou ao automático. O site atualiza em até 1 minuto."}catch(err){$("topBarMessage").textContent=err.message}finally{button.disabled=false;$("clearTopBarButton").disabled=false}}
-function clearTopBar(){$("topBarText").value="";updateTopBarPreview();saveTopBar()}
+const TOP_BAR_MAX=90,TOP_BAR_MAX_MESSAGES=6;
+let topBarPreviewTimer=null,topBarPreviewIndex=0;
+// Lista de campos (um por aviso). Sempre há pelo menos um campo, mesmo vazio.
+function topBarInputs(){return [...document.querySelectorAll("#topBarList input")]}
+function topBarTypedMessages(){return topBarInputs().map(i=>i.value.replace(/\s+/g," ").trim()).filter(Boolean)}
+function renderTopBarList(messages){
+  const box=$("topBarList");if(!box)return;
+  const list=messages.length?messages:[""];
+  setHTML(box,list.map((text,i)=>`<div class="top-bar-row"><label>Aviso ${i+1}<input maxlength="${TOP_BAR_MAX}" value="${esc(text)}" placeholder="Ex.: BLACK FRIDAY: 15% OFF EM TODA A LOJA"></label><span class="field-help top-bar-count"></span><button type="button" class="secondary top-bar-remove" data-index="${i}" aria-label="Remover aviso ${i+1}">REMOVER</button></div>`).join(""));
+  box.querySelectorAll("input").forEach(input=>{input.oninput=updateTopBarPreview});
+  box.querySelectorAll(".top-bar-remove").forEach(button=>{button.onclick=()=>{const current=topBarInputs().map(i=>i.value);current.splice(Number(button.dataset.index),1);renderTopBarList(current);updateTopBarPreview();$("topBarMessage").textContent="Aviso removido. Clique em SALVAR BARRA DO TOPO para confirmar."}});
+  updateTopBarPreview();
+}
+function addTopBarMessage(){const current=topBarInputs().map(i=>i.value);if(current.length>=TOP_BAR_MAX_MESSAGES)return;current.push("");renderTopBarList(current);const inputs=topBarInputs();inputs[inputs.length-1].focus()}
+function renderTopBar(t){if(!t)return;renderTopBarList(Array.isArray(t.messages)?t.messages:(t.text?[t.text]:[]));$("topBarMessage").textContent=""}
+// Sem avisos do painel, o site mostra os das promoções no ar ou o frete grátis e o Pix.
+function topBarAutomatic(){const now=Date.now();const banners=[...new Set(promotions.filter(x=>x.active&&x.banner_text&&Date.parse(x.starts_at)<=now&&now<Date.parse(x.ends_at)).sort((a,b)=>Number(a.min_subtotal)-Number(b.min_subtotal)).map(x=>x.banner_text.trim()))];if(banners.length)return{texts:banners,note:`Como aparece no site (automático: ${banners.length>1?"avisos das promoções no ar":"aviso da promoção no ar"})`};const b=storeBenefitsData,parts=[];if(b?.free_shipping?.enabled)parts.push(`FRETE GRÁTIS EM FORTALEZA E REGIÃO A PARTIR DE ${money(b.free_shipping.min_subtotal).replace(",00","")}`);if(b?.pix_discount?.enabled)parts.push(`${String(Number(b.pix_discount.percent)).replace(".",",")}% OFF NO PIX`);return{texts:[parts.join(" · ")],note:parts.length?"Como aparece no site (automático: frete grátis e Pix)":"Como aparece no site (automático: barra vazia)"}}
+function updateTopBarPreview(){
+  if(!$("topBarList"))return;
+  const typed=topBarTypedMessages(),auto=typed.length?null:topBarAutomatic(),texts=typed.length?typed:auto.texts;
+  topBarInputs().forEach(input=>{const count=input.closest(".top-bar-row")?.querySelector(".top-bar-count");if(count)count.textContent=`${input.value.length}/${TOP_BAR_MAX}`});
+  $("addTopBarButton").hidden=topBarInputs().length>=TOP_BAR_MAX_MESSAGES;
+  $("topBarPreviewNote").textContent=typed.length?(typed.length>1?`Como aparece no site (${typed.length} avisos, um de cada vez)`:"Como aparece no site"):auto.note;
+  // Prévia igual ao site: com mais de um aviso, alterna (aqui, a cada 2,5 s).
+  clearInterval(topBarPreviewTimer);topBarPreviewIndex=Math.min(topBarPreviewIndex,texts.length-1);
+  const show=()=>{$("topBarPreview").textContent=texts[topBarPreviewIndex]||""};show();
+  if(texts.length>1)topBarPreviewTimer=setInterval(()=>{topBarPreviewIndex=(topBarPreviewIndex+1)%texts.length;show()},2500);
+}
+async function saveTopBar(e){e?.preventDefault();const button=$("saveTopBarButton");button.disabled=true;$("clearTopBarButton").disabled=true;$("topBarMessage").textContent="";try{const d=await api("/api/admin/top-bar",{method:"PUT",body:JSON.stringify({messages:topBarTypedMessages()})});renderTopBar(d.top_bar);const n=d.top_bar?.messages?.length||0;$("topBarMessage").textContent=n?`Salvo (${n} aviso${n>1?"s":""}). O site atualiza em até 1 minuto.`:"Salvo: a barra voltou ao automático. O site atualiza em até 1 minuto."}catch(err){$("topBarMessage").textContent=err.message}finally{button.disabled=false;$("clearTopBarButton").disabled=false}}
+function clearTopBar(){renderTopBarList([]);saveTopBar()}
 // Frete grátis e desconto do Pix: valem o tempo todo, até desligar.
 function renderBenefits(b){if(!b)return;storeBenefitsData=b;updateTopBarPreview();$("benefitShippingOn").checked=!!b.free_shipping?.enabled;$("benefitShippingMin").value=Number(b.free_shipping?.min_subtotal||0);$("benefitPixOn").checked=!!b.pix_discount?.enabled;$("benefitPixPercent").value=Number(b.pix_discount?.percent||0);$("benefitsMessage").textContent=""}
 async function saveBenefits(e){e.preventDefault();const button=$("saveBenefitsButton");button.disabled=true;$("benefitsMessage").textContent="";try{const d=await api("/api/admin/store-benefits",{method:"PUT",body:JSON.stringify({free_shipping:{enabled:$("benefitShippingOn").checked,min_subtotal:Number(String($("benefitShippingMin").value).replace(",","."))},pix_discount:{enabled:$("benefitPixOn").checked,percent:Number(String($("benefitPixPercent").value).replace(",","."))}})});renderBenefits(d.benefits);$("benefitsMessage").textContent="Salvo. O site atualiza em até 1 minuto."}catch(err){$("benefitsMessage").textContent=err.message}finally{button.disabled=false}}
