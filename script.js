@@ -4170,9 +4170,8 @@ function browseNovidades() {
    CLIENTE QUE JÁ COMPROU — DADOS PREENCHIDOS PELO CPF
    O CPF é o primeiro campo da sacola. Se a cliente já comprou (no site
    ou tem cadastro na Olist), o resto é preenchido na hora, sem código.
-   E-mail, WhatsApp e número/complemento do endereço chegam escondidos
-   (vi•••••@gmail.com, (85) •••••-3305, •••): quem digitar o CPF de outra
-   pessoa não vê os dados dela. O pedido vai com os dados completos (o
+   O endereço chega completo; o e-mail e o WhatsApp chegam parcialmente
+   escondidos (vi•••••@gmail.com, (85) •••••-3305). O pedido vai com os dados completos (o
    servidor troca os campos escondidos pelo cadastro, com o profile_token).
    Para mudar um campo escondido, é só tocar nele e digitar de novo.
    Quando a cliente digita o e-mail do cadastro (ou o WhatsApp, se o
