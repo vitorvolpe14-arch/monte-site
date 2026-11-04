@@ -37,7 +37,7 @@
     <meta name="twitter:description" content="Conheça a coleção MONTÊ e compre online.">
     <meta name="twitter:image" content="https://oficialmontee.com.br/og-image.jpg?v=1">
 
-    <link rel="stylesheet" href="style.css?v=20261104-cliente">
+    <link rel="stylesheet" href="style.css?v=20261104-cpf">
     <!-- PRELOAD DO BANNER -->
 
     <link rel="preload" href="/fonts/dm-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
@@ -986,36 +986,16 @@
                         <h3>Seus dados</h3>
                         <i class="checkout-step-check" aria-hidden="true"></i>
                     </header>
-                    <!-- Cliente que já comprou: CPF → código no e-mail do cadastro → dados preenchidos.
-                         Depois disso (ou de uma compra), este aparelho lembra os dados. -->
-                    <div class="returning-customer" id="returningCustomer">
-                        <div id="returningAsk">
-                            <p class="returning-customer-title"><strong>Já comprou na MONTÊ?</strong> Informe seu CPF e preenchemos seus dados.</p>
-                            <div class="coupon-row">
-                                <label class="field returning-field"><input type="text" id="returningCpf" placeholder=" " inputmode="numeric" maxlength="14" autocomplete="off"><span>CPF</span></label>
-                                <button type="button" class="coupon-apply" id="returningCpfButton" data-click="requestReturningCode">BUSCAR</button>
-                            </div>
-                        </div>
-                        <div id="returningCodeBox" hidden>
-                            <p class="returning-customer-title" id="returningCodeText"></p>
-                            <div class="coupon-row">
-                                <label class="field returning-field"><input type="text" id="returningCode" placeholder=" " inputmode="numeric" maxlength="6" autocomplete="one-time-code"><span>Código de 6 números</span></label>
-                                <button type="button" class="coupon-apply" id="returningCodeButton" data-click="confirmReturningCode">CONFIRMAR</button>
-                            </div>
-                            <p class="returning-customer-links"><button type="button" data-click="resendReturningCode">Reenviar código</button> · <button type="button" data-click="resetReturningCustomer">Usar outro CPF</button></p>
-                        </div>
-                        <div id="returningDone" hidden>
-                            <p class="returning-customer-title"><span class="returning-customer-check" aria-hidden="true"></span><span id="returningDoneText"></span></p>
-                            <p class="returning-customer-links"><button type="button" data-click="forgetReturningCustomer">Não é você? Limpar dados</button></p>
-                        </div>
-                        <p class="returning-customer-status" id="returningStatus" role="status" aria-live="polite"></p>
-                    </div>
+                    <!-- Cliente que já comprou: o CPF vem primeiro e, se ela já tem cadastro (compra no
+                         site ou contato na Olist), o resto é preenchido na hora. -->
+                    <p class="returning-customer-hint">Já comprou na MONTÊ? Digite seu CPF e preenchemos o resto.</p>
                     <div class="field-grid">
+                        <label class="field full"><input type="text" id="customerCpf" placeholder=" " inputmode="numeric" maxlength="14" autocomplete="off"><span>CPF</span></label>
+                        <div class="returning-customer-status" id="returningStatus" role="status" aria-live="polite" hidden></div>
                         <label class="field full"><input type="text" id="customerName" placeholder=" " autocomplete="name"><span>Nome completo</span></label>
-                        <label class="field full"><input type="email" id="customerEmail" placeholder=" " autocomplete="email" inputmode="email"><span>E-mail</span></label>
+                        <label class="field full"><input type="text" id="customerEmail" placeholder=" " autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false"><span>E-mail</span></label>
                         <p class="email-suggestion" id="emailSuggestion" role="status" aria-live="polite" hidden></p>
-                        <label class="field"><input type="tel" id="customerPhone" placeholder=" " autocomplete="tel" inputmode="tel" maxlength="20"><span>WhatsApp</span></label>
-                        <label class="field"><input type="text" id="customerCpf" placeholder=" " inputmode="numeric" maxlength="14" autocomplete="off"><span>CPF</span></label>
+                        <label class="field full"><input type="tel" id="customerPhone" placeholder=" " autocomplete="tel" inputmode="tel" maxlength="20"><span>WhatsApp</span></label>
                     </div>
                     <p class="field-hint">Enviamos o código de rastreio do pedido pelo WhatsApp e por e-mail.</p>
                 </section>
@@ -1178,7 +1158,7 @@
 
 <!-- CATÁLOGO -->
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="script.js?v=20261104-cliente"></script>
+<script src="script.js?v=20261104-cpf"></script>
 
 </body>
 </html>

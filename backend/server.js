@@ -1467,13 +1467,20 @@ async function storeBenefits() {
 
 const pixPercentOf = benefits => benefits?.pix_discount?.enabled ? Number(benefits.pix_discount.percent) : 0;
 
-// Aviso da barra do topo do site, escrito no painel (aba Promoções) e guardado no kv_store.
-// Com texto, ele ocupa o lugar do aviso da promoção de presente; em branco, a barra volta ao
-// automático (aviso da promoção no ar, frete grátis e Pix).
+// Avisos da barra do topo do site, escritos no painel (aba Promoções) e guardados no kv_store
+// como { messages: [...] } (antes era um só, { text }). Com mais de um, o site alterna entre eles.
+// Com avisos, eles ocupam o lugar dos avisos das promoções de presente; sem nenhum, a barra volta
+// ao automático (avisos das promoções no ar, frete grátis e Pix).
 const TOP_BAR_KEY = "store_top_bar";
 const TOP_BAR_MAX_LENGTH = 90;
+const TOP_BAR_MAX_MESSAGES = 6;
 const topBarText = value => safeString(value).replace(/\s+/g, " ");
-const normalizeTopBar = value => ({ text: topBarText(value?.text).slice(0, TOP_BAR_MAX_LENGTH) || null });
+function normalizeTopBar(value) {
+    const list = Array.isArray(value?.messages) ? value.messages : (value?.text ? [value.text] : []);
+    const messages = list.map(text => topBarText(text).slice(0, TOP_BAR_MAX_LENGTH)).filter(Boolean).slice(0, TOP_BAR_MAX_MESSAGES);
+    // "text" (o primeiro aviso) continua para quem ainda tem a página antiga aberta.
+    return { messages, text: messages[0] || null };
+}
 
 async function loadTopBar() {
     const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + TOP_BAR_KEY + "&select=value&limit=1", { method: "GET" });
@@ -1490,12 +1497,14 @@ async function storeTopBar() {
     }
 }
 
-// O que a barra do topo anuncia: o aviso do painel ou, sem ele, o da promoção no ar de menor
-// valor mínimo que tenha aviso (a lista vem em ordem de valor mínimo). O script.js faz a mesma escolha.
-function topBarMessage(topBar, promotions, now = Date.now()) {
-    return topBar?.text ||
-        (Array.isArray(promotions) ? promotions.find(promotion => promotionLive(promotion, now) && promotion.banner_text)?.banner_text : null) ||
-        null;
+// O que a barra do topo anuncia: os avisos do painel ou, sem eles, os das promoções no ar (em
+// ordem de valor mínimo). O script.js faz a mesma escolha e alterna entre eles.
+function topBarMessages(topBar, promotions, now = Date.now()) {
+    if (topBar?.messages?.length) return topBar.messages;
+    const banners = (Array.isArray(promotions) ? promotions : [])
+        .filter(promotion => promotionLive(promotion, now) && promotion.banner_text)
+        .map(promotion => topBarText(promotion.banner_text));
+    return [...new Set(banners)];
 }
 
 function shippingChargeFor(option, productsSubtotal, benefits) {
@@ -4469,8 +4478,8 @@ app.get("/", async (req, res) => {
             cachedPublic("promotions", 30 * 1000, loadPromotions).catch(error => { console.error("Página inicial — promoções:", error.message); return null; })
         ]);
         let page = html;
-        // Barra do topo já com o aviso (do painel ou da promoção no ar): não pisca ao abrir.
-        const barMessage = topBarMessage(topBar, promotions);
+        // Barra do topo já com o primeiro aviso (do painel ou da promoção no ar): não pisca ao abrir.
+        const barMessage = topBarMessages(topBar, promotions)[0];
         if (barMessage) page = topBarHtml(page, barMessage);
         // Banner do meio: com fotos do painel, troca as do HTML; data-ssr evita que a página peça de novo.
         if (Array.isArray(editorial)) {
@@ -4926,14 +4935,21 @@ app.put("/api/admin/store-benefits", requireAdmin, async (req, res) => {
     }
 });
 
-// Aviso da barra do topo (painel, aba Promoções). Em branco, a barra volta ao automático.
+// Avisos da barra do topo (painel, aba Promoções). Sem nenhum, a barra volta ao automático.
 app.put("/api/admin/top-bar", requireAdmin, async (req, res) => {
     try {
-        const text = topBarText(req.body?.text);
-        if (text.length > TOP_BAR_MAX_LENGTH) {
-            return res.status(400).json({ success: false, message: `O aviso da barra do topo vai até ${TOP_BAR_MAX_LENGTH} letras.` });
+        const sent = Array.isArray(req.body?.messages) ? req.body.messages : [req.body?.text];
+        if (sent.some(text => text !== undefined && text !== null && typeof text !== "string")) {
+            return res.status(400).json({ success: false, message: "Confira os avisos da barra do topo." });
         }
-        const topBar = normalizeTopBar({ text });
+        const messages = sent.map(topBarText).filter(Boolean);
+        if (messages.some(text => text.length > TOP_BAR_MAX_LENGTH)) {
+            return res.status(400).json({ success: false, message: `Cada aviso da barra do topo vai até ${TOP_BAR_MAX_LENGTH} letras.` });
+        }
+        if (messages.length > TOP_BAR_MAX_MESSAGES) {
+            return res.status(400).json({ success: false, message: `Use até ${TOP_BAR_MAX_MESSAGES} avisos na barra do topo.` });
+        }
+        const topBar = normalizeTopBar({ messages });
         await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
             method: "POST",
             headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
@@ -5253,7 +5269,8 @@ app.post(
 
             const {
                 items,
-                customer,
+                customer: requestedCustomer,
+                profile_token: profileToken,
                 shipping_service_id: requestedShippingServiceId,
                 payment_method: requestedPaymentMethod,
                 coupon_code: requestedCouponCode,
@@ -5293,6 +5310,15 @@ app.post(
             /* =================================================
                VALIDAÇÃO DO CLIENTE
             ================================================= */
+
+            // Cliente que já comprou (preenchida pelo CPF): os campos escondidos viram os dados do cadastro.
+            let customer;
+            try {
+                customer = await customerWithSavedProfile(requestedCustomer, profileToken);
+            } catch (error) {
+                if (!error.field) throw error;
+                return res.status(400).json({ success: false, field: error.field, message: error.message });
+            }
 
             if (
                 !customer ||
@@ -6803,116 +6829,97 @@ app.post(
 
 
 /* =====================================================
-   CLIENTE QUE JÁ COMPROU — DADOS PREENCHIDOS NO CHECKOUT
-   A cliente informa o CPF; o cadastro vem da última compra paga no
-   site ou, sem ela, do contato na Olist. Endereço, telefone e e-mail
-   só voltam depois do código de 6 números enviado ao e-mail desse
-   cadastro: quem só sabe o CPF de alguém não vê os dados dela.
-   O código vale 10 minutos e aceita 5 tentativas; fica guardado só
-   o hash (kv_store, chave customer_code:<hash do CPF>).
+   CLIENTE QUE JÁ COMPROU — DADOS PREENCHIDOS PELO CPF
+   A cliente digita o CPF na sacola e o resto é preenchido: o cadastro
+   vem da última compra paga no site ou, sem ela, do contato na Olist.
+   Sem código nem senha. Para quem digitar o CPF de outra pessoa não ver
+   os dados dela, o e-mail, o WhatsApp e o número/complemento do endereço
+   voltam escondidos (vi•••••@gmail.com, (85) •••••-3305, •••). O cadastro
+   completo fica no servidor (kv_store, customer_profile:<hash do CPF>) e
+   uma chave assinada (profile_token) volta com os dados: no checkout, o
+   campo que ainda estiver escondido é trocado pelo valor verdadeiro.
 ===================================================== */
-const CUSTOMER_CODE_TTL_MS = 10 * 60 * 1000;
-const CUSTOMER_CODE_MAX_ATTEMPTS = 5;
-const CUSTOMER_CODE_RESEND_MS = 45 * 1000;
-const CUSTOMER_CODE_MAX_SENDS_PER_HOUR = 5;
+const CUSTOMER_PROFILE_TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
+const CUSTOMER_LOOKUP_MAX_PER_HOUR = 20;
+const HIDDEN_MARK = "•";
+const customerLookupRateLimit = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 15 });
 
-const customerLookupRateLimit = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 10 });
-const customerConfirmRateLimit = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 20 });
-
-function validCpf(value) {
-    const cpf = safeString(value).replace(/\D/g, "");
-    if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return "";
-    const digit = length => {
-        let sum = 0;
-        for (let i = 0; i < length; i++) sum += Number(cpf[i]) * (length + 1 - i);
-        const rest = (sum * 10) % 11;
-        return rest === 10 ? 0 : rest;
-    };
-    return digit(9) === Number(cpf[9]) && digit(10) === Number(cpf[10]) ? cpf : "";
-}
-const customerCodeKey = cpf => "customer_code:" + crypto.createHash("sha256").update("monte-customer:" + cpf).digest("hex").slice(0, 40);
-const customerCodeHash = (cpf, code) => crypto.createHmac("sha256", signingKey()).update(cpf + ":" + code).digest("hex");
+const customerProfileKey = cpf => "customer_profile:" + crypto.createHash("sha256").update("monte-customer:" + cpf).digest("hex").slice(0, 40);
 const plainEmail = value => {
     const email = safeString(value).toLowerCase();
-    return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) && email.length <= 160 ? email : "";
+    return isEmailAddress(email) && email.length <= 160 ? email : "";
 };
 // "vitoria@gmail.com" → "vi•••••@gmail.com": a cliente reconhece o e-mail sem ele aparecer inteiro.
 function maskedEmail(email) {
+    if (!email) return "";
     const [user, domain] = email.split("@");
-    return user.slice(0, Math.min(2, Math.max(1, user.length - 2))) + "•".repeat(Math.max(3, Math.min(8, user.length - 2))) + "@" + domain;
+    return user.slice(0, Math.min(2, Math.max(1, user.length - 2))) + HIDDEN_MARK.repeat(Math.max(3, Math.min(8, user.length - 2))) + "@" + domain;
+}
+// "85992163305" → "(85) •••••-3305".
+function maskedPhone(digits) {
+    const d = brazilMobileDigits(digits);
+    return d ? "(" + d.slice(0, 2) + ") " + HIDDEN_MARK.repeat(5) + "-" + d.slice(7) : "";
+}
+const maskedText = value => safeString(value) ? HIDDEN_MARK.repeat(3) : "";
+
+// O que a sacola recebe: o cadastro com as partes que identificam a cliente escondidas.
+function maskedCustomerProfile(profile) {
+    return {
+        name: profile.name,
+        email: maskedEmail(profile.email),
+        phone: maskedPhone(profile.phone),
+        cpf: profile.cpf,
+        address: {
+            cep: profile.address.cep,
+            street: profile.address.street,
+            number: maskedText(profile.address.number),
+            complement: maskedText(profile.address.complement),
+            neighborhood: profile.address.neighborhood,
+            city: profile.address.city,
+            state: profile.address.state
+        }
+    };
 }
 
-async function readCustomerCode(cpf) {
-    const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + customerCodeKey(cpf) + "&select=value&limit=1", { method: "GET" });
-    return rows?.[0]?.value || null;
-}
-async function writeCustomerCode(cpf, value) {
-    await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
-        method: "POST",
-        headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
-        body: JSON.stringify({ key: customerCodeKey(cpf), value })
-    });
-}
-async function deleteCustomerCode(cpf) {
-    await supabaseRequest("kv_store_48db9b7e?key=eq." + customerCodeKey(cpf), { method: "DELETE", headers: { "Prefer": "return=minimal" } });
-}
-
-// Onde está o cadastro da cliente: { source: "site", ref: id do pedido } ou { source: "olist",
-// ref: id do contato }, com o e-mail que recebe o código. O código vai sempre para o e-mail do
-// mesmo cadastro cujos dados serão devolvidos.
-async function findReturningCustomer(cpf) {
-    const orders = await supabaseRequest(
-        "orders?customer_cpf=eq." + cpf + "&paid_at=not.is.null&select=id,customer_email&order=paid_at.desc&limit=1",
+// Cadastro da última compra paga no site.
+async function siteCustomerProfile(cpf) {
+    const rows = await supabaseRequest(
+        "orders?customer_cpf=eq." + cpf + "&paid_at=not.is.null" +
+        "&select=customer_name,customer_email,customer_phone,customer_whatsapp,customer_address&order=paid_at.desc&limit=1",
         { method: "GET" }
     );
-    const order = Array.isArray(orders) ? orders[0] : null;
-    if (order) return { source: "site", ref: order.id, email: plainEmail(order.customer_email) };
-    if (!OLIST_SYNC_ENABLED) return null;
-    try {
-        const contactId = await findOlistContactIdByCpf(cpf);
-        if (!contactId) return null;
-        const contact = await olistRequest("/contatos/" + encodeURIComponent(contactId));
-        return { source: "olist", ref: contactId, email: plainEmail(contact?.email) };
-    } catch (error) {
-        console.error("Cliente — busca na Olist:", error.message);
-        return null;
-    }
+    const order = Array.isArray(rows) ? rows[0] : null;
+    if (!order) return null;
+    const address = order.customer_address && typeof order.customer_address === "object" ? order.customer_address : {};
+    return {
+        name: safeString(order.customer_name),
+        email: plainEmail(order.customer_email),
+        phone: brazilMobileDigits(order.customer_whatsapp || order.customer_phone),
+        cpf,
+        address: {
+            cep: safeString(address.cep).replace(/\D/g, ""),
+            street: safeString(address.street),
+            number: safeString(address.number),
+            complement: safeString(address.complement),
+            neighborhood: safeString(address.neighborhood),
+            city: safeString(address.city),
+            state: safeString(address.state).toUpperCase()
+        }
+    };
 }
 
-// Dados para o checkout, no formato dos campos do site.
-async function returningCustomerProfile(source, ref, cpf) {
-    if (source === "site") {
-        const rows = await supabaseRequest(
-            "orders?id=eq." + encodeURIComponent(ref) + "&customer_cpf=eq." + cpf +
-            "&select=customer_name,customer_email,customer_phone,customer_whatsapp,customer_address&limit=1",
-            { method: "GET" }
-        );
-        const order = Array.isArray(rows) ? rows[0] : null;
-        if (!order) return null;
-        const address = order.customer_address && typeof order.customer_address === "object" ? order.customer_address : {};
-        return {
-            name: safeString(order.customer_name),
-            email: plainEmail(order.customer_email),
-            phone: safeString(order.customer_whatsapp || order.customer_phone).replace(/\D/g, ""),
-            cpf,
-            address: {
-                cep: safeString(address.cep).replace(/\D/g, ""),
-                street: safeString(address.street),
-                number: safeString(address.number),
-                complement: safeString(address.complement),
-                neighborhood: safeString(address.neighborhood),
-                city: safeString(address.city),
-                state: safeString(address.state).toUpperCase()
-            }
-        };
-    }
-    const contact = await olistRequest("/contatos/" + encodeURIComponent(ref));
+// Cadastro do contato na Olist (lojas físicas, vendas fora do site...).
+async function olistCustomerProfile(cpf) {
+    if (!OLIST_SYNC_ENABLED) return null;
+    const contactId = await findOlistContactIdByCpf(cpf);
+    if (!contactId) return null;
+    const contact = await olistRequest("/contatos/" + encodeURIComponent(contactId));
     if (safeString(contact?.cpfCnpj).replace(/\D/g, "") !== cpf) return null;
     const address = contact?.endereco && typeof contact.endereco === "object" ? contact.endereco : {};
     return {
         name: safeString(contact.nome),
         email: plainEmail(contact.email),
-        phone: safeString(contact.celular || contact.telefone).replace(/\D/g, ""),
+        phone: brazilMobileDigits(contact.celular || contact.telefone),
         cpf,
         address: {
             cep: safeString(address.cep).replace(/\D/g, ""),
@@ -6926,91 +6933,89 @@ async function returningCustomerProfile(source, ref, cpf) {
     };
 }
 
-async function sendCustomerCodeEmail(email, code) {
-    if (!RESEND_API_KEY || !RESEND_FROM_EMAIL) throw new Error("E-mail não configurado.");
-    const html = "<html><body style=\"margin:0;background:#f7f5f2;font-family:Arial,Helvetica,sans-serif;color:#171717;\">" +
-        "<div style=\"max-width:620px;margin:0 auto;padding:40px 20px;\"><div style=\"background:#111;color:#fff;text-align:center;padding:24px 20px;letter-spacing:6px;font-size:24px;\">MONTÊ</div>" +
-        "<div style=\"background:#fff;padding:38px 30px;text-align:center;\"><p style=\"margin:0 0 12px;font-size:12px;letter-spacing:2px;color:#777;\">SEU CÓDIGO</p>" +
-        "<p style=\"margin:0 0 18px;font-size:36px;letter-spacing:10px;font-weight:600;\">" + escapeEmailHtml(code) + "</p>" +
-        "<p style=\"font-size:15px;line-height:1.7;color:#555;margin:0;\">Use este código na sacola da MONTÊ para preencher seus dados da última compra. Ele vale por 10 minutos.</p>" +
-        "<p style=\"font-size:13px;line-height:1.7;color:#999;margin:18px 0 0;\">Não pediu? É só ignorar este e-mail: sem o código, ninguém vê seus dados.</p></div>" +
-        "<p style=\"text-align:center;font-size:11px;color:#999;margin:20px 0;\">MONTÊ — Bolsas e acessórios</p></div></body></html>";
-    const response = await fetch("https://api.resend.com/emails", {
+// Até CUSTOMER_LOOKUP_MAX_PER_HOUR buscas por hora do mesmo endereço de internet, contadas no
+// Supabase (vale para todas as instâncias do Worker): impede varrer uma lista de CPFs.
+async function customerLookupAllowed(req) {
+    const key = "customer_lookup_ip:" + crypto.createHash("sha256").update("monte-ip:" + clientIp(req)).digest("hex").slice(0, 40);
+    const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + key + "&select=value&limit=1", { method: "GET" });
+    const value = rows?.[0]?.value || {};
+    const fresh = !(Date.now() - Number(value.first_at || 0) < 60 * 60 * 1000);
+    const count = fresh ? 1 : Number(value.count || 0) + 1;
+    if (count > CUSTOMER_LOOKUP_MAX_PER_HOUR) return false;
+    await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
         method: "POST",
-        headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify({
-            from: RESEND_FROM_NAME + " <" + RESEND_FROM_EMAIL + ">",
-            to: [email],
-            subject: "Seu código MONTÊ: " + code,
-            text: "Seu código MONTÊ: " + code + "\n\nUse na sacola para preencher seus dados da última compra. Vale por 10 minutos.\nNão pediu? É só ignorar este e-mail.",
-            html,
-            tags: [{ name: "type", value: "customer_code" }]
-        })
+        headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({ key, value: { count, first_at: fresh ? Date.now() : Number(value.first_at) } })
     });
-    if (!response.ok) throw new Error("Resend API " + response.status + ": " + (await response.text()).slice(0, 300));
+    return true;
 }
 
-// 1) CPF → envia o código ao e-mail do cadastro (ou diz que não há cadastro).
-app.post("/api/clientes/codigo", customerLookupRateLimit, async (req, res) => {
+app.post("/api/clientes/buscar", customerLookupRateLimit, async (req, res) => {
     try {
-        const cpf = validCpf(req.body?.cpf);
-        if (!cpf) return res.status(400).json({ success: false, message: "Confira o CPF: ele precisa ter 11 números válidos." });
-        const now = Date.now();
-        const saved = await readCustomerCode(cpf);
-        const sends = (Array.isArray(saved?.sends) ? saved.sends : []).filter(at => now - Number(at) < 60 * 60 * 1000);
-        // Código enviado há pouco e ainda válido: não manda outro e-mail, só lembra para onde foi.
-        if (saved?.email && now - Number(saved.sent_at || 0) < CUSTOMER_CODE_RESEND_MS && now < Number(saved.expires_at || 0)) {
-            return res.json({ success: true, found: true, sent: true, email_hint: maskedEmail(saved.email) });
+        const cpf = safeString(req.body?.cpf).replace(/\D/g, "");
+        if (!isValidCpf(cpf)) return res.status(400).json({ success: false, message: "CPF inválido." });
+        if (!(await customerLookupAllowed(req))) {
+            return res.status(429).json({ success: false, message: "Muitas buscas seguidas. Preencha seus dados abaixo." });
         }
-        if (sends.length >= CUSTOMER_CODE_MAX_SENDS_PER_HOUR) {
-            return res.status(429).json({ success: false, message: "Muitos códigos pedidos para este CPF. Tente de novo em 1 hora ou preencha seus dados abaixo." });
+        let profile = await siteCustomerProfile(cpf);
+        if (!profile) {
+            try { profile = await olistCustomerProfile(cpf); }
+            catch (error) { console.error("Cliente — busca na Olist:", error.message); }
         }
-        const customer = await findReturningCustomer(cpf);
-        if (!customer) return res.json({ success: true, found: false });
-        if (!customer.email) return res.json({ success: true, found: true, sent: false });
-        const code = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
-        await writeCustomerCode(cpf, {
-            hash: customerCodeHash(cpf, code), source: customer.source, ref: customer.ref, email: customer.email,
-            attempts: 0, sent_at: now, expires_at: now + CUSTOMER_CODE_TTL_MS, sends: [...sends, now]
+        if (!profile) return res.json({ success: true, found: false });
+        await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
+            method: "POST",
+            headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+            body: JSON.stringify({ key: customerProfileKey(cpf), value: { profile, saved_at: Date.now() } })
         });
-        await sendCustomerCodeEmail(customer.email, code);
-        return res.json({ success: true, found: true, sent: true, email_hint: maskedEmail(customer.email) });
+        return res.json({
+            success: true,
+            found: true,
+            customer: maskedCustomerProfile(profile),
+            profile_token: createSignedToken({ purpose: "customer_profile", cpf }, CUSTOMER_PROFILE_TOKEN_TTL_MS)
+        });
     } catch (error) {
-        console.error("Cliente — envio do código:", error);
-        return res.status(502).json({ success: false, message: "Não foi possível enviar o código agora. Preencha seus dados abaixo." });
+        console.error("Cliente — busca pelo CPF:", error);
+        return res.status(502).json({ success: false, message: "Não foi possível buscar seu cadastro agora. Preencha seus dados abaixo." });
     }
 });
 
-// 2) CPF + código → dados para o checkout. Acertou: o código é apagado (vale uma vez).
-app.post("/api/clientes/confirmar", customerConfirmRateLimit, async (req, res) => {
-    try {
-        const cpf = validCpf(req.body?.cpf);
-        const code = safeString(req.body?.code).replace(/\D/g, "");
-        if (!cpf || code.length !== 6) return res.status(400).json({ success: false, message: "Digite o código de 6 números." });
-        const saved = await readCustomerCode(cpf);
-        if (!saved?.hash || Date.now() > Number(saved.expires_at || 0)) {
-            return res.status(400).json({ success: false, expired: true, message: "O código expirou. Toque em reenviar para receber outro." });
-        }
-        if (Number(saved.attempts || 0) >= CUSTOMER_CODE_MAX_ATTEMPTS) {
-            return res.status(429).json({ success: false, expired: true, message: "Muitas tentativas. Toque em reenviar para receber outro código." });
-        }
-        const expected = Buffer.from(String(saved.hash), "hex");
-        const given = Buffer.from(customerCodeHash(cpf, code), "hex");
-        if (expected.length !== given.length || !crypto.timingSafeEqual(expected, given)) {
-            const attempts = Number(saved.attempts || 0) + 1;
-            await writeCustomerCode(cpf, { ...saved, attempts });
-            const left = CUSTOMER_CODE_MAX_ATTEMPTS - attempts;
-            return res.status(400).json({ success: false, message: left > 0 ? "Código incorreto. Confira o e-mail e tente de novo." : "Código incorreto. Toque em reenviar para receber outro.", expired: left <= 0 });
-        }
-        await deleteCustomerCode(cpf);
-        const customer = await returningCustomerProfile(saved.source, saved.ref, cpf);
-        if (!customer) return res.status(404).json({ success: false, message: "Não encontramos mais esse cadastro. Preencha seus dados abaixo." });
-        return res.json({ success: true, customer });
-    } catch (error) {
-        console.error("Cliente — confirmação do código:", error);
-        return res.status(502).json({ success: false, message: "Não foi possível confirmar agora. Tente de novo ou preencha seus dados abaixo." });
+// Checkout: troca os campos que ainda estão escondidos pelos dados verdadeiros do cadastro.
+// Campo que a cliente digitou de novo fica como ela digitou.
+async function customerWithSavedProfile(customer, token) {
+    if (!customer || typeof customer !== "object") return customer;
+    const hidden = value => typeof value === "string" && value.includes(HIDDEN_MARK);
+    const address = customer.address && typeof customer.address === "object" ? customer.address : {};
+    if (![customer.email, customer.phone, address.number, address.complement].some(hidden)) return customer;
+    const data = token ? verifySignedToken(token) : null;
+    const cpf = safeString(customer.cpf).replace(/\D/g, "");
+    let profile = null;
+    if (data?.purpose === "customer_profile" && data.cpf === cpf) {
+        const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + customerProfileKey(cpf) + "&select=value&limit=1", { method: "GET" });
+        profile = rows?.[0]?.value?.profile || null;
     }
-});
+    const merged = { ...customer, address: { ...address } };
+    if (profile) {
+        const masked = maskedCustomerProfile(profile);
+        if (customer.email === masked.email) merged.email = profile.email;
+        if (customer.phone === masked.phone) {
+            merged.phone = "(" + profile.phone.slice(0, 2) + ") " + profile.phone.slice(2, 7) + "-" + profile.phone.slice(7);
+            merged.whatsapp_phone = profile.phone;
+        }
+        if (address.number === masked.address.number) merged.address.number = profile.address.number;
+        if (address.complement === masked.address.complement) merged.address.complement = profile.address.complement;
+    }
+    // Sobrou campo escondido (cadastro trocado ou chave vencida): a cliente digita de novo.
+    const fields = [["email", merged.email, "customerEmail", "e-mail"], ["phone", merged.phone, "customerPhone", "WhatsApp"],
+        ["number", merged.address.number, "customerNumber", "número do endereço"], ["complement", merged.address.complement, "customerComplement", "complemento"]];
+    const left = fields.find(([, value]) => hidden(value));
+    if (left) {
+        const error = new Error("Digite de novo seu " + left[3] + ".");
+        error.field = left[2];
+        throw error;
+    }
+    return merged;
+}
 
 /* =====================================================
    MINHAS COMPRAS — CONSULTA SEGURA POR PEDIDO + E-MAIL
