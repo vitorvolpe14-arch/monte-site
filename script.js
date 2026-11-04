@@ -4320,6 +4320,10 @@ async function lookupCustomerByCpf() {
 async function confirmCustomerProfile(kind, value) {
     const cpf = String(document.getElementById("customerCpf")?.value || "").replace(/\D/g, "");
     const signature = cpf + "|" + kind + "|" + value;
+    // Nada mais escondido (a cliente digitou o que faltava): a mensagem deixa de pedir o e-mail.
+    if (customerProfileToken && !confirmHint() && !document.getElementById("returningStatus")?.hidden) {
+        greetReturningCustomer(customerProfileName, "Confira seus dados antes de finalizar.");
+    }
     if (!customerProfileToken || !confirmHint() || signature === lastConfirmTried) return;
     lastConfirmTried = signature;
     try {
