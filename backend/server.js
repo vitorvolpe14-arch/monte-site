@@ -4,6 +4,7 @@ const express = require("express");
 const crypto = require("crypto");
 const path = require("path");
 const cors = require("cors");
+const { pixLinkDiscountPercent, isExpectedPixAmount, paidPriceKey } = require("./pix-discount.js");
 
 // Este servidor roda no Render (Node) e no Cloudflare Workers (nodejs_compat).
 // No Workers não há arquivos do projeto no disco nem timers fora de uma requisição:
@@ -107,6 +108,14 @@ const INFINITEPAY_API =
 const INFINITEPAY_HANDLE =
     process.env.INFINITEPAY_HANDLE ||
     "monte-64839705-0z9";
+
+// Chave do Checkout Integrado (inchk_..., segredo no Cloudflare). Com ela o link leva o
+// desconto do Pix pela própria InfinitePay (backend/pix-discount.js); sem ela, o desconto
+// vai no preço do link, como antes.
+const INFINITEPAY_API_KEY = safeString(process.env.INFINITEPAY_API_KEY);
+
+// orders.payment_options.mode dos pedidos com o desconto do Pix pela InfinitePay.
+const PIX_DISCOUNT_LINK_MODE = "infinitepay_pix_discount";
 
 // Quando o pagamento não abre: aviso curto, e "payment_unavailable" faz o site mostrar, junto do
 // botão de finalizar, o atalho para concluir a compra pelo WhatsApp. O motivo técnico fica no log.
@@ -5214,14 +5223,42 @@ async function reusablePendingCheckout(fingerprint) {
 }
 
 // Guarda o link de pagamento no pedido (para o mesmo toque devolver o mesmo link).
-async function rememberCheckoutUrl(orderId, url) {
+// Cria o link de pagamento na InfinitePay. A chave (X-Api-Key) só vai quando o link leva
+// options (desconto do Pix pela InfinitePay). Devolve { ok, status, data }.
+async function createInfinitePayLink(payload, apiKey = "") {
+    const startedAt = Date.now();
+    const response = await fetchWithTimeout(
+        INFINITEPAY_API,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                ...(apiKey ? { "X-Api-Key": apiKey } : {})
+            },
+            body: JSON.stringify(payload)
+        },
+        15000
+    );
+    const text = await response.text();
+    let data;
+    try {
+        data = text ? JSON.parse(text) : {};
+    } catch {
+        data = { raw: text };
+    }
+    console.log("📥 InfinitePay respondeu em", Date.now() - startedAt, "ms", "| status", response.status);
+    return { ok: response.ok, status: response.status, data };
+}
+
+async function rememberCheckoutUrl(orderId, url, extraFields = {}) {
     const checkoutUrl = infinitePayReceiptUrl(url);
     if (!orderId || !checkoutUrl) return;
     try {
         await supabaseRequest("orders?id=eq." + encodeURIComponent(orderId), {
             method: "PATCH",
             headers: { "Prefer": "return=minimal" },
-            body: JSON.stringify({ checkout_url: checkoutUrl })
+            body: JSON.stringify({ checkout_url: checkoutUrl, ...extraFields })
         });
     } catch (error) {
         console.error("Checkout: não foi possível guardar o link de pagamento:", error.message);
@@ -5987,30 +6024,56 @@ app.post(
             // unitário enviado à InfinitePay. Assim o total salvo no pedido é
             // exatamente o valor cobrado e o payment_check do webhook confere.
             const pixPercent = pixPercentOf(benefits);
-            const pixUnitCents = item => pixDiscountedUnitCents(item.price, pixPercent);
-            const productUnitCents = item => paymentMethod === "pix"
-                ? pixUnitCents(item)
-                : Math.round(Number(item.price) * 100);
-            const checkoutProductCents = productItems.reduce(
-                (sum, item) => sum + productUnitCents(item) * Number(item.quantity), 0
-            );
             const shippingCents = Math.round(shippingValue * 100);
+            const units = productItems.reduce((sum, item) => sum + Number(item.quantity), 0);
 
-            // Cupom: desconto nas peças, dividido entre as linhas em centavos inteiros.
+            // Valor de cada forma de pagamento. Cupom: desconto nas peças (no Pix, depois do
+            // desconto do Pix), dividido entre as linhas em centavos inteiros.
             // Cada item guarda o que foi cobrado (charged_units, já com Pix e cupom) para a
             // InfinitePay e a Olist: o percentual do Pix pode mudar no painel depois.
-            let couponCents = 0;
-            const lines = productItems.map(item => ({ quantity: Number(item.quantity), unitCents: productUnitCents(item) }));
-            let split = lines.map(line => [{ quantity: line.quantity, unit_cents: line.unitCents }]);
-            if (coupon) {
-                const units = productItems.reduce((sum, item) => sum + Number(item.quantity), 0);
-                couponCents = couponDiscountCents(coupon, checkoutProductCents, units);
-                split = splitCouponDiscount(lines, couponCents);
-            }
-            productItems.forEach((item, index) => { item.charged_units = split[index]; });
-            const chargedLines = item => item.charged_units;
+            const priceFor = method => {
+                const lines = productItems.map(item => ({
+                    quantity: Number(item.quantity),
+                    unitCents: method === "pix"
+                        ? pixDiscountedUnitCents(item.price, pixPercent)
+                        : Math.round(Number(item.price) * 100)
+                }));
+                const productCents = lines.reduce((sum, line) => sum + line.unitCents * line.quantity, 0);
+                const couponCents = coupon ? couponDiscountCents(coupon, productCents, units) : 0;
+                return {
+                    couponCents,
+                    totalCents: productCents - couponCents + shippingCents,
+                    split: coupon
+                        ? splitCouponDiscount(lines, couponCents)
+                        : lines.map(line => [{ quantity: line.quantity, unit_cents: line.unitCents }])
+                };
+            };
+            const prices = { pix: priceFor("pix"), credit_card: priceFor("credit_card") };
+            const chosenPrice = prices[paymentMethod];
 
-            const checkoutTotal = (checkoutProductCents - couponCents + shippingCents) / 100;
+            // Desconto do Pix pela própria InfinitePay (backend/pix-discount.js): o link sai com
+            // o preço do cartão e ela tira o desconto só se a cliente pagar no Pix. O pedido
+            // guarda os dois valores; o webhook usa o da forma que a cliente usou.
+            const pixLinkPercent = INFINITEPAY_API_KEY
+                ? pixLinkDiscountPercent(prices.credit_card.totalCents, prices.pix.totalCents)
+                : 0;
+            let pixDiscountLink = pixLinkPercent > 0 ? {
+                mode: PIX_DISCOUNT_LINK_MODE,
+                link_total: prices.credit_card.totalCents / 100,
+                pix_discount_percent: pixLinkPercent,
+                pix: { total: prices.pix.totalCents / 100, coupon_discount: prices.pix.couponCents / 100 },
+                credit_card: { total: prices.credit_card.totalCents / 100, coupon_discount: prices.credit_card.couponCents / 100 }
+            } : null;
+
+            productItems.forEach((item, index) => {
+                item.charged_units = chosenPrice.split[index];
+                if (pixDiscountLink) {
+                    item.charged_units_by_method = { pix: prices.pix.split[index], credit_card: prices.credit_card.split[index] };
+                }
+            });
+
+            const couponCents = chosenPrice.couponCents;
+            const checkoutTotal = chosenPrice.totalCents / 100;
 
             const savedOrders = await supabaseRequest("orders", {
                 method: "POST",
@@ -6036,6 +6099,7 @@ app.post(
                     whatsapp_tracking_opt_in: customer.whatsapp_updates === true,
                     whatsapp_tracking_status: customer.whatsapp_updates === true ? "pending" : "opted_out",
                     checkout_fingerprint: fingerprint,
+                    ...(pixDiscountLink ? { payment_options: pixDiscountLink } : {}),
                     ...(coupon ? { coupon_code: coupon.code, coupon_discount: couponCents / 100 } : {}),
                     items: orderLines
                 })
@@ -6097,376 +6161,89 @@ app.post(
             }
 
             /* =================================================
-               PIX — CHECKOUT INDEPENDENTE DA INFINITEPAY
-               O Pix usa um checkout próprio da InfinitePay.
-               O desconto do Pix incide somente nos produtos;
-               o frete permanece com o valor integral.
+               LINK DE PAGAMENTO DA INFINITEPAY (Pix e cartão)
+               A página da InfinitePay sempre oferece Pix e cartão.
+               Com o desconto do Pix pela InfinitePay, o link sai com o
+               preço cheio e ela tira o desconto só no Pix (só nas peças;
+               o frete fica integral). Sem a chave, o desconto vai no preço.
             ================================================= */
-            if (paymentMethod === "pix") {
-                const pixItems = productItems.flatMap(item => chargedLines(item).map(line => ({
-                    quantity: line.quantity,
-                    price: line.unit_cents,
-                    description: item.description
-                })));
-
-                if (shippingValue > 0) {
-                    pixItems.push({
-                        quantity: 1,
-                        price: shippingCents,
-                        description: shippingOption.name
-                    });
-                }
-
-                const pixPayload = {
-                    handle: INFINITEPAY_HANDLE,
-                    order_nsu: orderNsu,
-                    redirect_url:
-                        `${SITE_URL}/pagamento-sucesso?order_nsu=${encodeURIComponent(orderNsu)}&confirmation_token=${encodeURIComponent(createOrderConfirmationToken(orderNsu))}&payment_method=pix`,
-                    webhook_url:
-                        `${SITE_URL}/webhook-infinitepay`,
-                    items: pixItems,
-                    customer: {
-                        name: String(customer.name),
-                        email: String(customer.email),
-                        phone_number: formattedPhone
-                    },
-                    address: {
-                        cep: customer.address.cep || "",
-                        street: customer.address.street || "",
-                        neighborhood: customer.address.neighborhood || "",
-                        number: customer.address.number || "",
-                        complement: customer.address.complement || ""
-                    }
-                };
-
-                console.log("PIX — criando checkout independente na InfinitePay:", {
-                    order_nsu: orderNsu,
-                    amount: checkoutTotal
-                });
-
-                const pixResponse = await fetchWithTimeout(
-                    INFINITEPAY_API,
-                    {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Accept": "application/json"
-                        },
-                        body: JSON.stringify(pixPayload)
-                    },
-                    15000
-                );
-
-                const pixResponseText = await pixResponse.text();
-                let pixData;
-                try {
-                    pixData = pixResponseText ? JSON.parse(pixResponseText) : {};
-                } catch {
-                    pixData = { raw: pixResponseText };
-                }
-
-                if (!pixResponse.ok || !pixData?.url) {
-                    console.error("PIX — erro ao criar checkout InfinitePay:", pixResponse.status, pixData);
-                    await releaseCoupon();
-                    await closeFailedOrder();
-                    return res.status(pixResponse.ok ? 502 : pixResponse.status).json({
-                        success: false,
-                        payment_unavailable: true,
-                        message: CHECKOUT_FAILED_MESSAGE
-                    });
-                }
-
-                await rememberCheckoutUrl(savedOrder.id, pixData.url);
-                console.log("PIX — checkout independente criado:", orderNsu);
-
-                return res.status(200).json({
-                    success: true,
-                    pix_checkout: true,
-                    url: pixData.url,
-                    amount: checkoutTotal,
-                    order_nsu: orderNsu,
-                    order_code: String(orderCode),
-                    status: "pending"
-                });
-            }
-
-            /* =================================================
-               INFINITEPAY — CHECKOUT DE CARTÃO
-            ================================================= */
-
-            const infinitePayItems =
-                productItems.flatMap(item => chargedLines(item).map(line => ({
-                    quantity: line.quantity,
-                    price: line.unit_cents,
-                    description: item.description
-                })));
-
-            if (shippingValue > 0) {
-                infinitePayItems.push({
-                    quantity: 1,
-                    price: Math.round(shippingValue * 100),
-                    description: shippingOption.name
-                });
-            }
-
-            /* =================================================
-               PAYLOAD INFINITEPAY
-            ================================================= */
-
-            const payload = {
-
-                handle:
-                    INFINITEPAY_HANDLE,
-
-                order_nsu:
-                    orderNsu,
-
+            const isPix = paymentMethod === "pix";
+            const linkPayload = split => ({
+                handle: INFINITEPAY_HANDLE,
+                order_nsu: orderNsu,
                 redirect_url:
-                    `${SITE_URL}/pagamento-sucesso?order_nsu=${encodeURIComponent(orderNsu)}&confirmation_token=${encodeURIComponent(createOrderConfirmationToken(orderNsu))}`,
-
+                    `${SITE_URL}/pagamento-sucesso?order_nsu=${encodeURIComponent(orderNsu)}&confirmation_token=${encodeURIComponent(createOrderConfirmationToken(orderNsu))}` +
+                    (isPix ? "&payment_method=pix" : ""),
                 webhook_url:
                     `${SITE_URL}/webhook-infinitepay`,
-
-                items:
-                    infinitePayItems,
-
+                items: [
+                    ...productItems.flatMap((item, index) => split[index].map(line => ({
+                        quantity: line.quantity,
+                        price: line.unit_cents,
+                        description: item.description
+                    }))),
+                    ...(shippingValue > 0 ? [{ quantity: 1, price: shippingCents, description: shippingOption.name }] : [])
+                ],
                 customer: {
-
-                    name:
-                        String(
-                            customer.name
-                        ),
-
-                    email:
-                        String(
-                            customer.email
-                        ),
-
-                    phone_number:
-                        formattedPhone
-
-                }
-
-            };
-
-
-            /* =================================================
-               ENDEREÇO PARA INFINITEPAY
-            ================================================= */
-
-            if (
-                customer.address
-            ) {
-
-                payload.address = {
-
-                    cep:
-                        customer.address.cep ||
-                        "",
-
-                    street:
-                        customer.address.street ||
-                        "",
-
-                    neighborhood:
-                        customer.address.neighborhood ||
-                        "",
-
-                    number:
-                        customer.address.number ||
-                        "",
-
-                    complement:
-                        customer.address.complement ||
-                        ""
-
-                };
-
-            }
-
-
-            /* =================================================
-               LOG
-            ================================================= */
-
-            console.log(
-                "📦 Pedido salvo:",
-                orderNsu
-            );
-
-            console.log(
-                "💰 Valor do frete:",
-                shippingValue
-            );
-
-            console.log(
-                "🛍️ Quantidade de produtos:",
-                productItems.length
-            );
-
-            console.log(
-                "📤 Enviando checkout para InfinitePay..."
-            );
-
-
-            /* =================================================
-               CHAMADA REAL DA INFINITEPAY
-            ================================================= */
-
-            const infinitePayStartedAt = Date.now();
-            const response = await fetchWithTimeout(
-                INFINITEPAY_API,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Accept": "application/json"
-                    },
-                    body: JSON.stringify(payload)
+                    name: String(customer.name),
+                    email: String(customer.email),
+                    phone_number: formattedPhone
                 },
-                15000
-            );
-            console.log("📥 InfinitePay respondeu em", Date.now() - infinitePayStartedAt, "ms");
+                address: {
+                    cep: customer.address.cep || "",
+                    street: customer.address.street || "",
+                    neighborhood: customer.address.neighborhood || "",
+                    number: customer.address.number || "",
+                    complement: customer.address.complement || ""
+                }
+            });
 
+            console.log("📤 Criando o link de pagamento na InfinitePay:", {
+                order_nsu: orderNsu,
+                payment_method: paymentMethod,
+                amount: checkoutTotal,
+                pix_discount_percent: pixDiscountLink ? pixDiscountLink.pix_discount_percent : null
+            });
 
-            /* =================================================
-               LÊ RESPOSTA
-            ================================================= */
+            let link = pixDiscountLink
+                ? await createInfinitePayLink({
+                    ...linkPayload(prices.credit_card.split),
+                    options: { discounts: { pix: pixDiscountLink.pix_discount_percent } }
+                }, INFINITEPAY_API_KEY)
+                : await createInfinitePayLink(linkPayload(chosenPrice.split));
 
-            const responseText =
-                await response.text();
-
-
-            let data;
-
-
-            try {
-
-                data =
-                    JSON.parse(
-                        responseText
-                    );
-
-            } catch {
-
-                data = {
-
-                    raw:
-                        responseText
-
-                };
-
+            // A InfinitePay recusou o link com o desconto (ex.: chave apagada): o pagamento abre
+            // do mesmo jeito, com o desconto já no preço da forma escolhida no site.
+            let discountLinkRefused = false;
+            if (pixDiscountLink && link.status >= 400 && link.status < 500) {
+                console.error("⚠️ InfinitePay recusou o desconto do Pix no link; o desconto vai no preço:", orderNsu, link.status, link.data);
+                discountLinkRefused = true;
+                pixDiscountLink = null;
+                link = await createInfinitePayLink(linkPayload(chosenPrice.split));
             }
 
-
-            /* =================================================
-               ERRO INFINITEPAY
-            ================================================= */
-
-            if (
-                !response.ok
-            ) {
-
-                console.error(
-                    "❌ InfinitePay respondeu com erro."
-                );
-
-                console.error(
-                    "Status:",
-                    response.status
-                );
-
-                console.error(
-                    "Resposta:",
-                    data
-                );
-
+            if (!link.ok || !link.data?.url) {
+                console.error("❌ InfinitePay não criou o link de pagamento:", orderNsu, link.status, link.data);
                 await releaseCoupon();
                 await closeFailedOrder();
-
-
-                return res.status(
-                    response.status
-                ).json({
-
-                    success:
-                        false,
-
-                    payment_unavailable:
-                        true,
-
-                    message:
-                        CHECKOUT_FAILED_MESSAGE
-
+                return res.status(link.ok ? 502 : link.status).json({
+                    success: false,
+                    payment_unavailable: true,
+                    message: CHECKOUT_FAILED_MESSAGE
                 });
-
             }
 
-
-            /* =================================================
-               VERIFICA URL
-            ================================================= */
-
-            if (
-                !data ||
-                !data.url
-            ) {
-
-                console.error(
-                    "❌ InfinitePay não retornou URL."
-                );
-
-                console.error(
-                    data
-                );
-
-                await releaseCoupon();
-                await closeFailedOrder();
-
-
-                return res.status(502).json({
-
-                    success:
-                        false,
-
-                    payment_unavailable:
-                        true,
-
-                    message:
-                        CHECKOUT_FAILED_MESSAGE
-
-                });
-
-            }
-
-
-            /* =================================================
-               SUCESSO
-            ================================================= */
-
-            await rememberCheckoutUrl(savedOrder.id, data.url);
-
-            console.log(
-                "✅ Checkout InfinitePay criado."
-            );
-
-            console.log(
-                "🔑 Order NSU:",
-                orderNsu
-            );
-
+            await rememberCheckoutUrl(savedOrder.id, link.data.url, discountLinkRefused ? { payment_options: null } : {});
+            console.log("✅ Link de pagamento criado:", orderNsu, pixDiscountLink ? "(desconto do Pix pela InfinitePay)" : "");
 
             return res.status(200).json({
-
-                success:
-                    true,
-
-                url:
-                    data.url,
-
-                order_nsu:
-                    orderNsu
-
+                success: true,
+                ...(isPix ? { pix_checkout: true } : {}),
+                url: link.data.url,
+                amount: checkoutTotal,
+                order_nsu: orderNsu,
+                order_code: String(orderCode),
+                status: "pending"
             });
 
 
@@ -6512,7 +6289,9 @@ app.post(
    WEBHOOK DE PAGAMENTO
 ===================================================== */
 
-async function verifyInfinitePayPayment({ orderNsu, transactionNsu, invoiceSlug, expectedAmount }) {
+// expectedAmount: valor original do link. pixAmount (pedido com o desconto do Pix pela
+// InfinitePay): no Pix o amount também pode vir já com o desconto.
+async function verifyInfinitePayPayment({ orderNsu, transactionNsu, invoiceSlug, expectedAmount, pixAmount = null }) {
     const response = await fetch("https://api.checkout.infinitepay.io/payment_check", {
         method: "POST",
         headers: {
@@ -6545,8 +6324,10 @@ async function verifyInfinitePayPayment({ orderNsu, transactionNsu, invoiceSlug,
 
     const returnedAmount = Number(data.amount);
     const expectedCents = Math.round(Number(expectedAmount || 0) * 100);
+    const matchesPix = pixAmount !== null && data.capture_method === "pix" &&
+        isExpectedPixAmount(returnedAmount, Math.round(Number(pixAmount) * 100), expectedCents);
 
-    if (!Number.isFinite(returnedAmount) || returnedAmount !== expectedCents) {
+    if (!Number.isFinite(returnedAmount) || (returnedAmount !== expectedCents && !matchesPix)) {
         throw new Error(
             `Valor do pagamento divergente. Esperado: ${expectedCents} centavos; recebido: ${returnedAmount} centavos.`
         );
@@ -6644,11 +6425,16 @@ app.post(
 
             // A InfinitePay recomenda consultar payment_check para confirmar
             // que o order_nsu/transaction_nsu/slug correspondem a um pagamento pago.
+            // Pedido com o desconto do Pix pela InfinitePay: o link tem o preço cheio e o pedido
+            // guarda o valor do Pix e o do cartão (orders.payment_options).
+            const pixDiscountLink = order.payment_options?.mode === PIX_DISCOUNT_LINK_MODE ? order.payment_options : null;
+
             const verification = await verifyInfinitePayPayment({
                 orderNsu,
                 transactionNsu,
                 invoiceSlug,
-                expectedAmount: order.total
+                expectedAmount: pixDiscountLink ? pixDiscountLink.link_total : order.total,
+                pixAmount: pixDiscountLink ? pixDiscountLink.pix.total : null
             });
 
             if (!verification.verified) {
@@ -6662,9 +6448,33 @@ app.post(
             const payment = verification.data;
             const paidAmount = Number(payment.paid_amount ?? 0);
             const resolvedPaymentMethod = payment.capture_method === "pix" ? "pix" : "credit_card";
-            // Pedido com o desconto do Pix pago com cartão no link da InfinitePay: a venda vale
+            // Link antigo, com o desconto do Pix já no preço, pago com cartão: a venda vale
             // (o valor pago confere), mas o aviso de venda destaca para a loja decidir.
-            const pixPaidByCard = safeString(order.payment_method).toLowerCase() === "pix" && resolvedPaymentMethod !== "pix";
+            const pixPaidByCard = !pixDiscountLink && safeString(order.payment_method).toLowerCase() === "pix" && resolvedPaymentMethod !== "pix";
+
+            // Desconto do Pix pela InfinitePay: o pedido fica com o valor da forma que a cliente
+            // usou (Pix com desconto nas peças; cartão com preço cheio) e cada peça com o que foi
+            // cobrado, para a Olist.
+            let pricedFields = {};
+            let couponDiscountChanged = false;
+            if (pixDiscountLink) {
+                const priceKey = paidPriceKey(pixDiscountLink, payment);
+                const paidPrice = pixDiscountLink[priceKey];
+                if (resolvedPaymentMethod === "pix" && priceKey !== "pix") {
+                    console.warn("⚠️ Pix sem o desconto da InfinitePay: o pedido fica com o preço cheio.", orderNsu, payment.amount, payment.paid_amount);
+                }
+                pricedFields = {
+                    total: paidPrice.total,
+                    items: (Array.isArray(order.items) ? order.items : []).map(item =>
+                        item?.charged_units_by_method?.[priceKey]
+                            ? { ...item, charged_units: item.charged_units_by_method[priceKey] }
+                            : item
+                    ),
+                    ...(order.coupon_code ? { coupon_discount: paidPrice.coupon_discount } : {})
+                };
+                couponDiscountChanged = Boolean(order.coupon_code) && Number(order.coupon_discount) !== Number(paidPrice.coupon_discount);
+                Object.assign(order, pricedFields);
+            }
             // Comprovante só do domínio da InfinitePay (o corpo do aviso pode ser forjado).
             const receiptUrl = infinitePayReceiptUrl(payment.receipt_url || webhook.receipt_url);
 
@@ -6742,12 +6552,22 @@ app.post(
                             ? paidAmount / 100
                             : null,
                         paid_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString()
+                        updated_at: new Date().toISOString(),
+                        ...pricedFields
                     })
                 }
             );
 
             order.payment_method = resolvedPaymentMethod;
+
+            // O cupom fica registrado com o desconto da forma que a cliente usou.
+            if (couponDiscountChanged) {
+                await supabaseRequest(`coupon_redemptions?order_id=eq.${encodeURIComponent(order.id)}`, {
+                    method: "PATCH",
+                    headers: { "Prefer": "return=minimal" },
+                    body: JSON.stringify({ discount_amount: pricedFields.coupon_discount })
+                }).catch(error => console.error("Cupom: não foi possível atualizar o desconto do pedido", orderNsu, error.message));
+            }
 
             const confirmationEmail = await ensureOrderConfirmationEmail({
                 ...order,
