@@ -4612,10 +4612,36 @@ const couponRateLimit = createRateLimiter({
 
 // A sacola confere o cupom antes do pagamento para mostrar o desconto.
 // O valor cobrado é sempre recalculado no /api/criar-checkout.
+// Tentativas erradas de cupom por endereço de internet, contadas no Supabase (o limite em
+// memória vale só para uma instância do Worker): impede adivinhar códigos em massa.
+const COUPON_MAX_FAILURES_PER_HOUR = 10;
+const couponFailKey = req => "coupon_fail_ip:" + crypto.createHash("sha256").update("monte-ip:" + clientIp(req)).digest("hex").slice(0, 40);
+async function couponFailures(req) {
+    const key = couponFailKey(req);
+    const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + key + "&select=value&limit=1", { method: "GET" });
+    const value = rows?.[0]?.value || {};
+    const fresh = !(Date.now() - Number(value.first_at || 0) < 60 * 60 * 1000);
+    const count = fresh ? 0 : Number(value.count || 0);
+    return { key, count, first_at: fresh ? Date.now() : Number(value.first_at), blocked: count >= COUPON_MAX_FAILURES_PER_HOUR };
+}
+async function recordCouponFailure(state) {
+    await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({ key: state.key, value: { count: state.count + 1, first_at: state.first_at } })
+    });
+}
+
 app.post("/api/cupom", couponRateLimit, async (req, res) => {
     try {
+        // Sem o Supabase para contar, o cupom continua sendo conferido (sem o limite).
+        const failures = await couponFailures(req).catch(() => null);
+        if (failures?.blocked) {
+            return res.status(429).json({ success: false, message: "Muitas tentativas de cupom. Tente de novo mais tarde ou fale com a MONTÊ pelo WhatsApp." });
+        }
         const code = normalizeCouponCode(req.body?.code);
         if (!isValidCouponCode(code)) {
+            if (failures) await recordCouponFailure(failures).catch(() => {});
             return res.status(400).json({ success: false, message: couponMessage("invalid") });
         }
         const cpf = typeof req.body?.cpf === "string" ? req.body.cpf.replace(/\D/g, "") : "";
@@ -4626,6 +4652,7 @@ app.post("/api/cupom", couponRateLimit, async (req, res) => {
             email.length <= 160 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null
         );
         if (!result?.ok) {
+            if (failures) await recordCouponFailure(failures).catch(() => {});
             return res.status(400).json({ success: false, message: couponMessage(result?.reason) });
         }
         return res.json({
@@ -5079,7 +5106,7 @@ app.post("/api/newsletter", newsletterRateLimit, async (req, res) => {
         }
 
         const email = safeString(req.body?.email).trim().toLowerCase();
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        if (email.length > 160 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
             return res.status(400).json({ success: false, message: "Informe um e-mail válido." });
         }
 
@@ -6841,7 +6868,9 @@ app.post(
    Quando a cliente digita o e-mail (ou o WhatsApp) do cadastro, tudo
    aparece completo para ela conferir (POST /api/clientes/conferir).
 ===================================================== */
-const CUSTOMER_PROFILE_TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
+// O cadastro guardado (e a chave que aponta para ele) vale 180 dias; depois sai na limpeza
+// periódica (purgeExpiredAnalytics), para não guardar dados pessoais além do necessário.
+const CUSTOMER_PROFILE_TOKEN_TTL_MS = 180 * 24 * 60 * 60 * 1000;
 const CUSTOMER_LOOKUP_MAX_PER_HOUR = 20;
 const HIDDEN_MARK = "•";
 const customerLookupRateLimit = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 15 });
@@ -7950,11 +7979,29 @@ async function refreshOlistAccess() {
 // (com o contato digitado no checkout) por 6 meses. Os eventos saem junto com a sessão (cascata).
 const ANALYTICS_RETENTION_MS = 395 * 24 * 60 * 60 * 1000;
 const CART_SNAPSHOT_RETENTION_MS = 183 * 24 * 60 * 60 * 1000;
+// Registros do kv_store que vencem: o cadastro da cliente guardado pela busca do CPF (dados
+// pessoais, 180 dias) e os contadores de tentativas (bloqueios de 15 min a 1 hora). Os campos
+// de data são milissegundos com 13 dígitos, então a comparação como texto funciona.
+const KV_RETENTION = [
+    ["customer_profile", "saved_at", () => CUSTOMER_PROFILE_TOKEN_TTL_MS],
+    ["customer_lookup_ip", "first_at", () => 2 * 60 * 60 * 1000],
+    ["customer_confirm", "first_at", () => 2 * 60 * 60 * 1000],
+    ["coupon_fail_ip", "first_at", () => 2 * 60 * 60 * 1000],
+    ["order_lookup", "first_at", () => 2 * 60 * 60 * 1000],
+    ["admin_login", "lastAt", () => 24 * 60 * 60 * 1000]
+];
 async function purgeExpiredAnalytics() {
     const minimal = { method: "DELETE", headers: { Prefer: "return=minimal" } };
     await supabaseRequest("cart_snapshots?updated_at=lt." + isoAgo(CART_SNAPSHOT_RETENTION_MS), minimal);
     await supabaseRequest("site_sessions?last_seen_at=lt." + isoAgo(ANALYTICS_RETENTION_MS), minimal);
     await supabaseRequest("short_links?expires_at=lt." + encodeURIComponent(new Date().toISOString()), minimal);
+    for (const [prefix, field, ttl] of KV_RETENTION) {
+        await supabaseRequest("kv_store_48db9b7e?key=like." + encodeURIComponent(prefix + ":") + "*" +
+            "&value->>" + field + "=lt." + (Date.now() - ttl()), minimal)
+            .catch(error => console.error("Limpeza do kv (" + prefix + "):", error.message));
+    }
+    // Códigos por e-mail da versão anterior da busca pelo CPF (não são mais usados).
+    await supabaseRequest("kv_store_48db9b7e?key=like." + encodeURIComponent("customer_code:") + "*", minimal).catch(() => {});
 }
 
 async function runScheduledTask(cron) {
