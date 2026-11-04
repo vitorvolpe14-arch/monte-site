@@ -1618,6 +1618,9 @@ function openCart() {
 
     lockPageScroll();
 
+    // Cliente que já comprou neste aparelho: a sacola abre com os dados preenchidos.
+    fillSavedCheckoutProfile();
+
 }
 
 
@@ -2515,6 +2518,9 @@ async function checkout() {
             throw failure;
         }
 
+        // Pedido criado: este aparelho guarda os dados para a próxima compra vir preenchida.
+        rememberCheckoutProfile({name,email,phone:whatsappNumber,cpf:cpfDigits,address:{cep:cep.replace(/\D/g,""),street,number,complement:complement||"",neighborhood,city,state}});
+
         if(paymentMethod==="pix"&&data?.pix_checkout&&data?.url){
             closeCart();
             let pixCheckoutUrl;
@@ -3121,13 +3127,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const cpfInput = document.getElementById("customerCpf");
     if (cpfInput) {
-        cpfInput.addEventListener("input", () => {
-            const digits = cpfInput.value.replace(/\D/g, "").slice(0, 11);
-            cpfInput.value = digits
-                .replace(/(\d{3})(\d)/, "$1.$2")
-                .replace(/(\d{3})(\d)/, "$1.$2")
-                .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-        });
+        cpfInput.addEventListener("input", () => { cpfInput.value = formatCpfTyping(cpfInput.value); });
     }
 });
 
@@ -3771,7 +3771,10 @@ const CHECKOUT_RULES = {
     customerNumber: v => v.trim().length > 0,
     customerNeighborhood: v => v.trim().length > 1,
     customerCity: v => v.trim().length > 1,
-    customerState: v => /^[A-Za-z]{2}$/.test(v.trim())
+    customerState: v => /^[A-Za-z]{2}$/.test(v.trim()),
+    // "Já comprou na MONTÊ?": CPF e código (não entram nas etapas do checkout).
+    returningCpf: v => v.replace(/\D/g, "").length === 11,
+    returningCode: v => v.replace(/\D/g, "").length === 6
 };
 
 // E-mail com erro comum de digitação ("…@gmailcom", "gmail.con", "hotmial.com"): sugere a
@@ -4135,6 +4138,227 @@ function browseNovidades() {
     document.getElementById("novidades")?.scrollIntoView({ behavior: "smooth" });
 }
 
+/* =====================================================
+   CLIENTE QUE JÁ COMPROU — DADOS PREENCHIDOS NA SACOLA
+   1) Neste aparelho: depois de uma compra (ou do código abaixo), os
+      dados ficam guardados aqui e a sacola abre já preenchida.
+   2) Em outro aparelho: a cliente informa o CPF, recebe um código no
+      e-mail do cadastro (última compra paga no site ou contato da Olist)
+      e, com ele, os dados são preenchidos. Sem o código, nada aparece.
+===================================================== */
+const CHECKOUT_PROFILE_KEY = "monte_checkout_profile";
+const CHECKOUT_PROFILE_MAX_AGE = 365 * 24 * 60 * 60 * 1000;
+const PROFILE_FIELDS = {
+    customerName: p => p.name,
+    customerEmail: p => p.email,
+    customerPhone: p => p.phone ? formatPhoneTyping(p.phone) : "",
+    customerCpf: p => formatCpfTyping(p.cpf),
+    customerCep: p => { const d = String(p.address?.cep || "").replace(/\D/g, ""); return d.length === 8 ? d.slice(0, 5) + "-" + d.slice(5) : d; },
+    customerStreet: p => p.address?.street,
+    customerNumber: p => p.address?.number,
+    customerComplement: p => p.address?.complement,
+    customerNeighborhood: p => p.address?.neighborhood,
+    customerCity: p => p.address?.city,
+    customerState: p => String(p.address?.state || "").toUpperCase()
+};
+let returningCpfDigits = "";
+
+function formatCpfTyping(value) {
+    return String(value || "").replace(/\D/g, "").slice(0, 11)
+        .replace(/(\d{3})(\d)/, "$1.$2")
+        .replace(/(\d{3})(\d)/, "$1.$2")
+        .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+}
+
+function readCheckoutProfile() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(CHECKOUT_PROFILE_KEY) || "null");
+        if (saved?.v === 1 && Date.now() - Number(saved.saved_at) < CHECKOUT_PROFILE_MAX_AGE && saved.cpf) return saved;
+    } catch {}
+    return null;
+}
+
+function rememberCheckoutProfile(profile) {
+    try { localStorage.setItem(CHECKOUT_PROFILE_KEY, JSON.stringify({ v: 1, saved_at: Date.now(), ...profile })); } catch {}
+}
+
+function setReturningView(view, text) {
+    ["returningAsk", "returningCodeBox", "returningDone"].forEach(id => {
+        const box = document.getElementById(id);
+        if (box) box.hidden = id !== view;
+    });
+    if (view === "returningDone") {
+        const done = document.getElementById("returningDoneText");
+        if (done) done.textContent = text || "";
+    }
+    if (view === "returningCodeBox") {
+        const codeText = document.getElementById("returningCodeText");
+        if (codeText) codeText.textContent = text || "";
+    }
+}
+
+function setReturningStatus(message = "", error = false) {
+    const status = document.getElementById("returningStatus");
+    if (!status) return;
+    status.textContent = message;
+    status.classList.toggle("is-error", !!error);
+}
+
+// Preenche os campos (só os vazios, a não ser com overwrite) e recalcula o frete.
+function fillCheckoutProfile(profile, { overwrite = false } = {}) {
+    let filled = 0;
+    Object.entries(PROFILE_FIELDS).forEach(([id, read]) => {
+        const input = document.getElementById(id);
+        const value = String(read(profile) || "").trim();
+        if (!input || !value || (!overwrite && input.value.trim())) return;
+        input.value = value;
+        refreshCheckoutField(input);
+        filled++;
+    });
+    renderEmailSuggestion();
+    if (filled) updateShipping();
+    updateCheckoutProgress();
+    return filled;
+}
+
+function checkoutFieldsEmpty() {
+    return [...CHECKOUT_STEP_FIELDS.data, ...CHECKOUT_STEP_FIELDS.delivery].every(id => !(document.getElementById(id)?.value || "").trim());
+}
+
+// Ao abrir a sacola: dados guardados neste aparelho entram sozinhos (se a cliente ainda não digitou nada).
+function fillSavedCheckoutProfile() {
+    const profile = readCheckoutProfile();
+    if (!profile || !cart.length || !checkoutFieldsEmpty()) return;
+    if (!fillCheckoutProfile(profile)) return;
+    const firstName = String(profile.name || "").trim().split(/\s+/)[0];
+    setReturningView("returningDone", (firstName ? `Olá, ${firstName}! ` : "") + "Preenchemos com os dados da sua última compra. Confira antes de finalizar.");
+    setReturningStatus("");
+}
+
+async function requestReturningCode(resend = false) {
+    const input = document.getElementById("returningCpf");
+    const button = document.getElementById("returningCpfButton");
+    const digits = resend === true ? returningCpfDigits : String(input?.value || "").replace(/\D/g, "");
+    if (digits.length !== 11) {
+        input?.closest(".field")?.classList.add("is-invalid");
+        setReturningStatus("Digite os 11 números do seu CPF.", true);
+        input?.focus();
+        return;
+    }
+    returningCpfDigits = digits;
+    if (button) button.disabled = true;
+    setReturningStatus(resend === true ? "Reenviando o código..." : "Procurando seu cadastro...");
+    try {
+        const response = await fetch("/api/clientes/codigo", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify({ cpf: digits })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success) throw new Error(data.message || "Não foi possível buscar agora. Preencha seus dados abaixo.");
+        if (!data.found) {
+            setReturningStatus("Não encontramos compras com este CPF. É só preencher seus dados abaixo.");
+            const cpfField = document.getElementById("customerCpf");
+            if (cpfField && !cpfField.value.trim()) { cpfField.value = formatCpfTyping(digits); refreshCheckoutField(cpfField); updateCheckoutProgress(); }
+            return;
+        }
+        if (!data.sent) {
+            setReturningStatus("Encontramos seu cadastro, mas ele não tem e-mail para confirmarmos que é você. Preencha seus dados abaixo.");
+            return;
+        }
+        setReturningView("returningCodeBox", `Enviamos um código de 6 números para ${data.email_hint}. Confira também a caixa de spam.`);
+        setReturningStatus("");
+        const code = document.getElementById("returningCode");
+        if (code) { code.value = ""; code.focus(); }
+    } catch (error) {
+        setReturningStatus(error.message || "Sem conexão. Confira sua internet e tente novamente.", true);
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
+
+function resendReturningCode() {
+    return requestReturningCode(true);
+}
+
+async function confirmReturningCode() {
+    const input = document.getElementById("returningCode");
+    const button = document.getElementById("returningCodeButton");
+    const code = String(input?.value || "").replace(/\D/g, "");
+    if (code.length !== 6) {
+        setReturningStatus("Digite o código de 6 números que chegou no seu e-mail.", true);
+        input?.focus();
+        return;
+    }
+    if (button) button.disabled = true;
+    setReturningStatus("Conferindo...");
+    try {
+        const response = await fetch("/api/clientes/confirmar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify({ cpf: returningCpfDigits, code })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success || !data.customer) throw new Error(data.message || "Não foi possível confirmar agora.");
+        fillCheckoutProfile(data.customer, { overwrite: true });
+        rememberCheckoutProfile(data.customer);
+        const firstName = String(data.customer.name || "").trim().split(/\s+/)[0];
+        setReturningView("returningDone", (firstName ? `Pronto, ${firstName}! ` : "Pronto! ") + "Preenchemos seus dados. Confira antes de finalizar.");
+        setReturningStatus("");
+    } catch (error) {
+        setReturningStatus(error.message || "Sem conexão. Confira sua internet e tente novamente.", true);
+        if (input) { input.value = ""; input.focus(); }
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
+
+function resetReturningCustomer() {
+    returningCpfDigits = "";
+    const cpf = document.getElementById("returningCpf");
+    if (cpf) { cpf.value = ""; cpf.closest(".field")?.classList.remove("is-valid", "is-invalid"); }
+    setReturningView("returningAsk");
+    setReturningStatus("");
+    cpf?.focus();
+}
+
+// "Não é você?": apaga os dados deste aparelho e limpa os campos.
+function forgetReturningCustomer() {
+    try { localStorage.removeItem(CHECKOUT_PROFILE_KEY); } catch {}
+    Object.keys(PROFILE_FIELDS).forEach(id => {
+        const input = document.getElementById(id);
+        if (!input) return;
+        input.value = "";
+        input.closest(".field")?.classList.remove("is-valid", "is-invalid");
+    });
+    updateShipping();
+    updateCheckoutProgress();
+    resetReturningCustomer();
+    setReturningStatus("Dados apagados deste aparelho.");
+}
+
+(function setupReturningCustomer() {
+    const start = () => {
+        const cpf = document.getElementById("returningCpf");
+        const code = document.getElementById("returningCode");
+        cpf?.addEventListener("input", () => { cpf.value = formatCpfTyping(cpf.value); setReturningStatus(""); });
+        code?.addEventListener("input", () => {
+            code.value = code.value.replace(/\D/g, "").slice(0, 6);
+            // Código colado ou digitado por inteiro: confere sozinho.
+            if (code.value.length === 6) confirmReturningCode();
+        });
+        [[cpf, requestReturningCode], [code, confirmReturningCode]].forEach(([input, action]) => {
+            input?.addEventListener("keydown", event => {
+                if (event.key !== "Enter") return;
+                event.preventDefault();
+                action();
+            });
+        });
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start, { once: true });
+    else start();
+})();
+
 registerClickActions({
     applyCoupon, browseNovidades, chooseGift, pickGiftProduct, changeQuantity, checkout, closeCart, closeCartOutside, closeMobileMenu,
     closeProductImageLightbox, closeProductModal, closeSearch, goToNovidades, navigateProductLightbox,
@@ -4142,7 +4366,8 @@ registerClickActions({
     openWhatsAppReservation, previousCategoryPage, previousCollectionPage, previousNewPage,
     previousSalePage, previousSlide, removeCoupon, removeFromCart, toggleMobileMenu, updateItemQuantity,
     acceptCookies, rejectCookies, customizeCookies, saveCookieChoices, openCookiePreferences,
-    applyEmailSuggestion
+    applyEmailSuggestion, requestReturningCode, resendReturningCode, confirmReturningCode,
+    resetReturningCustomer, forgetReturningCustomer
 });
 
 // A caixa "Guardar sacola" saiu do site: apaga o número que ela tinha guardado neste aparelho.
