@@ -110,8 +110,8 @@ const INFINITEPAY_HANDLE =
     "monte-64839705-0z9";
 
 // Chave do Checkout Integrado (inchk_..., segredo no Cloudflare). Com ela o link leva o
-// desconto do Pix pela própria InfinitePay (backend/pix-discount.js); sem ela, o desconto
-// vai no preço do link, como antes.
+// desconto do Pix pela própria InfinitePay (backend/pix-discount.js), vale por 24 horas e
+// aceita um pagamento só; sem ela, o desconto vai no preço do link, como antes.
 const INFINITEPAY_API_KEY = safeString(process.env.INFINITEPAY_API_KEY);
 
 // orders.payment_options.mode dos pedidos com o desconto do Pix pela InfinitePay.
@@ -5250,6 +5250,13 @@ async function reusablePendingCheckout(fingerprint) {
 }
 
 // Guarda o link de pagamento no pedido (para o mesmo toque devolver o mesmo link).
+// Prazo do link de pagamento (options.valid_until). Dentro do prazo do pedido pendente
+// (PENDING_ORDER_EXPIRE_MS); os lembretes levam a cliente para a sacola, não para o link.
+const INFINITEPAY_LINK_VALID_MS = 24 * 60 * 60 * 1000;
+function infinitePayLinkValidUntil(now = Date.now()) {
+    return new Date(now + INFINITEPAY_LINK_VALID_MS).toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
 // Cria o link de pagamento na InfinitePay. A chave (X-Api-Key) só vai quando o link leva
 // options (desconto do Pix pela InfinitePay). Devolve { ok, status, data }.
 async function createInfinitePayLink(payload, apiKey = "") {
@@ -6232,19 +6239,27 @@ app.post(
                 pix_discount_percent: pixDiscountLink ? pixDiscountLink.pix_discount_percent : null
             });
 
-            let link = pixDiscountLink
+            // Com a chave, o link vale por pouco tempo e aceita um pagamento só: a InfinitePay não
+            // deixa cancelar links, e sem prazo eles valem para sempre, com o preço da época.
+            const linkOptions = INFINITEPAY_API_KEY ? {
+                single_payment: true,
+                valid_until: infinitePayLinkValidUntil(),
+                ...(pixDiscountLink ? { discounts: { pix: pixDiscountLink.pix_discount_percent } } : {})
+            } : null;
+
+            let link = linkOptions
                 ? await createInfinitePayLink({
-                    ...linkPayload(prices.credit_card.split),
-                    options: { discounts: { pix: pixDiscountLink.pix_discount_percent } }
+                    ...linkPayload(pixDiscountLink ? prices.credit_card.split : chosenPrice.split),
+                    options: linkOptions
                 }, INFINITEPAY_API_KEY)
                 : await createInfinitePayLink(linkPayload(chosenPrice.split));
 
-            // A InfinitePay recusou o link com o desconto (ex.: chave apagada): o pagamento abre
-            // do mesmo jeito, com o desconto já no preço da forma escolhida no site.
+            // A InfinitePay recusou o link com as options (ex.: chave apagada): o pagamento abre
+            // do mesmo jeito, sem prazo e com o desconto já no preço da forma escolhida no site.
             let discountLinkRefused = false;
-            if (pixDiscountLink && link.status >= 400 && link.status < 500) {
-                console.error("⚠️ InfinitePay recusou o desconto do Pix no link; o desconto vai no preço:", orderNsu, link.status, link.data);
-                discountLinkRefused = true;
+            if (linkOptions && link.status >= 400 && link.status < 500) {
+                console.error("⚠️ InfinitePay recusou as options do link; segue sem prazo e com o desconto no preço:", orderNsu, link.status, link.data);
+                discountLinkRefused = Boolean(pixDiscountLink);
                 pixDiscountLink = null;
                 link = await createInfinitePayLink(linkPayload(chosenPrice.split));
             }
