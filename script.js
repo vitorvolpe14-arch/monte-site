@@ -2547,7 +2547,7 @@ async function checkout() {
         // Pedido criado: este aparelho guarda os dados para a próxima compra vir preenchida
         // (campos escondidos ficam escondidos, com a chave do cadastro).
         const usesSavedProfile=[email,phone,number,complement].some(isHiddenValue);
-        rememberCheckoutProfile({name,email,phone:isHiddenValue(phone)?phone:whatsappNumber,cpf:cpfDigits,token:usesSavedProfile?customerProfileToken:"",
+        rememberCheckoutProfile({name,email,phone:isHiddenValue(phone)?phone:whatsappNumber,cpf:cpfDigits,token:usesSavedProfile?customerProfileToken:"",confirm_with:usesSavedProfile?customerConfirmWith:"",
             address:{cep:cep.replace(/\D/g,""),street,number,complement:complement||"",neighborhood,city,state}});
 
         if(paymentMethod==="pix"&&data?.pix_checkout&&data?.url){
@@ -4175,6 +4175,8 @@ function browseNovidades() {
    pessoa não vê os dados dela. O pedido vai com os dados completos (o
    servidor troca os campos escondidos pelo cadastro, com o profile_token).
    Para mudar um campo escondido, é só tocar nele e digitar de novo.
+   Quando a cliente digita o e-mail do cadastro (ou o WhatsApp, se o
+   cadastro não tem e-mail), tudo aparece completo para ela conferir.
    Depois de uma compra, este aparelho lembra os dados e a sacola já abre
    preenchida. "Não é você?" apaga.
 ===================================================== */
@@ -4197,7 +4199,10 @@ const PROFILE_FIELDS = {
 };
 // Chave do cadastro usado para preencher (vem com os dados escondidos; o checkout envia).
 let customerProfileToken = "";
+let customerConfirmWith = "";
+let customerProfileName = "";
 let lastLookedUpCpf = "";
+let lastConfirmTried = "";
 
 function formatCpfTyping(value) {
     return String(value || "").replace(/\D/g, "").slice(0, 11)
@@ -4238,6 +4243,15 @@ function setReturningStatus(html) {
     setHTML(status, html || "");
 }
 
+// Ainda há dados escondidos: diz o que digitar para ver tudo completo.
+function confirmHint() {
+    const hidden = ["customerEmail", "customerPhone", "customerNumber", "customerComplement"].some(id => isHiddenValue(document.getElementById(id)?.value));
+    if (!hidden || !customerProfileToken) return "";
+    if (customerConfirmWith === "email") return " Digite seu e-mail para ver tudo completo e conferir.";
+    if (customerConfirmWith === "phone") return " Digite seu WhatsApp para ver tudo completo e conferir.";
+    return "";
+}
+
 function greetReturningCustomer(name, text) {
     const firstName = String(name || "").trim().split(/\s+/)[0];
     setReturningStatus('<span class="returning-customer-check" aria-hidden="true"></span><span>' +
@@ -4271,8 +4285,10 @@ function fillSavedCheckoutProfile() {
     if (!profile || !cart.length || !checkoutFieldsEmpty()) return;
     if (!fillCheckoutProfile(profile)) return;
     customerProfileToken = profile.token || "";
+    customerConfirmWith = profile.confirm_with || "";
+    customerProfileName = profile.name || "";
     lastLookedUpCpf = String(profile.cpf || "").replace(/\D/g, "");
-    greetReturningCustomer(profile.name, "Preenchemos com os dados da sua última compra. Confira antes de finalizar.");
+    greetReturningCustomer(profile.name, "Preenchemos com os dados da sua última compra." + (confirmHint() || " Confira antes de finalizar."));
 }
 
 // CPF completo: procura o cadastro e preenche os campos que ainda estão vazios.
@@ -4292,10 +4308,41 @@ async function lookupCustomerByCpf() {
         if (String(input.value || "").replace(/\D/g, "") !== cpf) return;
         if (!response.ok || !data.success || !data.found || !data.customer) return;
         customerProfileToken = data.profile_token || "";
+        customerConfirmWith = data.confirm_with || "";
+        customerProfileName = data.customer.name || "";
         if (!fillCheckoutProfile(data.customer)) return;
-        greetReturningCustomer(data.customer.name, "Preenchemos com os dados da sua última compra. Por segurança, parte deles fica escondida.");
+        greetReturningCustomer(data.customer.name, "Preenchemos com os dados da sua última compra." + (confirmHint() || " Confira antes de finalizar."));
     } catch {
         // Sem resposta: a cliente preenche os dados normalmente.
+    }
+}
+
+// E-mail (ou WhatsApp) digitado igual ao do cadastro: mostra tudo completo para conferir.
+async function confirmCustomerProfile(kind, value) {
+    const cpf = String(document.getElementById("customerCpf")?.value || "").replace(/\D/g, "");
+    const signature = cpf + "|" + kind + "|" + value;
+    if (!customerProfileToken || !confirmHint() || signature === lastConfirmTried) return;
+    lastConfirmTried = signature;
+    try {
+        const response = await fetch("/api/clientes/conferir", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify({ cpf, profile_token: customerProfileToken, [kind]: value })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.match || !data.customer) return;
+        // Troca só o que ainda está escondido (o que a cliente digitou fica como ela digitou).
+        Object.entries(PROFILE_FIELDS).forEach(([id, read]) => {
+            const input = document.getElementById(id);
+            const real = String(read(data.customer) || "").trim();
+            if (!input || !isHiddenValue(input.value)) return;
+            input.value = real;
+            refreshCheckoutField(input);
+        });
+        updateCheckoutProgress();
+        greetReturningCustomer(customerProfileName || data.customer.name, "Seus dados estão completos abaixo. Confira antes de finalizar.");
+    } catch {
+        // Sem resposta: os dados continuam escondidos e o pedido usa os do cadastro.
     }
 }
 
@@ -4314,7 +4361,9 @@ function clearHiddenProfileFields() {
 function forgetReturningCustomer() {
     try { localStorage.removeItem(CHECKOUT_PROFILE_KEY); } catch {}
     customerProfileToken = "";
+    customerConfirmWith = "";
     lastLookedUpCpf = "";
+    lastConfirmTried = "";
     Object.keys(PROFILE_FIELDS).forEach(id => {
         const input = document.getElementById(id);
         if (!input) return;
@@ -4335,6 +4384,15 @@ function forgetReturningCustomer() {
             if (cpfIsValid(cpf.value)) lookupCustomerByCpf();
         });
         cpf?.addEventListener("blur", lookupCustomerByCpf);
+        // E-mail ou WhatsApp completo: confere com o cadastro (para mostrar tudo completo).
+        const email = document.getElementById("customerEmail");
+        const phone = document.getElementById("customerPhone");
+        let confirmTimer = null;
+        const tryEmail = () => { const v = email.value.trim().toLowerCase(); if (!isHiddenValue(v) && CHECKOUT_RULES.customerEmail(v)) confirmCustomerProfile("email", v); };
+        const tryPhone = () => { const d = phoneDigits(phone.value); if (!isHiddenValue(phone.value) && /^[1-9]{2}9\d{8}$/.test(d)) confirmCustomerProfile("phone", d); };
+        email?.addEventListener("input", () => { clearTimeout(confirmTimer); confirmTimer = setTimeout(tryEmail, 700); });
+        email?.addEventListener("blur", tryEmail);
+        phone?.addEventListener("input", () => { clearTimeout(confirmTimer); confirmTimer = setTimeout(tryPhone, 400); });
         // Campo escondido (•••): ao tocar, fica vazio para a cliente digitar outro valor; se ela
         // sair sem digitar nada, o valor escondido volta (e o pedido usa o do cadastro).
         ["customerEmail", "customerPhone", "customerNumber", "customerComplement"].forEach(id => {
