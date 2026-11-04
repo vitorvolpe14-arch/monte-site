@@ -5,6 +5,7 @@ const crypto = require("crypto");
 const path = require("path");
 const cors = require("cors");
 const { pixLinkDiscountPercent, isExpectedPixAmount, paidPriceKey } = require("./pix-discount.js");
+const { PROMOTION_GIFTS_CEILING, promotionGiftCount } = require("./gift-promotion.js");
 
 // Este servidor roda no Render (Node) e no Cloudflare Workers (nodejs_compat).
 // No Workers não há arquivos do projeto no disco nem timers fora de uma requisição:
@@ -1155,8 +1156,10 @@ async function sendOrderConfirmationEmail(order) {
     const customerName = safeString(order.customer_name).split(/\s+/)[0] || "cliente";
     const total = Number(order.total || 0);
     const purchasesUrl = PUBLIC_SITE_URL + "/minhas-compras.html?order_nsu=" + encodeURIComponent(orderCode);
-    const gifts = orderGiftItems(order).map(item => safeString(item.name) + (item.variant_color ? " (" + safeString(item.variant_color) + ")" : "")).join(", ");
+    const gifts = orderGiftItems(order).map(item => (Number(item.quantity) > 1 ? Number(item.quantity) + "× " : "") + safeString(item.name) + (item.variant_color ? " (" + safeString(item.variant_color) + ")" : "")).join(", ");
     const giftTerms = [...new Set(orderGiftItems(order).map(item => safeString(item.promotion_terms)).filter(Boolean))].join(" ");
+    const manyGifts = orderGiftItems(order).reduce((sum, item) => sum + Math.max(1, Number(item.quantity) || 1), 0) > 1;
+    const giftSentence = manyGifts ? ["Seus presentes:", "vão juntos no pedido."] : ["Seu presente:", "vai junto no pedido."];
     const html = "<html><body style=\"margin:0;background:#f7f5f2;font-family:Arial,Helvetica,sans-serif;color:#171717;\">" +
       "<div style=\"max-width:620px;margin:0 auto;padding:40px 20px;\"><div style=\"background:#111;color:#fff;text-align:center;padding:24px 20px;letter-spacing:6px;font-size:24px;\">MONTÊ</div>" +
       "<div style=\"background:#fff;padding:38px 30px;\"><p style=\"margin:0 0 12px;font-size:12px;letter-spacing:2px;color:#777;\">COMPRA CONFIRMADA</p>" +
@@ -1164,13 +1167,13 @@ async function sendOrderConfirmationEmail(order) {
       "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Seu pagamento foi confirmado e seu pedido já está registrado na MONTÊ.</p>" +
       "<div style=\"margin:28px 0;padding:20px;background:#f7f5f2;\"><p style=\"margin:0 0 8px;font-size:11px;letter-spacing:1.5px;color:#777;\">NÚMERO DO PEDIDO</p><strong style=\"font-size:20px;\">" + escapeEmailHtml(orderCode) + "</strong><p style=\"margin:14px 0 0;font-size:14px;color:#555;\">Total: <strong>R$ " + total.toFixed(2).replace(".", ",") + "</strong></p></div>" +
       (orderHasPresale(order) ? "<p style=\"font-size:15px;line-height:1.7;color:#555;\"><strong>Pré-venda:</strong> seu pedido tem peça em produção, com estoque limitado. A entrega é em " + PRESALE_MIN_BUSINESS_DAYS + " dias úteis. A MONTÊ confirma o seu pedido em breve; se não for possível atender, o valor pago é devolvido integralmente.</p>" : "") +
-      (gifts ? "<p style=\"font-size:15px;line-height:1.7;color:#555;\"><strong>Seu presente:</strong> " + escapeEmailHtml(gifts) + " vai junto no pedido." + (giftTerms ? " " + escapeEmailHtml(giftTerms) : "") + "</p>" : "") +
+      (gifts ? "<p style=\"font-size:15px;line-height:1.7;color:#555;\"><strong>" + giftSentence[0] + "</strong> " + escapeEmailHtml(gifts) + " " + giftSentence[1] + (giftTerms ? " " + escapeEmailHtml(giftTerms) : "") + "</p>" : "") +
       "<p style=\"font-size:15px;line-height:1.7;color:#555;\">Acompanhe o status do seu pedido e novas atualizações pela área <strong>Minhas Compras</strong>.</p>" +
       "<div style=\"text-align:center;margin:30px 0;\"><a href=\"" + purchasesUrl + "\" style=\"display:inline-block;background:#111;color:#fff;text-decoration:none;padding:15px 26px;font-size:13px;letter-spacing:1.5px;\">ACESSAR MINHAS COMPRAS</a></div></div>" +
       "<p style=\"text-align:center;font-size:11px;color:#999;margin:20px 0;\">MONTÊ — Bolsas e acessórios</p></div></body></html>";
     const text = "Compra confirmada na MONTÊ\n\nPedido: " + orderCode + "\nTotal: R$ " + total.toFixed(2).replace(".", ",") +
         (orderHasPresale(order) ? "\n\nPré-venda: a entrega é em " + PRESALE_MIN_BUSINESS_DAYS + " dias úteis." : "") +
-        (gifts ? "\n\nSeu presente: " + gifts + " vai junto no pedido." + (giftTerms ? " " + giftTerms : "") : "") +
+        (gifts ? "\n\n" + giftSentence[0] + " " + gifts + " " + giftSentence[1] + (giftTerms ? " " + giftTerms : "") : "") +
         "\n\nAcesse: " + purchasesUrl;
     const idempotencyKey = "monte-order-confirmation-" + String(order.order_nsu);
     const response = await fetch("https://api.resend.com/emails", {
@@ -4806,8 +4809,11 @@ app.delete("/api/admin/coupons/:id", requireAdmin, async (req, res) => {
    Compra com as peças somando pelo menos min_subtotal (preço de
    tabela, antes do Pix e do cupom; o frete não conta) ganha uma peça
    da categoria da promoção, à escolha da cliente, entre as ativas com
-   estoque. A loja define início e fim. Com mais de uma promoção no ar,
-   elas viram degraus: vale o presente do maior degrau alcançado.
+   estoque. Promoção "a cada" (gift_every): um presente a cada
+   min_subtotal, até max_gifts (backend/gift-promotion.js); a cliente
+   escolhe o modelo e a cor de cada um. A loja define início e fim.
+   Com mais de uma promoção no ar, elas viram degraus: vale o presente
+   do maior degrau alcançado.
    O presente entra no pedido com preço zero: baixa o estoque como as
    outras peças, mas não vai para a InfinitePay.
    Tabela: backend/sql/promocoes.sql.
@@ -4822,7 +4828,7 @@ const orderGiftItems = order => (Array.isArray(order?.items) ? order.items : [])
 async function loadPromotions() {
     const rows = await supabaseRequest(
         "promotions?active=eq.true&ends_at=gt." + encodeURIComponent(new Date().toISOString()) +
-        "&select=id,name,min_subtotal,gift_category,starts_at,ends_at,banner_text,terms_text&order=min_subtotal.asc",
+        "&select=id,name,min_subtotal,gift_category,gift_every,max_gifts,starts_at,ends_at,banner_text,terms_text&order=min_subtotal.asc",
         { method: "GET" }
     );
     return Array.isArray(rows) ? rows : [];
@@ -4854,6 +4860,8 @@ app.get("/api/promocoes", async (req, res) => {
                 name: promotion.name,
                 min_subtotal: Number(promotion.min_subtotal),
                 gift_category: promotion.gift_category,
+                gift_every: promotion.gift_every === true,
+                max_gifts: promotion.max_gifts ? Number(promotion.max_gifts) : null,
                 ends_at: promotion.ends_at,
                 banner_text: promotion.banner_text || null,
                 terms_text: promotion.terms_text || null
@@ -4865,38 +4873,50 @@ app.get("/api/promocoes", async (req, res) => {
     }
 });
 
-// Presente escolhido pela cliente, conferido no cadastro: peça ativa da categoria da
-// promoção, fora da pré-venda, com a cor ativa e em estoque. Devolve o item do pedido ou null.
-async function loadGiftProduct(promotion, productId, variantId) {
+// Presentes escolhidos pela cliente, conferidos no cadastro numa consulta só: peças ativas da
+// categoria da promoção, fora da pré-venda, com a cor ativa e em estoque. A mesma cor escolhida
+// mais de uma vez vira uma linha com a quantidade (o estoque das peças da sacola junto com os
+// presentes é conferido depois). Devolve [{ item, variant }] ou null se algum não vale.
+async function loadGiftProducts(promotion, requested) {
+    const productIds = [...new Set(requested.map(gift => gift.product_id))];
+    const variantIds = [...new Set(requested.map(gift => gift.variant_id))];
     const rows = await supabaseRequest(
-        "products?id=eq." + encodeURIComponent(productId) +
+        "products?id=in.(" + productIds.map(encodeURIComponent).join(",") + ")" +
         "&active=eq.true&is_presale=eq.false&category=eq." + encodeURIComponent(promotion.gift_category) +
         "&select=id,name,product_variants(id,color,sku,stock,active,olist_product_id)" +
-        "&product_variants.id=eq." + encodeURIComponent(variantId),
+        "&product_variants.id=in.(" + variantIds.map(encodeURIComponent).join(",") + ")",
         { method: "GET" }
     );
-    const product = Array.isArray(rows) ? rows[0] : null;
-    const variant = product?.product_variants?.[0];
-    if (!product || !variant || variant.active === false || Number(variant.stock || 0) < 1) return null;
-    return {
-        item: {
-            id: product.id,
-            name: product.name,
-            description: product.name + " (presente)",
-            sku: variant.sku || null,
-            variant_id: variant.id,
-            variant_color: variant.color || null,
-            variant_sku: variant.sku || null,
-            quantity: 1,
-            price: 0,
-            presale: false,
-            gift: true,
-            promotion_id: promotion.id,
-            promotion_name: promotion.name,
-            promotion_terms: promotion.terms_text || null
-        },
-        variant
-    };
+    const products = new Map((Array.isArray(rows) ? rows : []).map(product => [String(product.id).toLowerCase(), product]));
+    const lines = new Map();
+    for (const gift of requested) {
+        const product = products.get(String(gift.product_id).toLowerCase());
+        const variant = (product?.product_variants || []).find(v => String(v.id).toLowerCase() === String(gift.variant_id).toLowerCase());
+        if (!product || !variant || variant.active === false) return null;
+        const line = lines.get(variant.id);
+        if (line) { line.item.quantity += 1; continue; }
+        lines.set(variant.id, {
+            item: {
+                id: product.id,
+                name: product.name,
+                description: product.name + " (presente)",
+                sku: variant.sku || null,
+                variant_id: variant.id,
+                variant_color: variant.color || null,
+                variant_sku: variant.sku || null,
+                quantity: 1,
+                price: 0,
+                presale: false,
+                gift: true,
+                promotion_id: promotion.id,
+                promotion_name: promotion.name,
+                promotion_terms: promotion.terms_text || null
+            },
+            variant
+        });
+    }
+    const list = [...lines.values()];
+    return list.every(({ item, variant }) => Number(variant.stock || 0) >= item.quantity) ? list : null;
 }
 
 // Promoções no painel. Devolve { promotion } ou { error }.
@@ -4918,6 +4938,19 @@ function sanitizePromotionPayload(body, { partial = false } = {}) {
         const category = safeString(b.gift_category);
         if (!PROMOTION_CATEGORIES[category]) return { error: "Escolha a categoria do presente." };
         promotion.gift_category = category;
+    }
+    if (!partial || has("gift_every")) promotion.gift_every = b.gift_every === true;
+    if (!partial || has("max_gifts")) {
+        const raw = b.max_gifts;
+        if (raw === null || raw === undefined || safeString(String(raw)) === "") {
+            promotion.max_gifts = null;
+        } else {
+            const max = Number(raw);
+            if (!Number.isInteger(max) || max < 1 || max > PROMOTION_GIFTS_CEILING) {
+                return { error: "O máximo de presentes por pedido vai de 1 a " + PROMOTION_GIFTS_CEILING + " (ou deixe em branco)." };
+            }
+            promotion.max_gifts = max;
+        }
     }
     for (const key of ["starts_at", "ends_at"]) {
         if (partial && !has(key)) continue;
@@ -5025,7 +5058,7 @@ app.get("/api/admin/promotions", requireAdmin, async (req, res) => {
                     total: order.total,
                     created_at: order.created_at,
                     gifts: orderGiftItems(order).filter(item => item.promotion_id === promotion.id)
-                        .map(item => ({ name: item.name, color: item.variant_color || null }))
+                        .map(item => ({ name: item.name, color: item.variant_color || null, quantity: Math.max(1, Number(item.quantity) || 1) }))
                 }))
             }))
         });
@@ -5206,7 +5239,7 @@ const CHECKOUT_REUSE_MS = 60 * 60 * 1000;
 
 // Mesma compra = mesma cliente, endereço, peças, frete, forma de pagamento, cupom e presente.
 // Qualquer mudança (outra cor, outro e-mail, outro endereço) gera um pedido novo.
-function checkoutFingerprint({ customer, items, shippingServiceId, paymentMethod, couponCode, gift }) {
+function checkoutFingerprint({ customer, items, shippingServiceId, paymentMethod, couponCode, gifts }) {
     const text = value => safeString(value).trim().toLowerCase();
     const digits = value => String(value ?? "").replace(/\D/g, "");
     const address = customer?.address || {};
@@ -5224,7 +5257,9 @@ function checkoutFingerprint({ customer, items, shippingServiceId, paymentMethod
         shipping: text(shippingServiceId),
         payment: text(paymentMethod),
         coupon: text(couponCode),
-        gift: gift ? [text(gift.promotion_id), text(gift.product_id), text(gift.variant_id)] : null
+        gifts: (Array.isArray(gifts) ? gifts : [])
+            .map(gift => [text(gift?.promotion_id), text(gift?.product_id), text(gift?.variant_id)].join("|"))
+            .sort()
     };
     return crypto.createHash("sha256").update(JSON.stringify(data)).digest("hex");
 }
@@ -5345,8 +5380,15 @@ app.post(
                 shipping_service_id: requestedShippingServiceId,
                 payment_method: requestedPaymentMethod,
                 coupon_code: requestedCouponCode,
-                gift: requestedGift
+                gift: requestedGift,
+                gifts: requestedGiftList
             } = req.body || {};
+
+            // Presentes escolhidos: { promotion_id, product_id, variant_id } cada um ("gift", um só,
+            // é o formato de antes, de uma página aberta antes da atualização).
+            const requestedGifts = Array.isArray(requestedGiftList)
+                ? requestedGiftList.slice(0, PROMOTION_GIFTS_CEILING + 1)
+                : (requestedGift ? [requestedGift] : []);
 
             const paymentMethod = safeString(requestedPaymentMethod || "pix").toLowerCase();
 
@@ -5641,7 +5683,7 @@ app.post(
                 shippingServiceId: requestedShippingServiceId,
                 paymentMethod,
                 couponCode,
-                gift: requestedGift
+                gifts: requestedGifts
             });
             const reusable = await reusablePendingCheckout(fingerprint);
             if (reusable) {
@@ -5791,13 +5833,12 @@ app.post(
             /* =================================================
                PRESENTE DA PROMOÇÃO (cadastrada no painel)
             ================================================= */
-            let giftItem = null;
-            let giftVariant = null;
-            if (requestedGift) {
-                const giftProductId = safeString(requestedGift.product_id);
-                const giftVariantId = safeString(requestedGift.variant_id);
+            let giftLines = [];
+            if (requestedGifts.length) {
                 const giftError = message => res.status(409).json({ success: false, gift_invalid: true, message });
-                if (!/^[0-9a-f-]{36}$/i.test(giftProductId) || !/^[0-9a-f-]{36}$/i.test(giftVariantId)) {
+                const uuid = /^[0-9a-f-]{36}$/i;
+                if (requestedGifts.some(gift => !gift || typeof gift !== "object" ||
+                    !uuid.test(safeString(gift.product_id)) || !uuid.test(safeString(gift.variant_id)))) {
                     return giftError("Escolha o seu presente de novo.");
                 }
                 // Sem cache: a promoção pode ter sido encerrada no painel agora há pouco.
@@ -5805,15 +5846,25 @@ app.post(
                 if (!promotion) {
                     return giftError("A promoção de presente não vale para esta compra agora.");
                 }
-                if (String(requestedGift.promotion_id) !== String(promotion.id)) {
+                if (requestedGifts.some(gift => String(gift.promotion_id) !== String(promotion.id))) {
                     return giftError("Sua compra alcançou outro presente. Escolha de novo.");
                 }
-                const gift = await loadGiftProduct(promotion, giftProductId, giftVariantId);
-                if (!gift) {
-                    return giftError("Esse presente acabou de esgotar. Escolha outro.");
+                const giftCount = promotionGiftCount(promotion, productsSubtotal);
+                if (requestedGifts.length > giftCount) {
+                    return giftError(giftCount === 1
+                        ? "Sua compra dá direito a 1 presente. Escolha de novo."
+                        : "Sua compra dá direito a " + giftCount + " presentes. Escolha de novo.");
                 }
-                giftItem = gift.item;
-                giftVariant = gift.variant;
+                const gifts = await loadGiftProducts(promotion, requestedGifts.map(gift => ({
+                    product_id: safeString(gift.product_id),
+                    variant_id: safeString(gift.variant_id)
+                })));
+                if (!gifts) {
+                    return giftError(requestedGifts.length > 1
+                        ? "Um dos presentes acabou de esgotar. Escolha de novo."
+                        : "Esse presente acabou de esgotar. Escolha outro.");
+                }
+                giftLines = gifts;
             }
 
             /* =================================================
@@ -5881,7 +5932,7 @@ app.post(
             }
 
             // O presente conta junto: a mesma peça comprada e ganha precisa de 2 em estoque.
-            if (giftItem) checkedVariants.push({ item: giftItem, variant: giftVariant });
+            giftLines.forEach(({ item, variant }) => checkedVariants.push({ item, variant }));
 
             // A mesma cor em mais de uma linha da sacola: confere a soma das quantidades.
             const quantityByVariant = new Map();
@@ -5968,8 +6019,8 @@ app.post(
                SALVA O PEDIDO ANTES DO PAGAMENTO
             ================================================= */
 
-            // Peças cobradas + o presente da promoção (preço zero, fora da InfinitePay).
-            const orderLines = giftItem ? [...productItems, giftItem] : productItems;
+            // Peças cobradas + os presentes da promoção (preço zero, fora da InfinitePay).
+            const orderLines = [...productItems, ...giftLines.map(({ item }) => item)];
 
             const pendingOrder = {
 
@@ -7358,7 +7409,8 @@ function reminderColorLabel(color, productName) {
 // Peças do pedido ou da sacola que ainda podem ser compradas, com preço e foto atuais.
 async function availableReminderItems(items) {
     const uuid = /^[0-9a-f-]{36}$/i;
-    const list = (Array.isArray(items) ? items : []).map(item => ({
+    // Os presentes da promoção não voltam para a sacola: a cliente escolhe de novo na sacola.
+    const list = (Array.isArray(items) ? items : []).filter(item => !isGiftItem(item)).map(item => ({
         productId: safeString(item?.id || item?.product_id),
         variantId: safeString(item?.variant_id),
         quantity: Math.max(1, Math.min(20, Math.floor(Number(item?.quantity) || 1)))

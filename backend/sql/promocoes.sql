@@ -42,3 +42,11 @@ values (
 -- sacola e no e-mail de confirmação.
 alter table public.promotions
   add column terms_text text check (terms_text is null or char_length(terms_text) <= 200);
+
+-- Um presente a cada valor mínimo (migração "monte_promotions_gift_every"). Com gift_every,
+-- a compra ganha um presente a cada min_subtotal em peças (R$ 998 = 2 presentes numa
+-- promoção de R$ 499), até max_gifts por pedido (vazio = sem limite; o site para em 20).
+-- A cliente escolhe o modelo e a cor de cada presente.
+alter table public.promotions
+  add column if not exists gift_every boolean not null default false,
+  add column if not exists max_gifts integer check (max_gifts is null or max_gifts between 1 and 20);

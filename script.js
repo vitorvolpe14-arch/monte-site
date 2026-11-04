@@ -86,10 +86,17 @@ let appliedCoupon = null;
 
 // Promoções de presente no ar (cadastradas no painel, vêm de /api/promocoes).
 let storePromotions = [];
-const GIFT_STORAGE_KEY = "monteGift";
-// Presente escolhido: { promotion_id, product_id, variant_id }.
-let selectedGift = (() => {
-    try { return JSON.parse(localStorage.getItem(GIFT_STORAGE_KEY) || "null"); } catch { return null; }
+const GIFT_STORAGE_KEY = "monteGifts";
+// Presentes escolhidos, um por presente ganho: [{ promotion_id, product_id, variant_id }].
+let selectedGifts = (() => {
+    try {
+        const saved = JSON.parse(localStorage.getItem(GIFT_STORAGE_KEY) || "null");
+        if (Array.isArray(saved)) return saved.filter(gift => gift && typeof gift === "object").slice(0, 20);
+        // Formato de antes: um presente só.
+        const old = JSON.parse(localStorage.getItem("monteGift") || "null");
+        localStorage.removeItem("monteGift");
+        return old && typeof old === "object" ? [old] : [];
+    } catch { return []; }
 })();
 let shippingOptions = [];
 let selectedShippingOption = null;
@@ -1915,7 +1922,9 @@ async function applyCoupon() {
    PRESENTES DAS PROMOÇÕES (cadastradas no painel, aba Promoções)
    Compra com as peças somando o valor mínimo (preço de tabela; o
    frete não conta) ganha uma peça da categoria da promoção, à
-   escolha da cliente. Na sacola, uma escada de benefícios mostra o
+   escolha da cliente. Na promoção "a cada", ganha uma peça a cada
+   valor mínimo (R$ 998 = 2 cintos numa promoção de R$ 499), até o
+   limite do painel, e escolhe o modelo e a cor de cada uma. Na sacola, uma escada de benefícios mostra o
    que ela já ganhou e o próximo degrau (outra promoção ou o frete
    grátis de Fortaleza e região). Com mais de uma promoção no ar,
    vale o presente do maior degrau alcançado. As peças da cor das
@@ -1923,11 +1932,13 @@ async function applyCoupon() {
    O servidor confere tudo de novo no checkout.
 ===================================================== */
 const GIFT_CATEGORY_WORDS = {
-    cintos: { one: "um cinto", mine: "seu cinto" },
-    acessorios: { one: "um acessório", mine: "seu acessório" },
-    bolsas: { one: "uma bolsa", mine: "sua bolsa" }
+    cintos: { one: "um cinto", mine: "seu cinto", many: "cintos", myMany: "seus" },
+    acessorios: { one: "um acessório", mine: "seu acessório", many: "acessórios", myMany: "seus" },
+    bolsas: { one: "uma bolsa", mine: "sua bolsa", many: "bolsas", myMany: "suas" }
 };
-const giftWords = promotion => GIFT_CATEGORY_WORDS[promotion?.gift_category] || { one: "um presente", mine: "seu presente" };
+const giftWords = promotion => GIFT_CATEGORY_WORDS[promotion?.gift_category] || { one: "um presente", mine: "seu presente", many: "presentes", myMany: "seus" };
+// "um cinto", "2 cintos".
+const giftAmount = (promotion, count) => count === 1 ? giftWords(promotion).one : count + " " + giftWords(promotion).many;
 
 async function loadStorePromotions() {
     let barMessages = null;
@@ -2005,7 +2016,7 @@ function giftOptionsFor(promotion) {
             const available = Number(variant.stock || 0) - (inCart.get(String(variant.id)) || 0);
             if (available < 1) return;
             const color = colorLabel(variant.color, product.name);
-            options.push({ product, variant, color, matches: cartColors.has(plainColor(color).split(/\s+/)[0]) });
+            options.push({ product, variant, color, available, matches: cartColors.has(plainColor(color).split(/\s+/)[0]) });
         }));
     return options.sort((a, b) =>
         (b.matches - a.matches) || (Number(b.product.price) - Number(a.product.price)) || a.product.name.localeCompare(b.product.name));
@@ -2025,34 +2036,91 @@ function reachedTier(subtotal = getCartSubtotal(), tiers = promotionTiers()) {
     return [...tiers].reverse().find(tier => subtotal >= Number(tier.promotion.min_subtotal)) || null;
 }
 
-function giftEligible(subtotal = getCartSubtotal()) {
-    return !!reachedTier(subtotal);
+// Quantos presentes a compra ganha (mesma conta do servidor, backend/gift-promotion.js): um a
+// partir do valor mínimo ou, na promoção "a cada", um a cada valor mínimo, até o limite do painel.
+const GIFTS_CEILING = 20;
+const giftMaxFor = promotion => promotion?.gift_every !== true ? 1
+    : Number(promotion.max_gifts) > 0 ? Math.min(Math.floor(Number(promotion.max_gifts)), GIFTS_CEILING) : GIFTS_CEILING;
+function giftCountFor(promotion, subtotal = getCartSubtotal()) {
+    const minCents = Math.round(Number(promotion?.min_subtotal) * 100);
+    const subtotalCents = Math.round(Number(subtotal) * 100);
+    if (!(minCents > 0) || !(subtotalCents >= minCents)) return 0;
+    if (promotion.gift_every !== true) return 1;
+    return Math.min(Math.floor(subtotalCents / minCents), giftMaxFor(promotion));
 }
 
-// O presente escolhido, se ainda vale (degrau alcançado e cor com estoque).
-function currentGift(subtotal = getCartSubtotal()) {
-    if (!selectedGift) return null;
+// Quantos presentes a cliente escolhe: os que ganhou, até o estoque que há para presente.
+function giftsToChoose(tier, subtotal = getCartSubtotal()) {
+    if (!tier) return 0;
+    const units = tier.options.reduce((sum, option) => sum + option.available, 0);
+    return Math.min(giftCountFor(tier.promotion, subtotal), units);
+}
+
+// Os presentes escolhidos que ainda valem: do degrau alcançado, com a cor em estoque e dentro
+// da quantidade ganha.
+function currentGifts(subtotal = getCartSubtotal()) {
     const tier = reachedTier(subtotal);
-    if (!tier || String(tier.promotion.id) !== String(selectedGift.promotion_id)) return null;
-    const option = tier.options.find(o => String(o.variant.id) === String(selectedGift.variant_id) &&
-        String(o.product.id) === String(selectedGift.product_id));
-    return option ? { ...option, promotion: tier.promotion } : null;
+    if (!tier || !selectedGifts.length) return [];
+    const limit = giftsToChoose(tier, subtotal);
+    const used = new Map();
+    const gifts = [];
+    for (const gift of selectedGifts) {
+        if (gifts.length >= limit) break;
+        if (String(gift?.promotion_id) !== String(tier.promotion.id)) continue;
+        const option = tier.options.find(o => String(o.variant.id) === String(gift.variant_id) &&
+            String(o.product.id) === String(gift.product_id));
+        if (!option) continue;
+        const key = String(option.variant.id);
+        if ((used.get(key) || 0) >= option.available) continue;
+        used.set(key, (used.get(key) || 0) + 1);
+        gifts.push({ ...option, promotion: tier.promotion });
+    }
+    return gifts;
 }
 
-function saveSelectedGift(gift) {
-    selectedGift = gift;
+function saveSelectedGifts(gifts) {
+    selectedGifts = Array.isArray(gifts) ? gifts.slice(0, GIFTS_CEILING) : [];
     try {
-        if (gift) localStorage.setItem(GIFT_STORAGE_KEY, JSON.stringify(gift));
+        if (selectedGifts.length) localStorage.setItem(GIFT_STORAGE_KEY, JSON.stringify(selectedGifts));
         else localStorage.removeItem(GIFT_STORAGE_KEY);
     } catch {}
 }
 
+const giftRef = gift => ({ promotion_id: gift.promotion.id, product_id: gift.product.id, variant_id: gift.variant.id });
+
 // Modelo tocado na escolha do presente, esperando a cor: { promotion_id, product_id }.
 let giftDraft = null;
 
+// Escolhe a cor de um presente. Com um presente só, a escolha troca a anterior; com vários,
+// cada escolha soma um, até completar (para trocar, a cliente remove um na sacola).
 function chooseGift(promotionId, productId, variantId) {
+    const tier = reachedTier();
+    if (!tier || String(tier.promotion.id) !== String(promotionId)) return;
+    const option = tier.options.find(o => String(o.product.id) === String(productId) && String(o.variant.id) === String(variantId));
+    if (!option) return;
+    const limit = giftsToChoose(tier);
+    const chosen = currentGifts().map(giftRef);
+    const entry = { promotion_id: promotionId, product_id: productId, variant_id: variantId };
     giftDraft = { promotion_id: promotionId, product_id: productId };
-    saveSelectedGift({ promotion_id: promotionId, product_id: productId, variant_id: variantId });
+    if (limit <= 1) {
+        saveSelectedGifts([entry]);
+    } else if (chosen.length >= limit) {
+        showToast("Você já escolheu " + giftAmount(tier.promotion, limit) + ". Remova um na sacola para trocar.");
+        return;
+    } else if (chosen.filter(gift => String(gift.variant_id) === String(variantId)).length >= option.available) {
+        showToast("Não há mais estoque dessa cor para presente. Escolha outra.");
+        return;
+    } else {
+        saveSelectedGifts([...chosen, entry]);
+    }
+    updatePaymentSummary();
+}
+
+// Tira um presente escolhido (a cliente escolhe outro no lugar).
+function removeGift(index) {
+    const chosen = currentGifts().map(giftRef);
+    chosen.splice(Number(index), 1);
+    saveSelectedGifts(chosen);
     updatePaymentSummary();
 }
 
@@ -2065,7 +2133,8 @@ function pickGiftProduct(promotionId, productId) {
         return;
     }
     giftDraft = { promotion_id: promotionId, product_id: productId };
-    if (selectedGift && String(selectedGift.product_id) !== String(productId)) saveSelectedGift(null);
+    // Com um presente só, trocar de modelo desfaz a escolha anterior.
+    if (giftsToChoose(tier) <= 1 && selectedGifts.length && String(selectedGifts[0].product_id) !== String(productId)) saveSelectedGifts([]);
     updatePaymentSummary();
     document.getElementById("giftColors")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
@@ -2112,11 +2181,20 @@ function renderGiftPerk({ subtotal, freeShippingApplies }) {
 
     const reached = reachedTier(subtotal, tiers);
     const shippingReached = freeShippingApplies && subtotal >= FREE_SHIPPING_MIN;
-    const steps = tiers.map(tier => ({
-        value: Number(tier.promotion.min_subtotal),
-        label: giftWords(tier.promotion).one.split(" ")[1],
-        goal: "ganhar " + giftWords(tier.promotion).one + " de presente"
-    }));
+    // Promoção "a cada": o primeiro degrau, o alcançado e o próximo (ex.: 1, 2 e 3 cintos).
+    const steps = tiers.flatMap(tier => {
+        const promotion = tier.promotion;
+        const min = Number(promotion.min_subtotal);
+        const count = giftCountFor(promotion, subtotal);
+        const levels = promotion.gift_every === true
+            ? [...new Set([1, count, count + 1])].filter(k => k >= 1 && k <= giftMaxFor(promotion))
+            : [1];
+        return levels.map(k => ({
+            value: Math.round(min * k * 100) / 100,
+            label: k === 1 ? giftWords(promotion).one.split(" ")[1] : k + " " + giftWords(promotion).many,
+            goal: "ganhar " + giftAmount(promotion, k) + " de presente"
+        }));
+    });
     if (freeShippingApplies) steps.push({ value: FREE_SHIPPING_MIN, label: "frete grátis", goal: "frete grátis em Fortaleza e região" });
     steps.sort((a, b) => a.value - b.value);
     // Degraus no mesmo valor viram um só ("cinto + frete grátis").
@@ -2127,7 +2205,8 @@ function renderGiftPerk({ subtotal, freeShippingApplies }) {
     }
     const next = steps.find(step => subtotal < step.value);
 
-    const won = [reached ? giftWords(reached.promotion).one + " de presente" : "", shippingReached ? "frete grátis" : ""].filter(Boolean);
+    const wonGifts = reached ? giftCountFor(reached.promotion, subtotal) : 0;
+    const won = [wonGifts ? giftAmount(reached.promotion, wonGifts) + " de presente" : "", shippingReached ? "frete grátis" : ""].filter(Boolean);
     const text = [
         won.length ? `<strong>Você ganhou ${won.join(" e ")}!</strong>` : "",
         next ? `Faltam <strong>${formatPrice(next.value - subtotal)}</strong> para ${next.goal}` : ""
@@ -2157,11 +2236,16 @@ function renderGiftPerk({ subtotal, freeShippingApplies }) {
     if (picker) picker.hidden = !reached;
     if (!reached || !optionsBox) return true;
 
-    // Presente escolhido que esgotou, saiu da loja ou é de outro degrau: escolhe de novo.
-    const chosen = currentGift(subtotal);
-    if (selectedGift && !chosen) saveSelectedGift(null);
+    // Presentes escolhidos que esgotaram, saíram da loja, são de outro degrau ou passaram da
+    // quantidade ganha (a sacola diminuiu): ficam só os que valem.
+    const chosen = currentGifts(subtotal);
+    if (selectedGifts.length !== chosen.length) saveSelectedGifts(chosen.map(giftRef));
+    const required = giftsToChoose(reached, subtotal);
+    const many = required > 1;
     const words = giftWords(reached.promotion);
-    setHTML(document.getElementById("giftPickerTitle"), escapeHTML("Escolha " + words.mine + " de presente"));
+    setHTML(document.getElementById("giftPickerTitle"), escapeHTML(many
+        ? "Escolha " + words.myMany + " " + required + " " + words.many + " de presente"
+        : "Escolha " + words.mine + " de presente"));
     // Regra da promoção para o presente (ex.: "Durante a ação, não fazemos troca do brinde.").
     const terms = document.getElementById("giftTerms");
     if (terms) {
@@ -2177,24 +2261,34 @@ function renderGiftPerk({ subtotal, freeShippingApplies }) {
         group.matches = group.matches || option.matches;
     });
     groups.sort((a, b) => (b.matches - a.matches) || (Number(b.product.price) - Number(a.product.price)) || a.product.name.localeCompare(b.product.name));
-    const draftId = chosen ? String(chosen.product.id)
-        : giftDraft && String(giftDraft.promotion_id) === String(reached.promotion.id) ? String(giftDraft.product_id) : "";
+    const chosenOf = productId => chosen.filter(gift => String(gift.product.id) === String(productId));
+    const lastChosen = chosen[chosen.length - 1];
+    const draftId = giftDraft && String(giftDraft.promotion_id) === String(reached.promotion.id) ? String(giftDraft.product_id)
+        : !many && lastChosen ? String(lastChosen.product.id) : "";
     const active = groups.find(group => String(group.product.id) === draftId) || null;
     if (!active) giftDraft = null;
 
-    setHTML(document.getElementById("giftPickerHint"), chosen
-        ? `Seu presente: <strong>${escapeHTML(chosen.product.name)}</strong> · ${escapeHTML(chosen.color || "Cor única")}`
-        : active ? "Agora escolha a cor." : "Toque no modelo que você quer ganhar.");
-    const signature = reached.promotion.id + ":" + draftId + ":" + (chosen ? chosen.variant.id : "") + ":" +
+    const stockNote = giftCountFor(reached.promotion, subtotal) > required ? ` Só há ${required} com estoque para presente.` : "";
+    setHTML(document.getElementById("giftPickerHint"), many
+        ? `Escolhidos: <strong>${chosen.length} de ${required}</strong>. ` + (chosen.length >= required
+            ? "Pronto! Para trocar, remova um na sacola."
+            : active ? "Escolha a cor ou toque em outro modelo." : "Toque no modelo de cada presente (pode repetir).") + escapeHTML(stockNote)
+        : lastChosen
+            ? `Seu presente: <strong>${escapeHTML(lastChosen.product.name)}</strong> · ${escapeHTML(lastChosen.color || "Cor única")}`
+            : active ? "Agora escolha a cor." : "Toque no modelo que você quer ganhar.");
+    const signature = reached.promotion.id + ":" + draftId + ":" + required + ":" + chosen.map(gift => gift.variant.id).join(",") + ":" +
         reached.options.map(o => o.variant.id).join("|");
     if (optionsBox.dataset.signature !== signature) {
         optionsBox.dataset.signature = signature;
         setHTML(optionsBox, groups.map(group => {
             const isActive = active === group;
+            const picked = chosenOf(group.product.id);
             const image = smallImage(Array.isArray(group.product.images) ? group.product.images[0] || "" : "");
             const colors = group.options.length;
-            const colorText = isActive && chosen ? chosen.color || "Cor única" : colors === 1 ? group.options[0].color || "Cor única" : colors + " cores";
-            return `<button type="button" class="product-card gift-card${isActive ? " is-active" : ""}${isActive && chosen ? " is-selected" : ""}" aria-pressed="${isActive ? "true" : "false"}"
+            const colorText = !many && picked.length ? picked[0].color || "Cor única"
+                : (picked.length ? "Escolhido" + (picked.length > 1 ? " ×" + picked.length : "") + " · " : "") +
+                    (colors === 1 ? group.options[0].color || "Cor única" : colors + " cores");
+            return `<button type="button" class="product-card gift-card${isActive ? " is-active" : ""}${picked.length ? " is-selected" : ""}" aria-pressed="${isActive ? "true" : "false"}"
                 data-click="pickGiftProduct" data-args="${escapeHTML(JSON.stringify([reached.promotion.id, group.product.id]))}">
                 <span class="product-image">${group.matches ? '<span class="product-badge">COMBINA COM SUA SACOLA</span>' : ""}${image ? `<img src="${escapeHTML(image)}" alt="${escapeHTML(group.product.name)}" loading="lazy" decoding="async">` : ""}</span>
                 <span class="product-info">
@@ -2211,27 +2305,32 @@ function renderGiftPerk({ subtotal, freeShippingApplies }) {
             if (!colorsBox.hidden) {
                 setHTML(colorsBox, `<p class="gift-colors-title">Escolha a cor do ${escapeHTML(active.product.name)}</p>
                     <div class="variant-options">${active.options.map(option => {
-                        const selected = chosen && String(option.variant.id) === String(chosen.variant.id);
-                        return `<button type="button" class="variant-option${selected ? " active" : ""}" aria-pressed="${selected ? "true" : "false"}"
-                            data-click="chooseGift" data-args="${escapeHTML(JSON.stringify([reached.promotion.id, active.product.id, option.variant.id]))}">${escapeHTML(option.color || "Cor única")}</button>`;
+                        const times = chosen.filter(gift => String(gift.variant.id) === String(option.variant.id)).length;
+                        return `<button type="button" class="variant-option${times ? " active" : ""}" aria-pressed="${times ? "true" : "false"}"
+                            data-click="chooseGift" data-args="${escapeHTML(JSON.stringify([reached.promotion.id, active.product.id, option.variant.id]))}">${escapeHTML(option.color || "Cor única")}${many && times > 1 ? " ×" + times : ""}</button>`;
                     }).join("")}</div>`);
             }
         }
     }
 
-    if (line && chosen) {
+    if (line && chosen.length) {
         line.hidden = false;
-        const image = smallImage(Array.isArray(chosen.product.images) ? chosen.product.images[0] || "" : "");
-        setHTML(line, `<div class="cart-item cart-gift-item">
-            <div class="cart-item-media">${image ? `<img src="${escapeHTML(image)}" alt="${escapeHTML(chosen.product.name)}">` : ""}</div>
+        setHTML(line, chosen.map((gift, index) => {
+            const image = smallImage(Array.isArray(gift.product.images) ? gift.product.images[0] || "" : "");
+            return `<div class="cart-item cart-gift-item">
+            <div class="cart-item-media">${image ? `<img src="${escapeHTML(image)}" alt="${escapeHTML(gift.product.name)}">` : ""}</div>
             <div class="cart-item-body">
-                <span class="cart-gift-tag">Presente</span>
-                <div class="cart-item-name">${escapeHTML(chosen.product.name)}</div>
-                <div class="cart-item-variant">${escapeHTML(chosen.color || "Cor única")}</div>
-                ${chosen.promotion.terms_text ? `<div class="cart-gift-terms">${escapeHTML(chosen.promotion.terms_text)}</div>` : ""}
-                <div class="cart-item-row"><span class="cart-gift-qty">1 unidade</span><div class="cart-item-price"><s>${formatPrice(chosen.product.price)}</s> Grátis</div></div>
+                <span class="cart-gift-tag">Presente${many ? " " + (index + 1) + " de " + required : ""}</span>
+                <div class="cart-item-name">${escapeHTML(gift.product.name)}</div>
+                <div class="cart-item-variant">${escapeHTML(gift.color || "Cor única")}</div>
+                ${gift.promotion.terms_text && index === chosen.length - 1 ? `<div class="cart-gift-terms">${escapeHTML(gift.promotion.terms_text)}</div>` : ""}
+                <div class="cart-item-row"><span class="cart-gift-qty">1 unidade</span><div class="cart-item-price"><s>${formatPrice(gift.product.price)}</s> Grátis</div></div>
             </div>
-        </div>`);
+            <button type="button" class="cart-item-remove" aria-label="Trocar o presente ${escapeHTML(gift.product.name)}" data-click="removeGift" data-args="[${index}]">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
+            </button>
+        </div>`;
+        }).join(""));
     }
     return true;
 }
@@ -2487,11 +2586,15 @@ async function checkout() {
     const paymentMethod=document.querySelector('input[name="paymentMethod"]:checked')?.value||selectedPaymentMethod||"pix";
     if(!["pix","credit_card"].includes(paymentMethod)){showToast("Selecione uma forma de pagamento válida.");return;}
 
-    // Promoção de presente: com a sacola no valor mínimo, a cliente escolhe o presente antes.
-    const gift=currentGift();
-    if(!gift&&giftEligible()){
+    // Promoção de presente: com a sacola no valor mínimo, a cliente escolhe os presentes antes.
+    const gifts=currentGifts();
+    const giftTier=reachedTier();
+    const giftsNeeded=giftsToChoose(giftTier);
+    if(gifts.length<giftsNeeded){
         document.getElementById(giftDraft?"giftColors":"giftPicker")?.scrollIntoView({behavior:"smooth",block:"center"});
-        showToast(giftDraft?"Escolha a cor do seu presente para finalizar.":"Escolha o seu presente para finalizar.");
+        showToast(giftsNeeded>1
+            ?"Escolha "+giftWords(giftTier.promotion).myMany+" "+giftsNeeded+" "+giftWords(giftTier.promotion).many+" de presente para finalizar (falta"+(giftsNeeded-gifts.length>1?"m ":" ")+(giftsNeeded-gifts.length)+")."
+            :(giftDraft?"Escolha a cor do seu presente para finalizar.":"Escolha o seu presente para finalizar."));
         return;
     }
 
@@ -2514,7 +2617,7 @@ async function checkout() {
             body:JSON.stringify({items,shipping_service_id:shippingServiceId,payment_method:paymentMethod,
                 profile_token:[email,phone,number,complement].some(isHiddenValue)?customerProfileToken||undefined:undefined,
                 coupon_code:appliedCoupon?.code||undefined,
-                gift:gift?{promotion_id:gift.promotion.id,product_id:gift.product.id,variant_id:gift.variant.id}:undefined,
+                gifts:gifts.length?gifts.map(giftRef):undefined,
                 customer:{name,email,phone,whatsapp_phone:whatsappNumber,whatsapp_updates:true,cpf:cpfDigits,
                     address:{cep,street,number,complement:complement||"",neighborhood,city,state}}})
         });
@@ -2525,7 +2628,7 @@ async function checkout() {
             if(data?.stock_changed&&typeof loadProductsFromDatabase==="function")loadProductsFromDatabase().catch(()=>{});
             // Presente esgotado ou promoção encerrada: confere de novo e escolhe outro.
             if(data?.gift_invalid){
-                saveSelectedGift(null);
+                saveSelectedGifts([]);
                 await Promise.all([loadProductsFromDatabase().catch(()=>{}),loadStorePromotions()]);
                 updatePaymentSummary();
                 document.getElementById("giftPerk")?.scrollIntoView({behavior:"smooth",block:"center"});
@@ -3695,8 +3798,7 @@ function renderCheckoutNote(summary) {
         setHTML(itemsBox, cart.length
             ? cart.map(item => `<div class="order-note-item"><span>${escapeHTML(item.name)}</span><span>${formatPrice(Number(item.price || 0) * Number(item.quantity || 0))}</span><small>${escapeHTML(colorLabel(item.variant_color, item.name) || "Cor única")} · ${Number(item.quantity || 0)} un.</small></div>`).join("")
             : '<div class="order-note-item"><span class="is-empty">Nenhuma peça na sacola</span></div>');
-        const gift = currentGift();
-        if (gift) appendHTML(itemsBox, `<div class="order-note-item"><span>${escapeHTML(gift.product.name)}</span><span>Presente</span><small>${escapeHTML(gift.color || "Cor única")} · 1 un.${gift.promotion.terms_text ? " · " + escapeHTML(gift.promotion.terms_text) : ""}</small></div>`);
+        currentGifts().forEach(gift => appendHTML(itemsBox, `<div class="order-note-item"><span>${escapeHTML(gift.product.name)}</span><span>Presente</span><small>${escapeHTML(gift.color || "Cor única")} · 1 un.${gift.promotion.terms_text ? " · " + escapeHTML(gift.promotion.terms_text) : ""}</small></div>`));
     }
 
     setNoteText("noteShipping", selectedShippingOption ? `${selectedShippingOption.name} · ${shippingPriceLabel(selectedShippingOption)}` : "");
@@ -3959,7 +4061,8 @@ function renderCheckoutExtras({ subtotal, shipping, pixDiscount, couponDiscount 
         const parts = [];
         if (pixDiscount > 0) parts.push(`${formatPrice(pixDiscount)} de desconto no Pix`);
         if (couponDiscount > 0) parts.push(`cupom -${formatPrice(couponDiscount)}`);
-        if (currentGift(subtotal)) parts.push("presente incluso");
+        const giftsIncluded = currentGifts(subtotal).length;
+        if (giftsIncluded) parts.push(giftsIncluded > 1 ? giftsIncluded + " presentes inclusos" : "presente incluso");
         parts.push(selectedShippingOption
             ? (shipping === 0 && Number(selectedShippingOption.price || 0) > 0 ? "frete grátis" : `frete ${formatPrice(shipping)}`)
             : "frete a calcular");
@@ -4422,7 +4525,7 @@ function forgetReturningCustomer() {
 })();
 
 registerClickActions({
-    applyCoupon, browseNovidades, chooseGift, pickGiftProduct, changeQuantity, checkout, closeCart, closeCartOutside, closeMobileMenu,
+    applyCoupon, browseNovidades, chooseGift, pickGiftProduct, removeGift, changeQuantity, checkout, closeCart, closeCartOutside, closeMobileMenu,
     closeProductImageLightbox, closeProductModal, closeSearch, goToNovidades, navigateProductLightbox,
     nextCategoryPage, nextCollectionPage, nextNewPage, nextSalePage, nextSlide, openCart, openSearch,
     openWhatsAppReservation, previousCategoryPage, previousCollectionPage, previousNewPage,
