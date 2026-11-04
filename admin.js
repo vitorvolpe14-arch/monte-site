@@ -86,7 +86,7 @@ function showSection(s){document.querySelectorAll(".section").forEach(x=>x.class
 async function loadProducts(){const d=await api("/api/admin/products");products=d.products||[];renderProducts();renderStock();renderDashboard();renderPhotoOptimizerInfo()}
 async function loadStockMovements(){try{const d=await api("/api/admin/stock/movements");renderStockMovements(d.movements||[])}catch(e){setHTML($("stockMovements"), '<p>'+esc(e.message)+'</p>')}}
 async function loadOrders(){const d=await api("/api/admin/orders");orders=d.orders||[];renderOrders();renderDashboard()}
-function renderDashboard(){const paidOrders=orders.filter(o=>["paid","processing","shipped","delivered"].includes(o.status));if($("statRevenue")){$("statRevenue").textContent=money(paidOrders.reduce((n,o)=>n+Number(o.total||0),0));$("statRevenueHint").textContent=paidOrders.length?paidOrders.length+(paidOrders.length===1?" pedido pago":" pedidos pagos")+" · ticket médio "+money(paidOrders.reduce((n,o)=>n+Number(o.total||0),0)/paidOrders.length):"Nenhum pedido pago ainda"}$("statProducts").textContent=products.filter(p=>p.active).length;$("statOrders").textContent=orders.filter(o=>o.status!=="expired").length;$("statPaid").textContent=orders.filter(o=>["paid","processing","shipped","delivered"].includes(o.status)).length;$("statLowStock").textContent=products.reduce((n,p)=>n+(p.product_variants||[]).filter(v=>v.stock<=2&&v.active).length,0);setHTML($("recentOrders"), orderTable(orders.filter(o=>o.status!=="expired").slice(0,5)));renderDashboardTodo()}
+// renderDashboard: bloco "VISÃO GERAL — DASHBOARD", no fim do arquivo.
 function isOlistProduct(p){return p.olist_product_id!==null&&p.olist_product_id!==undefined&&p.olist_product_id!==""}
 function renderOlistCleanup(){const bar=$("olistCleanupBar");if(!bar)return;const list=products.filter(isOlistProduct);bar.classList.toggle("hidden",!list.length);if(!list.length){if($("olistOnlyFilter"))$("olistOnlyFilter").checked=false;return}const withPhotos=list.filter(p=>Array.isArray(p.images)&&p.images.some(img=>String(img||"").trim())).length;$("olistCleanupTitle").textContent=list.length+" produto(s) sincronizado(s) da Olist";$("olistCleanupInfo").textContent=withPhotos+" com foto · "+(list.length-withPhotos)+" sem foto. Marque “Mostrar só Olist” para revisar antes de excluir."}
 async function deleteOlistProducts(){const list=products.filter(isOlistProduct);if(!list.length)return;const withPhotos=list.filter(p=>Array.isArray(p.images)&&p.images.some(img=>String(img||"").trim())).length;const names=list.slice(0,15).map(p=>"• "+(p.name||"Sem nome")+(p.sku?" ("+p.sku+")":"")).join("\n")+(list.length>15?"\n… e mais "+(list.length-15)+" produto(s)":"");if(!window.confirm("Excluir "+list.length+" produto(s) sincronizado(s) da Olist?\n\n"+names+"\n\nCom foto: "+withPhotos+". Produtos que já têm pedidos serão apenas desativados.\n\nEsta ação não pode ser desfeita."))return;const button=$("deleteOlistProductsButton");if(button){button.disabled=true;button.textContent="EXCLUINDO..."}try{const d=await api("/api/admin/olist/products/delete",{method:"POST",body:JSON.stringify({product_ids:list.map(p=>p.id)})});await loadProducts();const lines=[d.deleted+" produto(s) excluído(s)."];if(d.deactivated_with_orders)lines.push(d.deactivated_with_orders+" produto(s) com pedidos foram desativados (não aparecem mais na loja).");if(d.failed?.length)lines.push(d.failed.length+" produto(s) não puderam ser excluídos e foram desativados.");window.alert(lines.join("\n"))}catch(e){window.alert(e.message)}finally{if(button){button.disabled=false;button.textContent="EXCLUIR PRODUTOS DA OLIST"}}}
@@ -100,10 +100,11 @@ async function adjustStock(variantId,label,current){const raw=window.prompt(`Aju
 const SHIPPING_SERVICE_NAMES={"1":"PAC","2":"SEDEX","17":"Mini Envios","monte-fortaleza":"Entrega MONTÊ — Fortaleza","monte-regiao-metropolitana":"Entrega MONTÊ — Região Metropolitana"};
 function shippingMethod(o){return String(o.shipping_service_name||"").trim()||SHIPPING_SERVICE_NAMES[String(o.shipping_service_id||"")]||"Não informado"}
 function shippingDays(o){const d=Number(o.shipping_delivery_days);return d>0?`${d} ${d===1?"dia útil":"dias úteis"}`:""}
-function orderTable(list){if(!list.length)return "<p>Nenhum pedido encontrado.</p>";return `<table class="table order-table"><thead><tr><th>PEDIDO</th><th>CLIENTE</th><th>DATA</th><th>TOTAL</th><th>STATUS</th><th></th></tr></thead><tbody>${list.map(o=>`<tr><td><button class="link-button" data-click="openOrder" data-args="${esc(JSON.stringify([o.id]))}">${esc(o.order_code ? "MONTÊ-"+o.order_code : (o.order_nsu||"—"))}</button><span class="order-shipping-method">${esc(shippingMethod(o))}</span></td><td>${esc(o.customer_name||"—")}</td><td>${date(o.created_at)}</td><td>${money(o.total)}</td><td><span class="badge ${esc(o.status||"pending")}">${statusLabel(o.status)}</span>${o.approval_status==="pending"&&o.status==="paid"?' <span class="chip chip-presale">ACEITE OU RECUSE</span>':""}${o.status==="cancelled"&&o.refund_status==="pending"?' <span class="chip chip-low">ESTORNO PENDENTE</span>':""}</td><td><button class="secondary small-button" data-click="openOrder" data-args="${esc(JSON.stringify([o.id]))}">DETALHES</button></td></tr>`).join("")}</tbody></table>`}
+function orderTable(list){if(!list.length)return "<p>Nenhum pedido encontrado.</p>";return `<table class="table order-table"><thead><tr><th>PEDIDO</th><th>CLIENTE</th><th>DATA</th><th>TOTAL</th><th>STATUS</th><th></th></tr></thead><tbody>${list.map(o=>`<tr><td><button class="link-button" data-click="openOrder" data-args="${esc(JSON.stringify([o.id]))}">${esc(o.order_code ? "MONTÊ-"+o.order_code : (o.order_nsu||"—"))}</button><span class="order-shipping-method">${esc(shippingMethod(o))}</span></td><td>${esc(o.customer_name||"—")}</td><td>${date(o.created_at)}</td><td>${money(o.total)}</td><td><span class="badge ${esc(o.status||"pending")}">${statusLabel(o.status)}</span>${o.approval_status==="pending"&&o.status==="paid"?' <span class="chip chip-presale">ACEITE OU RECUSE</span>':""}${o.status==="cancelled"&&o.refund_status==="pending"?' <span class="chip chip-low">ESTORNO PENDENTE</span>':""}${isTestOrder(o)?' <span class="chip chip-test">TESTE</span>':""}</td><td><button class="secondary small-button" data-click="openOrder" data-args="${esc(JSON.stringify([o.id]))}">DETALHES</button></td></tr>`).join("")}</tbody></table>`}
 // Pedidos sem pagamento há mais de 2 dias ficam "expirados" e escondidos por padrão.
-let showExpiredOrders=false;
-function renderOrders(){const expired=orders.filter(o=>o.status==="expired").length,toggle=$("ordersExpiredToggle");if(toggle){toggle.hidden=!expired;setHTML(toggle, `<input id="showExpiredOrders" type="checkbox" ${showExpiredOrders?"checked":""}> Mostrar ${expired} pedido${expired===1?"":"s"} expirado${expired===1?"":"s"} (sem pagamento há mais de 2 dias)`);$("showExpiredOrders").onchange=e=>{showExpiredOrders=e.target.checked;renderOrders()}}const waiting=orders.filter(o=>o.approval_status==="pending"&&o.status==="paid").length,refunds=orders.filter(o=>o.status==="cancelled"&&o.refund_status==="pending").length;const alerts=(waiting?`<p class="order-alert">${waiting} pedido${waiting>1?"s":""} de pré-venda aguardando você aceitar ou recusar.</p>`:"")+(refunds?`<p class="order-alert">${refunds} estorno${refunds>1?"s":""} pendente${refunds>1?"s":""}: faça no app da InfinitePay e marque como feito no pedido.</p>`:"");setHTML($("ordersTable"), alerts+orderTable(showExpiredOrders?orders:orders.filter(o=>o.status!=="expired")))}
+let showExpiredOrders=false,showTestOrders=false;
+// Pedidos de teste (is_test) ficam escondidos; a opção de mostrar aparece quando existe algum.
+function renderOrders(){const tests=orders.filter(isTestOrder).length,base=showTestOrders?orders:orders.filter(o=>!isTestOrder(o)),expired=base.filter(o=>o.status==="expired").length,toggle=$("ordersExpiredToggle"),testToggle=$("ordersTestToggle");if(toggle){toggle.hidden=!expired;setHTML(toggle, `<input id="showExpiredOrders" type="checkbox" ${showExpiredOrders?"checked":""}> Mostrar ${expired} pedido${expired===1?"":"s"} expirado${expired===1?"":"s"} (sem pagamento há mais de 2 dias)`);$("showExpiredOrders").onchange=e=>{showExpiredOrders=e.target.checked;renderOrders()}}if(testToggle){testToggle.hidden=!tests;setHTML(testToggle, `<input id="showTestOrders" type="checkbox" ${showTestOrders?"checked":""}> Mostrar ${tests} pedido${tests===1?"":"s"} de teste (não ${tests===1?"entra":"entram"} nas contas do painel)`);$("showTestOrders").onchange=e=>{showTestOrders=e.target.checked;renderOrders()}}const real=orders.filter(o=>!isTestOrder(o)),waiting=real.filter(o=>o.approval_status==="pending"&&o.status==="paid").length,refunds=real.filter(o=>o.status==="cancelled"&&o.refund_status==="pending").length;const alerts=(waiting?`<p class="order-alert">${waiting} pedido${waiting>1?"s":""} de pré-venda aguardando você aceitar ou recusar.</p>`:"")+(refunds?`<p class="order-alert">${refunds} estorno${refunds>1?"s":""} pendente${refunds>1?"s":""}: faça no app da InfinitePay e marque como feito no pedido.</p>`:"");setHTML($("ordersTable"), alerts+orderTable(showExpiredOrders?base:base.filter(o=>o.status!=="expired")))}
 function statusLabel(s){return({pending:"Aguardando pagamento",expired:"EXPIRADO",paid:"PAGO",processing:"SEPARANDO",shipped:"ENVIADO",delivered:"ENTREGUE",cancelled:"CANCELADO"})[s]||s||"—"}
 // Pré-venda: a loja aceita ou recusa; recusado, o estorno é feito no app da InfinitePay.
 function decisionCard(o){
@@ -124,7 +125,10 @@ function markRefundDone(id){if(!window.confirm("Você já fez o estorno no app d
 function reminderLine(o){const s=o.payment_reminder_status;if(!s)return "";const label={sent:"enviado",error:"falhou",skipped_paid_later:"não enviado (comprou em outro pedido)",skipped_newer_order:"não enviado (fez outro pedido)",skipped_sold_out:"não enviado (peças esgotadas)",skipped_invalid_email:"não enviado (e-mail inválido)",skipped_checkout_failed:"não enviado (o pagamento não abriu)"}[s]||s;return `<p>Lembrete por e-mail: <strong>${esc(label)}</strong>${s==="sent"&&o.payment_reminder_sent_at?" em "+date(o.payment_reminder_sent_at):""}</p>`}
 function openOrder(id){const o=orders.find(x=>String(x.id)===String(id));if(!o)return;window.currentOrderId=o.id;$("orderModalTitle").textContent=(o.order_code ? "MONTÊ-"+o.order_code : (o.order_nsu||"Pedido"));setHTML($("orderDetails"), orderDetail(o));$("orderModal").classList.remove("hidden")}
 function closeOrder(){$("orderModal").classList.add("hidden")}
-function orderDetail(o){const a=o.customer_address||{},p=(o.payments||[])[0]||{},items=o.order_items||[];const presaleIds=new Set((Array.isArray(o.items)?o.items:[]).filter(x=>x&&x.presale===true).map(x=>String(x.variant_id||x.id)));const giftItems=(Array.isArray(o.items)?o.items:[]).filter(x=>x&&x.gift===true);const address=[a.street&&a.number?`${a.street}, ${a.number}`:a.street||"",a.complement||"",a.neighborhood||"",a.cep||"",a.city&&a.state?`${a.city} - ${a.state}`:a.city||a.state||""].filter(Boolean).join(" · ");return `${decisionCard(o)}<div class="order-summary-grid"><div class="detail-card"><h3>Cliente</h3><p><strong>${esc(o.customer_name||"—")}</strong></p><p>${esc(o.customer_email||"—")}</p><p>Telefone: ${esc(o.customer_phone||"—")}</p><p>WhatsApp rastreio: <strong>${esc(o.customer_whatsapp||"—")}</strong></p><p>CPF: ${esc(o.customer_cpf||"—")}</p></div><div class="detail-card"><h3>Entrega</h3><p>Forma de envio: <strong class="shipping-method">${esc(shippingMethod(o))}</strong></p>${shippingDays(o)?`<p>Prazo informado à cliente: ${esc(shippingDays(o))}</p>`:""}<p>${esc(address||"—")}</p><p>Frete: ${Number(o.shipping)>0?money(o.shipping):"grátis"}</p></div><div class="detail-card"><h3>Pagamento</h3><p>Status: <strong>${esc(statusLabel(o.status))}</strong></p><p>Transação: ${esc(o.transaction_nsu||p.transaction_nsu||"—")}</p><p>Parcelas: ${esc(o.installments||p.installments||"—")}</p><p>Pago em: ${date(o.paid_at||p.created_at)}</p>${reminderLine(o)}${o.receipt_url||p.receipt_url?`<a href="${esc(o.receipt_url||p.receipt_url)}" target="_blank" rel="noopener">Abrir comprovante</a>`:""}</div><div class="detail-card"><h3>Resumo</h3><p>Subtotal: ${money(o.subtotal)}</p><p>Frete (${esc(shippingMethod(o))}): ${money(o.shipping)}</p>${o.coupon_code?`<p>Cupom ${esc(o.coupon_code)}: -${money(o.coupon_discount)}</p>`:""}<p class="total-line">Total: ${money(o.total)}</p></div></div><div class="detail-card"><h3>Produtos</h3><div class="order-items">${items.length?items.map(i=>`<div class="order-item"><div><strong>${esc(i.product_name)}${presaleIds.has(String(i.variant_id))||presaleIds.has(String(i.product_id))?' <span class="chip chip-presale">PRÉ-VENDA · ENTREGA EM 10 DIAS ÚTEIS</span>':""}${Number(i.total_price)===0&&giftItems.some(g=>String(g.variant_id)===String(i.variant_id))?' <span class="chip chip-gift">PRESENTE · '+esc(giftItems.find(g=>String(g.variant_id)===String(i.variant_id)).promotion_name||"promoção")+'</span>':""}</strong><span>${esc(i.variant_color||"Sem cor")} · SKU ${esc(i.sku||"—")}</span></div><div>${i.quantity} × ${money(i.unit_price)}<br><strong>${money(i.total_price)}</strong></div></div>`).join(""):"<p>Nenhum item registrado.</p>"}</div></div><div class="detail-card"><h3>Expedição</h3><div class="status-actions"><label>Status<select id="orderStatus">${[...(["pending","expired"].includes(o.status)?[o.status]:[]),"paid","processing","shipped","delivered"].map(s=>`<option value="${s}" ${o.status===s?"selected":""}>${statusLabel(s)}</option>`).join("")}</select></label><label>Transportadora<input id="shippingCarrier" value="${esc(o.shipping_carrier||"")}" placeholder="Ex.: Correios"></label><label>Código de rastreio<input id="trackingCode" value="${esc(o.tracking_code||"")}" placeholder="Código"></label><label>Link de rastreio<input id="trackingUrl" value="${esc(o.tracking_url||"")}" placeholder="https://..."></label></div><p class="whatsapp-admin-status">WhatsApp: <strong>${o.whatsapp_tracking_sent_at?"enviado":"automático"}</strong>${o.whatsapp_tracking_sent_at?" · enviado em "+date(o.whatsapp_tracking_sent_at):""}</p><p class="whatsapp-admin-status">E-mail de atualização: <strong>${esc(o.tracking_email_status||"não enviado")}</strong>${o.tracking_email_sent_at?" · enviado em "+date(o.tracking_email_sent_at):""}</p><div id="orderUpdateError" class="error"></div><div class="modal-actions"><button class="secondary" data-click="closeOrder">FECHAR</button><button class="secondary" data-click="sendTrackingWhatsApp" data-args="${esc(JSON.stringify([o.id]))}">ENVIAR WHATSAPP</button><button class="secondary" data-click="sendTrackingEmail" data-args="${esc(JSON.stringify([o.id]))}">ENVIAR E-MAIL</button>${o.status==="paid" ? '<button class="secondary" data-click="syncPaidOrderOlist" data-args="'+esc(JSON.stringify([o.id]))+'">SINCRONIZAR OLIST</button>' : ''}<button data-click="saveOrderStatus" data-args="${esc(JSON.stringify([o.id]))}">SALVAR STATUS</button></div></div>`}
+// Pedido de teste: fora da Visão geral e do Analytics. Dá para marcar e desmarcar aqui.
+function testCard(o){return isTestOrder(o)?`<div class="detail-card test-card"><div><h3>Pedido de teste</h3><p>Não entra no faturamento nem nas contas do painel e fica escondido na lista de pedidos.</p></div><button type="button" class="secondary" data-click="setOrderTest" data-args="${esc(JSON.stringify([o.id,false]))}">NÃO É TESTE</button></div>`:`<div class="test-line"><button type="button" class="link-button test-link" data-click="setOrderTest" data-args="${esc(JSON.stringify([o.id,true]))}">Este pedido foi um teste? Marcar como teste</button></div>`}
+async function setOrderTest(id,isTest){if(isTest&&!window.confirm("Marcar este pedido como teste?\n\nEle sai do faturamento e das contas do painel e fica escondido na lista de pedidos. Nada é apagado e dá para desfazer."))return;try{await api(`/api/admin/orders/${encodeURIComponent(id)}/test`,{method:"PATCH",body:JSON.stringify({is_test:isTest})});await loadOrders();if(isTest&&!showTestOrders)closeOrder();else openOrder(id);if($("analyticsSection")&&!$("analyticsSection").classList.contains("hidden"))loadAnalytics()}catch(e){window.alert(e.message)}}
+function orderDetail(o){const a=o.customer_address||{},p=(o.payments||[])[0]||{},items=o.order_items||[];const presaleIds=new Set((Array.isArray(o.items)?o.items:[]).filter(x=>x&&x.presale===true).map(x=>String(x.variant_id||x.id)));const giftItems=(Array.isArray(o.items)?o.items:[]).filter(x=>x&&x.gift===true);const address=[a.street&&a.number?`${a.street}, ${a.number}`:a.street||"",a.complement||"",a.neighborhood||"",a.cep||"",a.city&&a.state?`${a.city} - ${a.state}`:a.city||a.state||""].filter(Boolean).join(" · ");return `${testCard(o)}${decisionCard(o)}<div class="order-summary-grid"><div class="detail-card"><h3>Cliente</h3><p><strong>${esc(o.customer_name||"—")}</strong></p><p>${esc(o.customer_email||"—")}</p><p>Telefone: ${esc(o.customer_phone||"—")}</p><p>WhatsApp rastreio: <strong>${esc(o.customer_whatsapp||"—")}</strong></p><p>CPF: ${esc(o.customer_cpf||"—")}</p></div><div class="detail-card"><h3>Entrega</h3><p>Forma de envio: <strong class="shipping-method">${esc(shippingMethod(o))}</strong></p>${shippingDays(o)?`<p>Prazo informado à cliente: ${esc(shippingDays(o))}</p>`:""}<p>${esc(address||"—")}</p><p>Frete: ${Number(o.shipping)>0?money(o.shipping):"grátis"}</p></div><div class="detail-card"><h3>Pagamento</h3><p>Status: <strong>${esc(statusLabel(o.status))}</strong></p><p>Transação: ${esc(o.transaction_nsu||p.transaction_nsu||"—")}</p><p>Parcelas: ${esc(o.installments||p.installments||"—")}</p><p>Pago em: ${date(o.paid_at||p.created_at)}</p>${reminderLine(o)}${o.receipt_url||p.receipt_url?`<a href="${esc(o.receipt_url||p.receipt_url)}" target="_blank" rel="noopener">Abrir comprovante</a>`:""}</div><div class="detail-card"><h3>Resumo</h3><p>Subtotal: ${money(o.subtotal)}</p><p>Frete (${esc(shippingMethod(o))}): ${money(o.shipping)}</p>${o.coupon_code?`<p>Cupom ${esc(o.coupon_code)}: -${money(o.coupon_discount)}</p>`:""}<p class="total-line">Total: ${money(o.total)}</p></div></div><div class="detail-card"><h3>Produtos</h3><div class="order-items">${items.length?items.map(i=>`<div class="order-item"><div><strong>${esc(i.product_name)}${presaleIds.has(String(i.variant_id))||presaleIds.has(String(i.product_id))?' <span class="chip chip-presale">PRÉ-VENDA · ENTREGA EM 10 DIAS ÚTEIS</span>':""}${Number(i.total_price)===0&&giftItems.some(g=>String(g.variant_id)===String(i.variant_id))?' <span class="chip chip-gift">PRESENTE · '+esc(giftItems.find(g=>String(g.variant_id)===String(i.variant_id)).promotion_name||"promoção")+'</span>':""}</strong><span>${esc(i.variant_color||"Sem cor")} · SKU ${esc(i.sku||"—")}</span></div><div>${i.quantity} × ${money(i.unit_price)}<br><strong>${money(i.total_price)}</strong></div></div>`).join(""):"<p>Nenhum item registrado.</p>"}</div></div><div class="detail-card"><h3>Expedição</h3><div class="status-actions"><label>Status<select id="orderStatus">${[...(["pending","expired"].includes(o.status)?[o.status]:[]),"paid","processing","shipped","delivered"].map(s=>`<option value="${s}" ${o.status===s?"selected":""}>${statusLabel(s)}</option>`).join("")}</select></label><label>Transportadora<input id="shippingCarrier" value="${esc(o.shipping_carrier||"")}" placeholder="Ex.: Correios"></label><label>Código de rastreio<input id="trackingCode" value="${esc(o.tracking_code||"")}" placeholder="Código"></label><label>Link de rastreio<input id="trackingUrl" value="${esc(o.tracking_url||"")}" placeholder="https://..."></label></div><p class="whatsapp-admin-status">WhatsApp: <strong>${o.whatsapp_tracking_sent_at?"enviado":"automático"}</strong>${o.whatsapp_tracking_sent_at?" · enviado em "+date(o.whatsapp_tracking_sent_at):""}</p><p class="whatsapp-admin-status">E-mail de atualização: <strong>${esc(o.tracking_email_status||"não enviado")}</strong>${o.tracking_email_sent_at?" · enviado em "+date(o.tracking_email_sent_at):""}</p><div id="orderUpdateError" class="error"></div><div class="modal-actions"><button class="secondary" data-click="closeOrder">FECHAR</button><button class="secondary" data-click="sendTrackingWhatsApp" data-args="${esc(JSON.stringify([o.id]))}">ENVIAR WHATSAPP</button><button class="secondary" data-click="sendTrackingEmail" data-args="${esc(JSON.stringify([o.id]))}">ENVIAR E-MAIL</button>${o.status==="paid" ? '<button class="secondary" data-click="syncPaidOrderOlist" data-args="'+esc(JSON.stringify([o.id]))+'">SINCRONIZAR OLIST</button>' : ''}<button data-click="saveOrderStatus" data-args="${esc(JSON.stringify([o.id]))}">SALVAR STATUS</button></div></div>`}
 async function sendTrackingEmail(id){
     const status=$("orderStatus")?.value;
     if(status==="shipped" && !$("trackingCode")?.value.trim()){
@@ -722,10 +726,189 @@ function closeDrawer(id){const d=$(id);if(d)d.open=false}
   if(newPromo)newPromo.onclick=()=>{resetPromotionForm();showSubtab("promotions","gifts");openDrawer("promoFormPanel","promoName");$("promoFormPanel").scrollIntoView({behavior:"smooth",block:"start"})};
 })();
 function goTo(section,subtab){showSection(section);if(subtab)showSubtab(section,subtab)}
+registerClickActions({goTo,setOrderTest});
+
+/* =====================================================
+   VISÃO GERAL — DASHBOARD
+   Só vendas para clientes: pedidos marcados como teste (is_test) ficam de
+   fora de tudo aqui. "Venda" = pedido pago, em separação, enviado ou
+   entregue; a data da venda é a do pagamento (ou a do pedido). O período
+   (7, 30, 90 dias ou desde o início) vale para os números, o gráfico e as
+   listas da parte "Vendas"; o topo mostra sempre o mês atual.
+===================================================== */
+const SALE_STATUSES=["paid","processing","shipped","delivered"];
+const DAY_MS=86400000;
+let dashDays=30;
+try{const saved=Number(localStorage.getItem("monteDashDays"));if([0,7,30,90].includes(saved)&&localStorage.getItem("monteDashDays")!==null)dashDays=saved}catch{}
+function isTestOrder(o){return o&&o.is_test===true}
+function realOrders(){return orders.filter(o=>!isTestOrder(o))}
+function saleTime(o){return new Date(o.paid_at||o.created_at).getTime()}
+function realSales(){return realOrders().filter(o=>SALE_STATUSES.includes(o.status))}
+function sumTotal(list){return list.reduce((n,o)=>n+Number(o.total||0),0)}
+function soldItems(o){const list=Array.isArray(o.order_items)&&o.order_items.length?o.order_items:(Array.isArray(o.items)?o.items:[]);return list.filter(i=>Number(i.total_price??(Number(i.unit_price||i.price||0)*Number(i.quantity||1)))>0)}
+function soldPieces(list){return list.reduce((n,o)=>n+soldItems(o).reduce((m,i)=>m+Number(i.quantity||1),0),0)}
+function startOfDay(t){const d=new Date(t);d.setHours(0,0,0,0);return d.getTime()}
+function plural(n,one,many){return n===1?one:many}
+// Variação em relação ao período anterior: seta + número + com o quê comparou (a cor nunca vai sozinha).
+function deltaHtml(cur,prev,label){
+  if(!prev&&!cur)return `<span class="delta-label">${esc(label)}: sem vendas</span>`;
+  if(!prev)return `<span class="delta-value up">▲ novo</span> <span class="delta-label">${esc(label)}: sem vendas</span>`;
+  const pct=(cur-prev)/prev*100,abs=Math.abs(pct),dir=abs<0.5?"flat":pct>0?"up":"down";
+  const text=dir==="flat"?"= igual":(dir==="up"?"▲ ":"▼ ")+(abs>=999?"999+":abs.toLocaleString("pt-BR",{maximumFractionDigits:abs<10?1:0}))+"%";
+  return `<span class="delta-value ${dir}">${text}</span> <span class="delta-label">${esc(label)}</span>`;
+}
+function renderDashboard(){
+  const sales=realSales();
+  renderDashboardHero(sales);
+  renderDashboardTodo();
+  renderDashboardPeriod(sales);
+  renderDashboardPipeline();
+  setHTML($("recentOrders"), orderTable(realOrders().filter(o=>o.status!=="expired").slice(0,6)));
+}
+function renderDashboardHero(sales){
+  const now=new Date(),day=now.getDate();
+  const start=new Date(now.getFullYear(),now.getMonth(),1).getTime();
+  const prevStart=new Date(now.getFullYear(),now.getMonth()-1,1);
+  const prevDays=new Date(now.getFullYear(),now.getMonth(),0).getDate();
+  const prevEnd=new Date(prevStart.getFullYear(),prevStart.getMonth(),Math.min(day,prevDays),now.getHours(),now.getMinutes(),now.getSeconds()).getTime();
+  const cur=sales.filter(o=>saleTime(o)>=start),prev=sales.filter(o=>{const t=saleTime(o);return t>=prevStart.getTime()&&t<prevEnd});
+  const month=now.toLocaleDateString("pt-BR",{month:"long"}),prevMonth=prevStart.toLocaleDateString("pt-BR",{month:"long"});
+  if($("heroLabel"))$("heroLabel").textContent="FATURAMENTO DE "+month.toUpperCase();
+  if(!$("statRevenue"))return;
+  const total=sumTotal(cur);
+  $("statRevenue").textContent=money(total);
+  setHTML($("heroDelta"), deltaHtml(total,sumTotal(prev),`vs ${day===1?"1º":"1º a "+Math.min(day,prevDays)} de ${prevMonth}`));
+  $("statRevenueHint").textContent=cur.length?`${cur.length} ${plural(cur.length,"venda","vendas")} · ticket médio ${money(total/cur.length)}`:"Nenhuma venda este mês ainda";
+}
+function dashRange(sales){
+  const now=Date.now();
+  if(dashDays>0)return{start:startOfDay(now-(dashDays-1)*DAY_MS),end:now,prevStart:startOfDay(now-(2*dashDays-1)*DAY_MS),prevEnd:startOfDay(now-(dashDays-1)*DAY_MS),compare:`vs ${dashDays} dias anteriores`};
+  const first=sales.length?Math.min(...sales.map(saleTime)):now;
+  return{start:startOfDay(first),end:now,prevStart:null,prevEnd:null,compare:"",since:first};
+}
+function renderDashboardPeriod(sales){
+  document.querySelectorAll(".dash-period").forEach(b=>{const on=Number(b.dataset.days)===dashDays;b.classList.toggle("active",on);b.setAttribute("aria-pressed",on?"true":"false")});
+  const r=dashRange(sales),inRange=(o,a,b)=>{const t=saleTime(o);return t>=a&&t<=b};
+  const cur=sales.filter(o=>inRange(o,r.start,r.end)),prev=r.prevStart===null?null:sales.filter(o=>inRange(o,r.prevStart,r.prevEnd-1));
+  const revenue=sumTotal(cur),pieces=soldPieces(cur);
+  const sinceText=r.since?"desde "+new Date(r.since).toLocaleDateString("pt-BR"):"";
+  const kpi=(label,value,cmp,sub)=>`<div class="kpi"><span class="kpi-label">${esc(label)}</span><strong class="kpi-value">${esc(value)}</strong><span class="delta">${cmp}</span><small class="kpi-sub">${esc(sub)}</small></div>`;
+  const cmp=(c,p)=>prev?deltaHtml(c,p,r.compare):`<span class="delta-label">${esc(sinceText||"desde o início")}</span>`;
+  const prevRevenue=prev?sumTotal(prev):0,prevTicket=prev&&prev.length?prevRevenue/prev.length:0;
+  setHTML($("dashKpis"),
+    kpi("Faturamento",money(revenue),cmp(revenue,prevRevenue),"total pago pelas clientes, com frete")+
+    kpi("Vendas",fmtInt(cur.length),cmp(cur.length,prev?prev.length:0),"pedidos pagos")+
+    kpi("Ticket médio",money(cur.length?revenue/cur.length:0),cmp(cur.length?revenue/cur.length:0,prevTicket),"valor médio por venda")+
+    kpi("Peças vendidas",fmtInt(pieces),cmp(pieces,prev?soldPieces(prev):0),"sem contar os presentes"));
+  renderRevenueChart(revenueBins(cur,r));
+  renderTopProducts(cur);
+  renderRankList($("dashPayments"),groupSales(cur,o=>({pix:"Pix",credit_card:"Cartão de crédito",debit_card:"Cartão de débito"})[o.payment_method]||(o.payment_method?String(o.payment_method):"Não informado")),"revenue");
+  renderRankList($("dashShippingMethods"),groupSales(cur,o=>shippingMethod(o)),"count");
+}
+// Um ponto por dia; períodos longos (mais de 92 dias) viram semanas.
+function revenueBins(list,r){
+  const days=Math.max(1,Math.round((startOfDay(r.end)-r.start)/DAY_MS)+1),step=days>92?7:1,bins=[];
+  for(let t=r.start;t<=r.end;t+=step*DAY_MS)bins.push({start:t,end:t+step*DAY_MS,revenue:0,count:0,week:step>1});
+  list.forEach(o=>{const t=saleTime(o),b=bins.find(x=>t>=x.start&&t<x.end);if(b){b.revenue+=Number(o.total||0);b.count++}});
+  return bins;
+}
+function shortDate(t){return new Date(t).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}
+function binLabel(b){return b.week?"semana de "+shortDate(b.start):new Date(b.start).toLocaleDateString("pt-BR",{weekday:"short",day:"2-digit",month:"2-digit"})}
+function niceStep(max,ticks){const raw=max/ticks,mag=Math.pow(10,Math.floor(Math.log10(raw||1))),n=raw/mag;return (n<=1?1:n<=2?2:n<=2.5?2.5:n<=5?5:10)*mag}
+function axisMoney(v){return v>=10000?(v/1000).toLocaleString("pt-BR",{maximumFractionDigits:1})+" mil":v.toLocaleString("pt-BR",{maximumFractionDigits:0})}
+function renderRevenueChart(bins){
+  const box=$("dashRevenueChart");if(!box)return;
+  box._bins=bins;
+  const total=bins.reduce((n,b)=>n+b.revenue,0),count=bins.reduce((n,b)=>n+b.count,0),withSales=bins.filter(b=>b.count);
+  if($("dashChartHint"))$("dashChartHint").textContent=count?`${money(total)} em ${count} ${plural(count,"venda","vendas")} no período. ${window.matchMedia&&window.matchMedia("(hover: none)").matches?"Toque em uma coluna":"Passe o mouse ou use as setas do teclado"} para ver cada ${bins[0]&&bins[0].week?"semana":"dia"}.`:"Nenhuma venda no período.";
+  box.setAttribute("aria-label","Gráfico de colunas do faturamento por "+(bins[0]&&bins[0].week?"semana":"dia")+": "+money(total)+" no período.");
+  const W=Math.round(box.clientWidth);
+  if(!W){box._pending=true;return}
+  box._pending=false;box._width=W;
+  const H=W<520?220:260,padL=W<520?40:52,padR=10,padT=26,padB=28,plotW=W-padL-padR,plotH=H-padT-padB,base=padT+plotH;
+  const max=Math.max(0,...bins.map(b=>b.revenue)),step=niceStep(max||1000,4),top=Math.max(step,Math.ceil((max||1)/step)*step);
+  const y=v=>base-(v/top)*plotH,slot=plotW/bins.length,barW=Math.max(2,Math.min(24,slot*0.62));
+  let grid="";for(let v=0;v<=top+0.001;v+=step){const gy=y(v).toFixed(1);grid+=`<line x1="${padL}" x2="${W-padR}" y1="${gy}" y2="${gy}" class="dc-grid${v===0?" dc-base":""}"/><text x="${padL-8}" y="${(+gy+4).toFixed(1)}" text-anchor="end" class="dc-tick">${axisMoney(v)}</text>`}
+  const labelEvery=Math.max(1,Math.ceil(bins.length/(W<520?4:8)));
+  let bars="",labels="",maxIdx=-1;
+  bins.forEach((b,i)=>{
+    const cx=padL+slot*i+slot/2,x=cx-barW/2;
+    if(b.revenue>0){const yy=y(b.revenue),h=base-yy,rr=Math.min(4,barW/2,h);bars+=`<path class="dc-bar" data-i="${i}" d="M${x.toFixed(1)} ${base} V${(yy+rr).toFixed(1)} Q${x.toFixed(1)} ${yy.toFixed(1)} ${(x+rr).toFixed(1)} ${yy.toFixed(1)} H${(x+barW-rr).toFixed(1)} Q${(x+barW).toFixed(1)} ${yy.toFixed(1)} ${(x+barW).toFixed(1)} ${(yy+rr).toFixed(1)} V${base} Z"/>`;if(maxIdx<0||b.revenue>bins[maxIdx].revenue)maxIdx=i}
+    if((bins.length-1-i)%labelEvery===0)labels+=`<text x="${cx.toFixed(1)}" y="${H-8}" text-anchor="middle" class="dc-tick">${esc(shortDate(b.start))}</text>`;
+  });
+  let peak="";
+  if(maxIdx>=0){const cx=padL+slot*maxIdx+slot/2,tx=Math.min(W-padR-4,Math.max(padL+4,cx)),anchor=tx===cx?"middle":(tx<cx?"end":"start");peak=`<text x="${tx.toFixed(1)}" y="${(y(bins[maxIdx].revenue)-8).toFixed(1)}" text-anchor="${anchor}" class="dc-peak">${esc(money(bins[maxIdx].revenue))}</text>`}
+  setHTML(box,`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true"><g>${grid}</g><line class="dc-cross" x1="0" x2="0" y1="${padT}" y2="${base}" visibility="hidden"/><g>${bars}</g>${peak}<g>${labels}</g></svg><div class="dc-tip" hidden><span class="dc-tip-date"></span><strong class="dc-tip-value"></strong><span class="dc-tip-count"></span></div>`);
+  box._geo={padL,slot,padT,base,W};
+  // Tabela: o mesmo conteúdo do gráfico, sem precisar passar o mouse.
+  setHTML($("dashRevenueTable"),withSales.length?`<table class="table"><thead><tr><th>${bins[0].week?"SEMANA":"DIA"}</th><th>VENDAS</th><th>FATURAMENTO</th></tr></thead><tbody>${withSales.slice().reverse().map(b=>`<tr><td>${esc(binLabel(b))}</td><td>${fmtInt(b.count)}</td><td>${money(b.revenue)}</td></tr>`).join("")}<tr class="dc-total"><td>Total</td><td>${fmtInt(count)}</td><td>${money(total)}</td></tr></tbody></table>`:'<p class="field-help">Nenhuma venda no período.</p>');
+  if(box._active!=null)showChartTip(box,Math.min(box._active,bins.length-1));
+}
+function showChartTip(box,i){
+  const bins=box._bins,g=box._geo;if(!bins||!g||i<0||i>=bins.length)return;
+  box._active=i;const b=bins[i],tip=box.querySelector(".dc-tip"),cross=box.querySelector(".dc-cross");
+  box.querySelectorAll(".dc-bar").forEach(el=>el.classList.toggle("is-active",Number(el.dataset.i)===i));
+  const cx=g.padL+g.slot*i+g.slot/2;
+  if(cross){cross.setAttribute("x1",cx);cross.setAttribute("x2",cx);cross.setAttribute("visibility","visible")}
+  tip.querySelector(".dc-tip-date").textContent=binLabel(b);
+  tip.querySelector(".dc-tip-value").textContent=money(b.revenue);
+  tip.querySelector(".dc-tip-count").textContent=b.count?`${b.count} ${plural(b.count,"venda","vendas")}`:"sem vendas";
+  tip.hidden=false;
+  const w=tip.offsetWidth,left=cx+14+w<=g.W?cx+14:Math.max(0,cx-14-w);
+  tip.style.left=left+"px";tip.style.top=Math.max(0,g.padT-6)+"px";
+}
+function hideChartTip(box){box._active=null;const tip=box.querySelector(".dc-tip"),cross=box.querySelector(".dc-cross");if(tip)tip.hidden=true;if(cross)cross.setAttribute("visibility","hidden");box.querySelectorAll(".dc-bar.is-active").forEach(el=>el.classList.remove("is-active"))}
+(function(){
+  const box=$("dashRevenueChart");if(!box)return;
+  const indexAt=e=>{const g=box._geo;if(!g)return -1;const x=e.clientX-box.getBoundingClientRect().left;return Math.max(0,Math.min(box._bins.length-1,Math.floor((x-g.padL)/g.slot)))};
+  box.addEventListener("pointermove",e=>{const i=indexAt(e);if(i>=0)showChartTip(box,i)});
+  box.addEventListener("pointerdown",e=>{const i=indexAt(e);if(i>=0)showChartTip(box,i)});
+  // No toque a dica fica até tocar fora do gráfico; com o mouse some ao sair.
+  box.addEventListener("pointerleave",e=>{if(e.pointerType!=="touch"&&document.activeElement!==box)hideChartTip(box)});
+  document.addEventListener("pointerdown",e=>{if(box._active!=null&&!box.contains(e.target))hideChartTip(box)});
+  box.addEventListener("focus",()=>{const bins=box._bins||[];let i=bins.length-1;for(let k=bins.length-1;k>=0;k--)if(bins[k].count){i=k;break}showChartTip(box,i)});
+  box.addEventListener("blur",()=>hideChartTip(box));
+  box.addEventListener("keydown",e=>{const bins=box._bins||[];if(!bins.length)return;let i=box._active??bins.length-1;if(e.key==="ArrowLeft")i--;else if(e.key==="ArrowRight")i++;else if(e.key==="Home")i=0;else if(e.key==="End")i=bins.length-1;else if(e.key==="Escape"){hideChartTip(box);return}else return;e.preventDefault();showChartTip(box,Math.max(0,Math.min(bins.length-1,i)))});
+  // O gráfico acompanha a largura da tela (e aparece certo quando a Visão geral volta a ser mostrada).
+  if(window.ResizeObserver){let frame=0;new ResizeObserver(()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{const w=Math.round(box.clientWidth);if(w&&(box._pending||w!==box._width)&&box._bins)renderRevenueChart(box._bins)})}).observe(box)}
+  document.querySelectorAll(".dash-period").forEach(b=>b.addEventListener("click",()=>{dashDays=Number(b.dataset.days)||0;try{localStorage.setItem("monteDashDays",String(dashDays))}catch{}renderDashboardPeriod(realSales())}));
+})();
+function groupSales(list,keyFn){
+  const map=new Map();list.forEach(o=>{const k=keyFn(o),x=map.get(k)||{name:k,revenue:0,count:0};x.revenue+=Number(o.total||0);x.count++;map.set(k,x)});
+  return [...map.values()];
+}
+// Barras horizontais em ordem (maior primeiro), uma cor só; o número fica escrito ao lado.
+function renderRankList(box,rows,by,opts={}){
+  if(!box)return;
+  rows=rows.filter(r=>r[by]>0).sort((a,b)=>b[by]-a[by]||b.revenue-a.revenue).slice(0,opts.limit||6);
+  if(!rows.length){setHTML(box,'<p class="rank-empty">Nenhuma venda no período.</p>');return}
+  const total=rows.reduce((n,r)=>n+r[by],0),max=rows[0][by];
+  setHTML(box,rows.map(r=>{
+    const share=total?Math.round(r[by]/total*100):0;
+    const value=by==="revenue"?money(r.revenue):`${fmtInt(r.count)} ${plural(r.count,"venda","vendas")}`;
+    const sub=opts.sub?opts.sub(r):(by==="revenue"?`${fmtInt(r.count)} ${plural(r.count,"venda","vendas")} · ${share}%`:`${share}% · ${money(r.revenue)}`);
+    return `<div class="rank-row">${r.img!==undefined?`<span class="rank-thumb">${r.img?`<img src="${esc(r.img)}" alt="" loading="lazy" data-img-error="hide">`:""}</span>`:""}<div class="rank-body"><div class="rank-top"><span class="rank-name">${esc(r.name)}</span><strong class="rank-value">${esc(value)}</strong></div><div class="rank-track"><i data-w="${(r[by]/max*100).toFixed(1)}"></i></div><small class="rank-sub">${esc(sub)}</small></div></div>`;
+  }).join(""));
+  box.querySelectorAll("[data-w]").forEach(el=>{el.style.width=Math.max(2,Number(el.dataset.w))+"%"});
+}
+function renderTopProducts(list){
+  const map=new Map();
+  list.forEach(o=>soldItems(o).forEach(i=>{const key=String(i.product_id||i.product_name||"—"),x=map.get(key)||{name:i.product_name||"Produto",product_id:i.product_id,revenue:0,count:0,pieces:0};x.revenue+=Number(i.total_price??(Number(i.unit_price||0)*Number(i.quantity||1)));x.pieces+=Number(i.quantity||1);x.count++;map.set(key,x)}));
+  const rows=[...map.values()].map(r=>{const p=products.find(x=>String(x.id)===String(r.product_id));return {...r,img:p&&Array.isArray(p.images)&&p.images[0]?smallPhoto(p.images[0]):""}});
+  renderRankList($("dashTopProducts"),rows,"revenue",{limit:5,sub:r=>`${fmtInt(r.pieces)} ${plural(r.pieces,"peça","peças")}`});
+}
+// Expedição: onde estão os pedidos pagos agora (não depende do período).
+function renderDashboardPipeline(){
+  const box=$("dashPipeline");if(!box)return;
+  const real=realOrders(),n=st=>real.filter(o=>o.status===st&&!(st==="paid"&&o.approval_status==="pending")).length;
+  const steps=[["Para separar",n("paid"),"pagos, esperando a separação"],["Separando",n("processing"),"em separação"],["A caminho",n("shipped"),"enviados"],["Entregues",n("delivered"),"desde o início"]];
+  setHTML(box,steps.map(([label,count,sub],i)=>`<button type="button" class="pipeline-step${i<3&&count?" has-items":""}" data-click="goTo" data-args="${esc(JSON.stringify(["orders"]))}"><span class="pipeline-label">${esc(label)}</span><strong>${fmtInt(count)}</strong><small>${esc(sub)}</small></button>`).join('<span class="pipeline-arrow" aria-hidden="true">→</span>'));
+}
 function renderDashboardTodo(){
-  const toShip=orders.filter(o=>["paid","processing"].includes(o.status)&&o.approval_status!=="pending").length;
-  const approvals=orders.filter(o=>o.approval_status==="pending"&&o.status==="paid").length;
-  const refunds=orders.filter(o=>o.status==="cancelled"&&o.refund_status==="pending").length;
+  const real=realOrders();
+  const toShip=real.filter(o=>["paid","processing"].includes(o.status)&&o.approval_status!=="pending").length;
+  const approvals=real.filter(o=>o.approval_status==="pending"&&o.status==="paid").length;
+  const refunds=real.filter(o=>o.status==="cancelled"&&o.refund_status==="pending").length;
   const low=products.reduce((n,p)=>n+(p.product_variants||[]).filter(v=>v.stock<=2&&v.active).length,0);
   const badge=$("navOrdersBadge");if(badge){badge.textContent=toShip>99?"99+":String(toShip);badge.hidden=!toShip}
   const box=$("dashboardTodo");if(!box)return;
@@ -735,6 +918,5 @@ function renderDashboardTodo(){
     [refunds,"estorno pendente na InfinitePay","estornos pendentes na InfinitePay",["orders"]],
     [low,"cor com estoque baixo (até 2 peças)","cores com estoque baixo (até 2 peças)",["stock","stock"]]
   ].filter(x=>x[0]>0);
-  setHTML(box,items.length?items.map(([n,one,many,args])=>`<button type="button" class="todo-item" data-click="goTo" data-args="${esc(JSON.stringify(args))}"><strong>${n}</strong><span>${n===1?one:many}</span><i aria-hidden="true">›</i></button>`).join(""):'<p class="todo-empty">Tudo em dia. Nenhum pedido para enviar, nenhuma pré-venda esperando resposta e nenhum estorno pendente.</p>');
+  setHTML(box,items.length?`<p class="todo-title">Precisa da sua atenção</p>`+items.map(([n,one,many,args])=>`<button type="button" class="todo-item" data-click="goTo" data-args="${esc(JSON.stringify(args))}"><strong>${n}</strong><span>${n===1?one:many}</span><i aria-hidden="true">›</i></button>`).join(""):'<p class="todo-empty">Tudo em dia: nenhum pedido para enviar, nenhuma pré-venda esperando resposta e nenhum estorno pendente.</p>');
 }
-registerClickActions({goTo});

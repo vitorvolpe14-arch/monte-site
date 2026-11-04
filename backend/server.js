@@ -2179,7 +2179,7 @@ app.get("/api/admin/analytics",requireAdmin,async(req,res)=>{
       supabaseRequest("site_events?created_at=gte."+encodeURIComponent(since)+"&select=*&order=created_at.desc&limit=10000",{method:"GET"}),
       supabaseRequest("site_sessions?last_seen_at=gte."+encodeURIComponent(since)+"&select=*&order=last_seen_at.desc&limit=5000",{method:"GET"}),
       supabaseRequest("cart_snapshots?last_activity_at=gte."+encodeURIComponent(since)+"&select=*&order=last_activity_at.desc&limit=5000",{method:"GET"}),
-      supabaseRequest("orders?created_at=gte."+encodeURIComponent(since)+"&select=id,order_nsu,order_code,customer_name,customer_email,subtotal,shipping,shipping_service_id,shipping_service_name,total,status,payment_method,created_at,paid_at,paid_amount&order=created_at.desc",{method:"GET"}),
+      supabaseRequest("orders?created_at=gte."+encodeURIComponent(since)+"&is_test=is.false&select=id,order_nsu,order_code,customer_name,customer_email,subtotal,shipping,shipping_service_id,shipping_service_name,total,status,payment_method,created_at,paid_at,paid_amount&order=created_at.desc",{method:"GET"}),
       supabaseRequest("order_items?created_at=gte."+encodeURIComponent(since)+"&select=order_id,product_id,product_name,sku,quantity,total_price,created_at&order=created_at.desc&limit=10000",{method:"GET"})
     ]);
     const good=["paid","processing","shipped","delivered"],paid=orders.filter(o=>good.includes(o.status)),paidIds=new Set(paid.map(o=>String(o.id)));
@@ -4215,6 +4215,16 @@ app.post("/api/admin/orders/:id/refund-done", requireAdmin, async (req, res) => 
     }
 });
 
+// Pedido de teste: fica fora da Visão geral e do Analytics e escondido na lista de pedidos.
+app.patch("/api/admin/orders/:id/test",requireAdmin,async(req,res)=>{
+    try{
+        if(typeof req.body?.is_test!=="boolean") return res.status(400).json({success:false,message:"Informe se o pedido é de teste."});
+        const d=await supabaseRequest("orders?id=eq."+encodeURIComponent(req.params.id),{method:"PATCH",body:JSON.stringify({is_test:req.body.is_test})});
+        const order=Array.isArray(d)?d[0]:null;
+        if(!order) return res.status(404).json({success:false,message:"Pedido não encontrado."});
+        return res.json({success:true,is_test:order.is_test===true});
+    }catch(e){console.error("Admin order test PATCH:",e);return res.status(500).json({success:false,message:"Não foi possível atualizar o pedido."})}
+});
 app.patch("/api/admin/orders/:id/status",requireAdmin,async(req,res)=>{
     try{
         const id=encodeURIComponent(req.params.id);
