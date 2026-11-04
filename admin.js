@@ -100,7 +100,7 @@ async function adjustStock(variantId,label,current){const raw=window.prompt(`Aju
 const SHIPPING_SERVICE_NAMES={"1":"PAC","2":"SEDEX","17":"Mini Envios","monte-fortaleza":"Entrega MONTÊ — Fortaleza","monte-regiao-metropolitana":"Entrega MONTÊ — Região Metropolitana"};
 function shippingMethod(o){return String(o.shipping_service_name||"").trim()||SHIPPING_SERVICE_NAMES[String(o.shipping_service_id||"")]||"Não informado"}
 function shippingDays(o){const d=Number(o.shipping_delivery_days);return d>0?`${d} ${d===1?"dia útil":"dias úteis"}`:""}
-function orderTable(list){if(!list.length)return "<p>Nenhum pedido encontrado.</p>";return `<table class="table order-table"><thead><tr><th>PEDIDO</th><th>CLIENTE</th><th>DATA</th><th>TOTAL</th><th>STATUS</th><th></th></tr></thead><tbody>${list.map(o=>`<tr><td><button class="link-button" data-click="openOrder" data-args="${esc(JSON.stringify([o.id]))}">${esc(o.order_code ? "MONTÊ-"+o.order_code : (o.order_nsu||"—"))}</button><span class="order-shipping-method">${esc(shippingMethod(o))}</span></td><td>${esc(o.customer_name||"—")}</td><td>${date(o.created_at)}</td><td>${money(o.total)}</td><td><span class="badge ${esc(o.status||"pending")}">${statusLabel(o.status)}</span>${o.approval_status==="pending"&&o.status==="paid"?' <span class="chip chip-presale">ACEITE OU RECUSE</span>':""}${o.status==="cancelled"&&o.refund_status==="pending"?' <span class="chip chip-low">ESTORNO PENDENTE</span>':""}${isTestOrder(o)?' <span class="chip chip-test">TESTE</span>':""}</td><td><button class="secondary small-button" data-click="openOrder" data-args="${esc(JSON.stringify([o.id]))}">DETALHES</button></td></tr>`).join("")}</tbody></table>`}
+function orderTable(list){if(!list.length)return "<p>Nenhum pedido encontrado.</p>";return `<table class="table order-table"><thead><tr><th>PEDIDO</th><th>CLIENTE</th><th>DATA</th><th>TOTAL</th><th>STATUS</th><th></th></tr></thead><tbody>${list.map(o=>`<tr><td><button class="link-button" data-click="openOrder" data-args="${esc(JSON.stringify([o.id]))}">${esc(o.order_code ? "MONTÊ-"+o.order_code : (o.order_nsu||"—"))}</button><span class="order-shipping-method">${esc(shippingMethod(o))}</span></td><td>${esc(o.customer_name||"—")}</td><td>${date(o.created_at)}</td><td>${money(o.total)}${o.infinitepay&&o.status!=="cancelled"?`<small class="order-net">líquido ${money(o.infinitepay.net)}</small>`:""}</td><td><span class="badge ${esc(o.status||"pending")}">${statusLabel(o.status)}</span>${o.approval_status==="pending"&&o.status==="paid"?' <span class="chip chip-presale">ACEITE OU RECUSE</span>':""}${o.status==="cancelled"&&o.refund_status==="pending"?' <span class="chip chip-low">ESTORNO PENDENTE</span>':""}${isTestOrder(o)?' <span class="chip chip-test">TESTE</span>':""}</td><td><button class="secondary small-button" data-click="openOrder" data-args="${esc(JSON.stringify([o.id]))}">DETALHES</button></td></tr>`).join("")}</tbody></table>`}
 // Pedidos sem pagamento há mais de 2 dias ficam "expirados" e escondidos por padrão.
 let showExpiredOrders=false,showTestOrders=false;
 // Pedidos de teste (is_test) ficam escondidos; a opção de mostrar aparece quando existe algum.
@@ -741,9 +741,9 @@ registerClickActions({goTo,setOrderTest});
 const SALE_STATUSES=["paid","processing","shipped","delivered"];
 const DAY_MS=86400000;
 const DASH_SOURCES={site:"Site",olist:"Fora do site (Olist)",all:"Site + Olist"};
-let dashDays=30,dashSource="all";
+let dashDays=30,dashSource="all",dashValue="gross";
 let olistSales=[],olistSaleSituations=[1,3,4,5,6,7],olistSalesStatus=null,olistSalesEnabled=true,olistSalesError="",olistSalesLoaded=false;
-try{const saved=localStorage.getItem("monteDashDays");if(saved!==null&&[0,7,30,90].includes(Number(saved)))dashDays=Number(saved);const src=localStorage.getItem("monteDashSource");if(DASH_SOURCES[src])dashSource=src}catch{}
+try{const saved=localStorage.getItem("monteDashDays");if(saved!==null&&[0,7,30,90].includes(Number(saved)))dashDays=Number(saved);const src=localStorage.getItem("monteDashSource");if(DASH_SOURCES[src])dashSource=src;const val=localStorage.getItem("monteDashValue");if(val==="net"||val==="gross")dashValue=val}catch{}
 function isTestOrder(o){return o&&o.is_test===true}
 function realOrders(){return orders.filter(o=>!isTestOrder(o))}
 function saleTime(o){return new Date(o.paid_at||o.created_at).getTime()}
@@ -754,15 +754,20 @@ function plural(n,one,many){return n===1?one:many}
 function paymentLabel(v){const s=String(v||"").trim(),t=s.toLowerCase();if(!t)return "Não informado";if(t.includes("pix"))return "Pix";const cred=t.includes("créd")||t.includes("cred"),deb=t.includes("déb")||t.includes("deb");if(cred&&deb)return "Cartão (crédito ou débito)";if(t==="credit_card"||cred)return "Cartão de crédito";if(t==="debit_card"||t.includes("déb")||t.includes("deb"))return "Cartão de débito";if(t.includes("dinheiro"))return "Dinheiro";if(t.includes("boleto"))return "Boleto";if(t.includes("transfer"))return "Transferência";return s.charAt(0).toUpperCase()+s.slice(1)}
 function olistChannel(s){if(Number(s.origem)===1)return "Olist · loja (PDV)";if(s.canal)return "Olist · "+s.canal;return "Olist · pedido de venda"}
 // Venda no mesmo formato para o site e a Olist: data, valor, itens, pagamento, envio e canal.
-function siteSaleRows(){return realSales().map(o=>({source:"site",time:saleTime(o),total:Number(o.total||0),hasItems:true,items:soldItems(o).map(i=>({key:String(i.product_id||i.product_name||"—"),product_id:i.product_id,name:i.product_name||"Produto",qty:Number(i.quantity||1),total:Number(i.total_price??(Number(i.unit_price||0)*Number(i.quantity||1)))})),payment:paymentLabel(o.payment_method),shipping:shippingMethod(o),channel:"Site"}))}
+function siteSaleRows(){return realSales().map(o=>({source:"site",time:saleTime(o),total:Number(o.total||0),hasItems:true,items:soldItems(o).map(i=>({key:String(i.product_id||i.product_name||"—"),product_id:i.product_id,name:i.product_name||"Produto",qty:Number(i.quantity||1),total:Number(i.total_price??(Number(i.unit_price||0)*Number(i.quantity||1)))})),payment:paymentLabel(o.payment_method),shipping:shippingMethod(o),channel:"Site",pay:o.infinitepay||null,order:o}))}
 function productsBySku(){const map=new Map();products.forEach(p=>{if(p.sku)map.set(String(p.sku).toUpperCase(),p);(p.product_variants||[]).forEach(v=>{if(v.sku)map.set(String(v.sku).toUpperCase(),p)})});return map}
 function olistSaleRows(){
   const ok=new Set(olistSaleSituations.map(Number)),bySku=productsBySku();
   return olistSales.filter(s=>ok.has(Number(s.situacao))&&s.data).map(s=>({source:"olist",time:new Date(String(s.data).slice(0,10)+"T12:00:00").getTime(),total:Number(s.total||0),hasItems:!!s.detail_at,
     items:(Array.isArray(s.itens)?s.itens:[]).filter(i=>Number(i.valor)>0).map(i=>{const p=i.sku?bySku.get(String(i.sku).toUpperCase()):null;return {key:p?String(p.id):"olist:"+(i.sku||i.descricao),product_id:p?p.id:null,name:p?p.name:(i.descricao||"Produto"),qty:Number(i.quantidade||1),total:Number(i.valor||0)*Number(i.quantidade||1)}}),
-    payment:s.detail_at?paymentLabel(s.pagamento):"Não informado",shipping:s.envio||(Number(s.origem)===1?"Na loja (PDV)":"Não informado na Olist"),channel:olistChannel(s)}));
+    payment:s.detail_at?paymentLabel(s.pagamento):"Não informado",shipping:s.envio||(Number(s.origem)===1?"Na loja (PDV)":"Não informado na Olist"),channel:olistChannel(s),pay:s.infinitepay||null,olist:s}));
 }
-function dashSales(){return dashSource==="site"?siteSaleRows():dashSource==="olist"?olistSaleRows():siteSaleRows().concat(olistSaleRows())}
+function dashRows(){return dashSource==="site"?siteSaleRows():dashSource==="olist"?olistSaleRows():siteSaleRows().concat(olistSaleRows())}
+// "Valores: Líquido": cada venda vale o que fica depois das taxas da InfinitePay (exato no site,
+// estimado na loja); as peças da venda ficam na mesma proporção.
+function netRow(s){const net=s.pay?Number(s.pay.net):s.total,f=s.total?net/s.total:1;return {...s,gross:s.total,total:net,items:s.items.map(i=>({...i,total:i.total*f}))}}
+function dashSales(){const rows=dashRows();return dashValue==="net"?rows.map(netRow):rows}
+function netSubText(){return dashSource==="site"?"depois das taxas da InfinitePay":dashSource==="olist"?"estimado com a taxa da maquininha":"site exato · loja estimada pela maquininha"}
 function sumTotal(list){return list.reduce((n,s)=>n+Number(s.total||0),0)}
 function soldPieces(list){return list.reduce((n,s)=>n+s.items.reduce((m,i)=>m+i.qty,0),0)}
 // Variação em relação ao período anterior: seta + número + com o quê comparou (a cor nunca vai sozinha).
@@ -785,6 +790,8 @@ function renderDashboard(){
 // "Vendas de" e a situação da leitura da Olist.
 function renderDashboardSource(){
   document.querySelectorAll(".dash-src").forEach(b=>{const on=b.dataset.source===dashSource;b.classList.toggle("active",on);b.setAttribute("aria-pressed",on?"true":"false")});
+  document.querySelectorAll(".dash-val").forEach(b=>{const on=b.dataset.value===dashValue;b.classList.toggle("active",on);b.setAttribute("aria-pressed",on?"true":"false")});
+  document.querySelectorAll("[data-net-text]").forEach(el=>{if(el.dataset.grossText===undefined)el.dataset.grossText=el.textContent;el.textContent=dashValue==="net"?el.dataset.netText:el.dataset.grossText});
   const box=$("olistSalesStatus");if(!box)return;
   const st=olistSalesStatus||{},count=olistSaleRows().length,button=$("olistSalesSync");
   let text;
@@ -808,12 +815,12 @@ function renderDashboardHero(sales){
   const prevEnd=new Date(prevStart.getFullYear(),prevStart.getMonth(),Math.min(day,prevDays),now.getHours(),now.getMinutes(),now.getSeconds()).getTime();
   const cur=sales.filter(s=>s.time>=start),prev=sales.filter(s=>s.time>=prevStart.getTime()&&s.time<prevEnd);
   const month=now.toLocaleDateString("pt-BR",{month:"long"}),prevMonth=prevStart.toLocaleDateString("pt-BR",{month:"long"});
-  if($("heroLabel"))$("heroLabel").textContent="FATURAMENTO DE "+month.toUpperCase()+" · "+DASH_SOURCES[dashSource].toUpperCase();
+  if($("heroLabel"))$("heroLabel").textContent=(dashValue==="net"?"LÍQUIDO DE ":"FATURAMENTO DE ")+month.toUpperCase()+" · "+DASH_SOURCES[dashSource].toUpperCase();
   if(!$("statRevenue"))return;
   const total=sumTotal(cur);
   $("statRevenue").textContent=money(total);
   setHTML($("heroDelta"), deltaHtml(total,sumTotal(prev),`vs ${day===1?"1º":"1º a "+Math.min(day,prevDays)} de ${prevMonth}`));
-  $("statRevenueHint").textContent=cur.length?`${cur.length} ${plural(cur.length,"venda","vendas")} · ticket médio ${money(total/cur.length)}`:"Nenhuma venda este mês ainda";
+  $("statRevenueHint").textContent=cur.length?`${cur.length} ${plural(cur.length,"venda","vendas")} · ticket médio ${money(total/cur.length)}${dashValue==="net"?" · "+netSubText():""}`:"Nenhuma venda este mês ainda";
 }
 function dashRange(sales){
   const now=Date.now();
@@ -831,9 +838,9 @@ function renderDashboardPeriod(sales){
   const cmp=(c,p)=>prev?deltaHtml(c,p,r.compare):`<span class="delta-label">${esc(sinceText||"desde o início")}</span>`;
   const prevRevenue=prev?sumTotal(prev):0,prevTicket=prev&&prev.length?prevRevenue/prev.length:0;
   setHTML($("dashKpis"),
-    kpi("Faturamento",money(revenue),cmp(revenue,prevRevenue),dashSource==="olist"?"valor dos pedidos na Olist":"total pago pelas clientes, com frete")+
+    kpi(dashValue==="net"?"Líquido":"Faturamento",money(revenue),cmp(revenue,prevRevenue),dashValue==="net"?netSubText():dashSource==="olist"?"valor dos pedidos na Olist":"total pago pelas clientes, com frete")+
     kpi("Vendas",fmtInt(cur.length),cmp(cur.length,prev?prev.length:0),dashSource==="site"?"pedidos pagos":"pedidos pagos no site e vendas na Olist")+
-    kpi("Ticket médio",money(cur.length?revenue/cur.length:0),cmp(cur.length?revenue/cur.length:0,prevTicket),"valor médio por venda")+
+    kpi("Ticket médio",money(cur.length?revenue/cur.length:0),cmp(cur.length?revenue/cur.length:0,prevTicket),dashValue==="net"?"líquido médio por venda":"valor médio por venda")+
     kpi("Peças vendidas",fmtInt(pieces),cmp(pieces,prev?soldPieces(prev):0),noItems?`${noItems} ${plural(noItems,"venda da Olist ainda sem itens","vendas da Olist ainda sem itens")}`:"sem contar os presentes"));
   renderRevenueChart(revenueBins(cur,r));
   renderTopProducts(cur);
@@ -859,7 +866,7 @@ function renderRevenueChart(bins){
   box._bins=bins;
   const total=bins.reduce((n,b)=>n+b.revenue,0),count=bins.reduce((n,b)=>n+b.count,0),withSales=bins.filter(b=>b.count),both=dashSource==="all";
   if($("dashChartHint"))$("dashChartHint").textContent=count?`${money(total)} em ${count} ${plural(count,"venda","vendas")} no período (${DASH_SOURCES[dashSource].toLowerCase()}). ${window.matchMedia&&window.matchMedia("(hover: none)").matches?"Toque em uma coluna":"Passe o mouse ou use as setas do teclado"} para ver cada ${bins[0]&&bins[0].week?"semana":"dia"}.`:"Nenhuma venda no período.";
-  box.setAttribute("aria-label","Gráfico de colunas do faturamento por "+(bins[0]&&bins[0].week?"semana":"dia")+": "+money(total)+" no período.");
+  box.setAttribute("aria-label","Gráfico de colunas do "+(dashValue==="net"?"líquido":"faturamento")+" por "+(bins[0]&&bins[0].week?"semana":"dia")+": "+money(total)+" no período.");
   const W=Math.round(box.clientWidth);
   if(!W){box._pending=true;return}
   box._pending=false;box._width=W;
@@ -880,7 +887,7 @@ function renderRevenueChart(bins){
   box._geo={padL,slot,padT,base,W};
   // Tabela: o mesmo conteúdo do gráfico, sem precisar passar o mouse.
   const unit=bins[0]&&bins[0].week?"SEMANA":"DIA";
-  setHTML($("dashRevenueTable"),withSales.length?`<table class="table"><thead><tr><th>${unit}</th><th>VENDAS</th>${both?"<th>SITE</th><th>OLIST</th>":""}<th>FATURAMENTO</th></tr></thead><tbody>${withSales.slice().reverse().map(b=>`<tr><td>${esc(binLabel(b))}</td><td>${fmtInt(b.count)}</td>${both?`<td>${money(b.site)}</td><td>${money(b.olist)}</td>`:""}<td>${money(b.revenue)}</td></tr>`).join("")}<tr class="dc-total"><td>Total</td><td>${fmtInt(count)}</td>${both?`<td>${money(bins.reduce((n,b)=>n+b.site,0))}</td><td>${money(bins.reduce((n,b)=>n+b.olist,0))}</td>`:""}<td>${money(total)}</td></tr></tbody></table>`:'<p class="field-help">Nenhuma venda no período.</p>');
+  setHTML($("dashRevenueTable"),withSales.length?`<table class="table"><thead><tr><th>${unit}</th><th>VENDAS</th>${both?"<th>SITE</th><th>OLIST</th>":""}<th>${dashValue==="net"?"LÍQUIDO":"FATURAMENTO"}</th></tr></thead><tbody>${withSales.slice().reverse().map(b=>`<tr><td>${esc(binLabel(b))}</td><td>${fmtInt(b.count)}</td>${both?`<td>${money(b.site)}</td><td>${money(b.olist)}</td>`:""}<td>${money(b.revenue)}</td></tr>`).join("")}<tr class="dc-total"><td>Total</td><td>${fmtInt(count)}</td>${both?`<td>${money(bins.reduce((n,b)=>n+b.site,0))}</td><td>${money(bins.reduce((n,b)=>n+b.olist,0))}</td>`:""}<td>${money(total)}</td></tr></tbody></table>`:'<p class="field-help">Nenhuma venda no período.</p>');
   if(box._active!=null)showChartTip(box,Math.min(box._active,bins.length-1));
 }
 function showChartTip(box,i){
@@ -913,10 +920,11 @@ function hideChartTip(box){box._active=null;const tip=box.querySelector(".dc-tip
   if(window.ResizeObserver){let frame=0;new ResizeObserver(()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{const w=Math.round(box.clientWidth);if(w&&(box._pending||w!==box._width)&&box._bins)renderRevenueChart(box._bins)})}).observe(box)}
   document.querySelectorAll(".dash-period").forEach(b=>b.addEventListener("click",()=>{dashDays=Number(b.dataset.days)||0;try{localStorage.setItem("monteDashDays",String(dashDays))}catch{}renderDashboardPeriod(dashSales())}));
   document.querySelectorAll(".dash-src").forEach(b=>b.addEventListener("click",()=>{dashSource=DASH_SOURCES[b.dataset.source]?b.dataset.source:"all";try{localStorage.setItem("monteDashSource",dashSource)}catch{}renderDashboard()}));
+  document.querySelectorAll(".dash-val").forEach(b=>b.addEventListener("click",()=>{dashValue=b.dataset.value==="net"?"net":"gross";try{localStorage.setItem("monteDashValue",dashValue)}catch{}renderDashboard()}));
   const sync=$("olistSalesSync");if(sync)sync.onclick=syncOlistSalesNow;
 })();
 async function loadOlistSales(){
-  try{const d=await api("/api/admin/olist/sales");olistSales=Array.isArray(d.sales)?d.sales:[];if(Array.isArray(d.sale_situations)&&d.sale_situations.length)olistSaleSituations=d.sale_situations;olistSalesStatus=d.status||null;olistSalesEnabled=d.enabled!==false;olistSalesError=""}
+  try{const d=await api("/api/admin/olist/sales");olistSales=Array.isArray(d.sales)?d.sales:[];if(Array.isArray(d.sale_situations)&&d.sale_situations.length)olistSaleSituations=d.sale_situations;olistSalesStatus=d.status||null;olistSalesEnabled=d.enabled!==false;machineFees=d.machine_fees||null;olistSalesError=""}
   catch(e){olistSalesError=e.message}
   olistSalesLoaded=true;renderDashboard();
 }
@@ -943,7 +951,7 @@ async function syncOlistSalesNow(){
    Os pedidos de teste também passaram pela InfinitePay: ficam fora da conta, mas
    aparecem numa linha à parte para a conta bater com o app.
 ===================================================== */
-let infinitePayFees=null;
+let infinitePayFees=null,machineFees=null;
 function feePct(v){return Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+"%"}
 function netPayLabel(n){return n.method==="pix"?"Pix":n.installments>1?`Crédito ${n.installments}x`:"Crédito à vista"}
 function netFeeLabel(n){return n.fee_percent?`${feePct(n.fee_percent)} · ${netPayLabel(n)}`:`grátis · ${netPayLabel(n)}`}
@@ -952,32 +960,58 @@ function netLines(o){
   return `<p>Pago pela cliente: <strong>${money(n.paid)}</strong>${n.interest>0?` (${money(n.interest)} de juros do parcelamento)`:""}</p><p>Taxa da InfinitePay (${esc(netFeeLabel(n))}): ${n.fee?"−"+money(n.fee):"sem taxa"}</p><p>Líquido na InfinitePay: <strong>${money(n.net)}</strong></p>`;
 }
 function sumNet(rows,key){return Math.round(rows.reduce((n,o)=>n+Math.round(Number(o.infinitepay[key]||0)*100),0))/100}
+function sumPay(rows,key){return Math.round(rows.reduce((n,s)=>n+Math.round(Number(s.pay[key]||0)*100),0))/100}
 function orderCodeLabel(o){return o.order_code?"MONTÊ-"+o.order_code:(o.order_nsu||"—")}
+function lowerFirst(t){t=String(t||"");return t.charAt(0).toLowerCase()+t.slice(1)}
+function monthLabel(ym){const [y,m]=String(ym).split("-").map(Number);return y&&m?new Date(y,m-1,1).toLocaleDateString("pt-BR",{month:"short",year:"numeric"}).replace(". de "," ").replace(" de "," "):ym}
+// Valor líquido de cada venda no período: site (exato, pelas taxas do link de pagamento) e
+// loja (estimado, pelas taxas da maquininha), conforme "Vendas de".
 function renderDashboardNet(r){
   const panel=$("dashNetPanel");if(!panel)return;
-  panel.hidden=dashSource==="olist";if(panel.hidden)return;
-  const inRange=o=>{const t=saleTime(o);return t>=r.start&&t<=r.end};
-  const rows=realSales().filter(o=>o.infinitepay&&inRange(o)).sort((a,b)=>saleTime(b)-saleTime(a));
-  const sale=sumNet(rows,"sale"),paid=sumNet(rows,"paid"),interest=sumNet(rows,"interest"),fee=sumNet(rows,"fee"),net=sumNet(rows,"net");
-  const withInterest=rows.filter(o=>o.infinitepay.interest>0).length,pix=rows.filter(o=>o.infinitepay.method==="pix").length;
+  panel.hidden=false;
+  const inRange=t=>t>=r.start&&t<=r.end;
+  const rows=dashRows().filter(s=>s.pay&&inRange(s.time)).sort((a,b)=>b.time-a.time);
+  const sale=sumPay(rows,"sale"),paid=sumPay(rows,"paid"),interest=sumPay(rows,"interest"),fee=sumPay(rows,"fee"),net=sumPay(rows,"net");
+  const est=rows.filter(s=>s.pay.estimated),estFee=sumPay(est,"fee");
+  const withInterest=rows.filter(s=>s.pay.interest>0).length,pix=rows.filter(s=>s.pay.method==="pix").length;
   const period=dashDays?`nos últimos ${dashDays} dias`:(r.since?"desde "+new Date(r.since).toLocaleDateString("pt-BR"):"desde o início");
-  $("dashNetHint").textContent=`Vendas do site ${period}, com as taxas da InfinitePay, para conferir com o app dela.${dashSource==="all"?" As vendas de fora do site não passam pela InfinitePay do site e ficam de fora.":""}`;
+  const who={site:"Vendas do site",olist:"Vendas da loja (Olist)",all:"Vendas do site e da loja"}[dashSource];
+  $("dashNetTitle").textContent=dashSource==="site"?"Valor líquido do site na InfinitePay":dashSource==="olist"?"Valor líquido da loja na InfinitePay":"Valor líquido na InfinitePay";
+  $("dashNetHint").textContent=`${who} ${period}, depois das taxas da InfinitePay, para conferir com o app dela.${dashSource!=="site"?" Na loja o líquido é estimado (≈): a Olist não informa a taxa da maquininha.":""}`;
   const step=(label,value,sub,cls="")=>`<div class="net-step${cls}"><span>${esc(label)}</span><strong>${esc(value)}</strong><small>${esc(sub)}</small></div>`;
   setHTML($("dashNet"),
-    step("Vendido no site",money(sale),rows.length?`${fmtInt(rows.length)} ${plural(rows.length,"venda","vendas")} · valor dos pedidos`:"nenhuma venda no período")+
-    step("+ Juros pagos pelas clientes",money(interest),withInterest?`${fmtInt(withInterest)} ${plural(withInterest,"venda parcelada","vendas parceladas")} com juros`:"nenhuma venda com juros")+
-    step("− Taxas da InfinitePay",money(fee),paid?`${pct(fee/paid*100)} do valor pago${pix?` · ${fmtInt(pix)} no Pix, sem taxa`:""}`:"—")+
-    step("= Líquido na InfinitePay",money(net),sale?`${pct(net/sale*100)} do vendido · o que entra na conta`:"o que entra na conta"," is-net"));
-  setHTML($("dashNetTable"),rows.length?`<table class="table net-table"><thead><tr><th>PAGO EM</th><th>PEDIDO</th><th>FORMA</th><th>VENDA</th><th>PAGO PELA CLIENTE</th><th>TAXA</th><th>LÍQUIDO</th></tr></thead><tbody>${rows.map(o=>{const n=o.infinitepay;return `<tr><td>${esc(date(o.paid_at||o.created_at))}</td><td><button class="link-button" data-click="openOrder" data-args="${esc(JSON.stringify([o.id]))}">${esc(orderCodeLabel(o))}</button></td><td>${esc(netPayLabel(n))}</td><td data-label="Venda">${money(n.sale)}</td><td data-label="Pago pela cliente">${money(n.paid)}${n.interest>0?`<small class="net-sub">+${money(n.interest)} de juros</small>`:""}</td><td data-label="Taxa">${n.fee?"−"+money(n.fee):"grátis"}<small class="net-sub">${n.fee_percent?feePct(n.fee_percent):"Pix"}</small></td><td><strong>${money(n.net)}</strong></td></tr>`}).join("")}<tr class="dc-total"><td>Total</td><td>${fmtInt(rows.length)} ${plural(rows.length,"venda","vendas")}</td><td></td><td data-label="Venda">${money(sale)}</td><td data-label="Pago pela cliente">${money(paid)}</td><td data-label="Taxas">${fee?"−"+money(fee):"—"}</td><td>${money(net)}</td></tr></tbody></table>`:'<p class="field-help">Nenhuma venda do site no período.</p>');
+    step(dashSource==="site"?"Vendido no site":dashSource==="olist"?"Vendido na loja":"Vendido",money(sale),rows.length?`${fmtInt(rows.length)} ${plural(rows.length,"venda","vendas")} · valor dos pedidos`:"nenhuma venda no período")+
+    step("+ Juros pagos pelas clientes",money(interest),withInterest?`${fmtInt(withInterest)} ${plural(withInterest,"venda parcelada","vendas parceladas")} com juros no site`:"nenhuma venda com juros")+
+    step("− Taxas da InfinitePay",(estFee?"≈ ":"")+money(fee),paid?`${pct(fee/paid*100)} do valor pago${estFee?` · ${money(estFee)} estimados na loja`:""}${pix?` · ${fmtInt(pix)} no Pix, sem taxa`:""}`:"—")+
+    step("= Líquido na InfinitePay",(estFee?"≈ ":"")+money(net),sale?`${pct(net/sale*100)} do vendido · o que entra na conta`:"o que entra na conta"," is-net"));
+  const cell=s=>{const n=s.pay,approx=n.estimated&&n.fee?"≈ ":"";
+    const when=s.source==="site"?date(s.order.paid_at||s.order.created_at):new Date(s.time).toLocaleDateString("pt-BR");
+    const ref=s.source==="site"?`<button class="link-button" data-click="openOrder" data-args="${esc(JSON.stringify([s.order.id]))}">${esc(orderCodeLabel(s.order))}</button>`:`<span class="net-ref">Loja · nº ${esc(s.olist.numero||"—")}</span>`;
+    const form=s.source==="site"?netPayLabel(n):n.label;
+    const feeSub=n.fee_percent?feePct(n.fee_percent)+(n.estimated?" · estimada":""):n.method==="pix"?"Pix":"sem taxa";
+    return `<tr><td>${esc(when)}</td><td>${ref}</td><td>${esc(form)}</td><td data-label="Venda">${money(n.sale)}</td><td data-label="Pago pela cliente">${money(n.paid)}${n.interest>0?`<small class="net-sub">+${money(n.interest)} de juros</small>`:""}</td><td data-label="Taxa">${n.fee?approx+"−"+money(n.fee):"grátis"}<small class="net-sub">${esc(feeSub)}</small></td><td><strong>${approx}${money(n.net)}</strong></td></tr>`};
+  setHTML($("dashNetTable"),rows.length?`<table class="table net-table"><thead><tr><th>PAGO EM</th><th>PEDIDO</th><th>FORMA</th><th>VENDA</th><th>PAGO PELA CLIENTE</th><th>TAXA</th><th>LÍQUIDO</th></tr></thead><tbody>${rows.map(cell).join("")}<tr class="dc-total"><td>Total</td><td>${fmtInt(rows.length)} ${plural(rows.length,"venda","vendas")}</td><td></td><td data-label="Venda">${money(sale)}</td><td data-label="Pago pela cliente">${money(paid)}</td><td data-label="Taxas">${fee?(estFee?"≈ ":"")+"−"+money(fee):"—"}</td><td>${(estFee?"≈ ":"")+money(net)}</td></tr></tbody></table>`:'<p class="field-help">Nenhuma venda no período.</p>');
   // Também passaram pela InfinitePay, mas não entram na conta acima.
-  const tests=orders.filter(o=>isTestOrder(o)&&o.infinitepay&&inRange(o));
-  const cancelled=realOrders().filter(o=>o.status==="cancelled"&&o.infinitepay&&inRange(o));
+  const inR=o=>inRange(saleTime(o));
   const notes=[];
-  if(tests.length)notes.push(`Fora da conta: ${fmtInt(tests.length)} ${plural(tests.length,"pedido de teste pago","pedidos de teste pagos")} na InfinitePay no período (${money(sumNet(tests,"net"))} de líquido). No app ${plural(tests.length,"ele aparece","eles aparecem")} junto com as vendas.`);
-  if(cancelled.length)notes.push(`Fora da conta: ${fmtInt(cancelled.length)} ${plural(cancelled.length,"pedido cancelado","pedidos cancelados")} depois de ${plural(cancelled.length,"pago","pagos")} (${money(sumNet(cancelled,"paid"))}). O estorno sai da conta pelo app da InfinitePay.`);
-  const f=infinitePayFees;
-  const feeTable=f&&Array.isArray(f.credit)?`<details class="help-more"><summary>Taxas usadas na conta</summary><p class="field-help">Tabela da InfinitePay para o ${esc(String(f.plan||"link de pagamento").toLowerCase())}: Pix ${f.pix?feePct(f.pix):"grátis"}; crédito ${f.credit.map((v,i)=>`${i?i+1+"x":"à vista"} ${feePct(v)}`).join(" · ")}. A taxa é sobre o valor pago pela cliente. Nas vendas parceladas com juros, a cliente paga a diferença. Pode haver diferença de centavos em relação ao app.</p></details>`:"";
-  setHTML($("dashNetNotes"),notes.map(t=>`<p class="field-help">${esc(t)}</p>`).join("")+feeTable);
+  if(dashSource!=="olist"){
+    const tests=orders.filter(o=>isTestOrder(o)&&o.infinitepay&&inR(o));
+    const cancelled=realOrders().filter(o=>o.status==="cancelled"&&o.infinitepay&&inR(o));
+    if(tests.length)notes.push(`Fora da conta: ${fmtInt(tests.length)} ${plural(tests.length,"pedido de teste pago","pedidos de teste pagos")} na InfinitePay no período (${money(sumNet(tests,"net"))} de líquido). No app ${plural(tests.length,"ele aparece","eles aparecem")} junto com as vendas.`);
+    if(cancelled.length)notes.push(`Fora da conta: ${fmtInt(cancelled.length)} ${plural(cancelled.length,"pedido cancelado","pedidos cancelados")} depois de ${plural(cancelled.length,"pago","pagos")} (${money(sumNet(cancelled,"paid"))}). O estorno sai da conta pelo app da InfinitePay.`);
+  }
+  const noDetail=rows.filter(s=>s.source==="olist"&&s.pay.method==="unknown").length;
+  if(noDetail)notes.push(`${fmtInt(noDetail)} ${plural(noDetail,"venda da loja ainda está","vendas da loja ainda estão")} sem o detalhe do pagamento na importação: ${plural(noDetail,"conta","contam")} como cartão à vista até o detalhe chegar.`);
+  const f=infinitePayFees,mf=machineFees,tables=[];
+  if(dashSource!=="olist"&&f&&Array.isArray(f.credit))tables.push(`<p class="field-help"><strong>Site</strong> (${esc(lowerFirst(f.plan||"link de pagamento"))}): Pix ${f.pix?feePct(f.pix):"grátis"}; crédito ${f.credit.map((v,i)=>`${i?i+1+"x":"à vista"} ${feePct(v)}`).join(" · ")}. A taxa é sobre o valor pago pela cliente; nas vendas parceladas com juros, a cliente paga a diferença.</p>`);
+  if(dashSource!=="site"&&mf&&Array.isArray(mf.tiers)){
+    const used=[...new Map(rows.filter(s=>s.source==="olist"&&s.pay.tier).map(s=>[new Date(s.time).toISOString().slice(0,7),s.pay.tier])).entries()].sort((a,b)=>a[0]<b[0]?-1:1);
+    tables.push(`<p class="field-help"><strong>Loja</strong> (${esc(lowerFirst(mf.plan||"maquininha"))}): Pix grátis. A faixa sai do faturamento em cartão do mês anterior (site + loja; o Pix não conta)${used.length?": "+esc(used.map(([m,t])=>monthLabel(m)+" "+t).join(" · ")):""}.</p>`+
+      mf.tiers.map(t=>`<p class="field-help">${esc(t.label.charAt(0).toUpperCase()+t.label.slice(1))}: débito ${feePct(t.debit)} · crédito ${t.credit.map((v,i)=>`${i?i+1+"x":"à vista"} ${feePct(v)}`).join(" · ")}</p>`).join("")+
+      `<p class="field-help">Quando a Olist não diz se foi débito ou crédito, conta crédito à vista. Elo e Amex cobram um pouco mais. Para o valor exato da loja, confira as taxas no app da InfinitePay.</p>`);
+  }
+  if(tables.length)tables.push('<p class="field-help">Pode haver diferença de centavos em relação ao app.</p>');
+  setHTML($("dashNetNotes"),notes.map(t=>`<p class="field-help">${esc(t)}</p>`).join("")+(tables.length?`<details class="help-more"><summary>Taxas usadas na conta</summary>${tables.join("")}</details>`:""));
 }
 function groupSales(list,keyFn){
   const map=new Map();list.forEach(s=>{const k=keyFn(s),x=map.get(k)||{name:k,revenue:0,count:0};x.revenue+=Number(s.total||0);x.count++;map.set(k,x)});
