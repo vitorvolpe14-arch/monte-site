@@ -8218,10 +8218,23 @@ html.catalog-pending .footer {
    PROMOÇÕES DE PRESENTE (escada de benefícios e escolha do presente)
 ===================================================== */
 .shipping-bar-promo[hidden] { display: none; }
-/* Com promoção no ar, telas menores mostram só o aviso dela. */
+/* Com aviso (do painel ou da promoção no ar), telas menores mostram só ele. */
 @media (max-width: 1180px) {
     .shipping-bar.has-promo > :not(.shipping-bar-promo) { display: none; }
     .shipping-bar.has-promo > .shipping-bar-sep.shipping-bar-promo { display: none; }
+}
+/* No celular o aviso fica parado (sozinho, não alterna com outra mensagem) e, se for longo,
+   quebra em até duas linhas em vez de ser cortado. */
+@media (max-width: 760px) {
+    .shipping-bar.has-promo > .shipping-bar-msg.shipping-bar-promo {
+        animation: none;
+        white-space: normal;
+        line-height: 1.25;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+    }
 }
 
 .gift-perk {

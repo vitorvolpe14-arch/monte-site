@@ -2435,6 +2435,18 @@ input:focus,select:focus,textarea:focus{
 .chip-gift{background:#651f2b;color:#fff}
 @media(max-width:800px){.promo-form-grid{grid-template-columns:1fr}}
 
+/* Barra do topo do site: prévia igual à faixa preta da loja */
+.top-bar-panel{margin:20px 0}
+.top-bar-form{display:grid;gap:14px}
+.top-bar-preview{display:grid;gap:6px}
+.top-bar-preview-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ad-muted)}
+.top-bar-preview-strip{min-height:36px;display:flex;align-items:center;justify-content:center;padding:8px 14px;border-radius:10px;background:#000;color:#fff;font-size:12px;letter-spacing:1.7px;font-weight:500;line-height:1.35;text-align:center;overflow-wrap:anywhere}
+.top-bar-preview-strip span:empty::before{content:"(sem aviso)";color:#8a8a8a;letter-spacing:.06em}
+.top-bar-actions{display:flex;justify-content:flex-end;align-items:center;gap:14px;flex-wrap:wrap}
+.top-bar-actions .field-help{margin:0}
+#topBarCount{margin-right:auto}
+@media(max-width:800px){.top-bar-actions{flex-direction:column;align-items:stretch}#topBarCount{margin-right:0}}
+
 /* Benefícios da loja (frete grátis e Pix) */
 .benefits-panel{margin:20px 0}
 .benefits-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}

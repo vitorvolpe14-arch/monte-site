@@ -1927,23 +1927,30 @@ const GIFT_CATEGORY_WORDS = {
 const giftWords = promotion => GIFT_CATEGORY_WORDS[promotion?.gift_category] || { one: "um presente", mine: "seu presente" };
 
 async function loadStorePromotions() {
+    let barMessage = null;
     try {
         const response = await fetch("/api/promocoes", { headers: { "Accept": "application/json" } });
         const body = await response.json();
         storePromotions = Array.isArray(body?.promotions) ? body.promotions : [];
         if (body?.benefits) applyStoreBenefits(body.benefits);
+        // A barra do topo anuncia o aviso escrito no painel ou, sem ele, o da promoção no ar
+        // (mesma escolha do servidor, que já entrega a página com o aviso).
+        barMessage = body?.top_bar?.text || storePromotions.find(promotion => promotion.banner_text)?.banner_text || "";
     } catch {
         storePromotions = [];
     }
-    // A barra do topo anuncia a promoção (no celular, só esse aviso).
-    const banner = storePromotions.find(promotion => promotion.banner_text)?.banner_text;
-    const barMessage = document.getElementById("shippingBarPromo");
-    if (barMessage && banner) {
-        barMessage.textContent = banner;
-        document.querySelectorAll(".shipping-bar-promo").forEach(el => { el.hidden = false; });
-        document.querySelector(".shipping-bar")?.classList.add("has-promo");
-    }
+    if (barMessage !== null) showTopBarMessage(barMessage);
     if (cart.length) updatePaymentSummary();
+}
+
+// Aviso da barra do topo: no computador, ao lado do frete grátis e do Pix; em telas menores,
+// só ele. Sem aviso, a barra mostra só o frete grátis e o Pix.
+function showTopBarMessage(text) {
+    const message = document.getElementById("shippingBarPromo");
+    if (!message) return;
+    message.textContent = text;
+    document.querySelectorAll(".shipping-bar-promo").forEach(el => { el.hidden = !text; });
+    document.querySelector(".shipping-bar")?.classList.toggle("has-promo", Boolean(text));
 }
 
 function plainColor(value) {

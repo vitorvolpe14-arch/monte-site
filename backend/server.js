@@ -1467,6 +1467,37 @@ async function storeBenefits() {
 
 const pixPercentOf = benefits => benefits?.pix_discount?.enabled ? Number(benefits.pix_discount.percent) : 0;
 
+// Aviso da barra do topo do site, escrito no painel (aba Promoções) e guardado no kv_store.
+// Com texto, ele ocupa o lugar do aviso da promoção de presente; em branco, a barra volta ao
+// automático (aviso da promoção no ar, frete grátis e Pix).
+const TOP_BAR_KEY = "store_top_bar";
+const TOP_BAR_MAX_LENGTH = 90;
+const topBarText = value => safeString(value).replace(/\s+/g, " ");
+const normalizeTopBar = value => ({ text: topBarText(value?.text).slice(0, TOP_BAR_MAX_LENGTH) || null });
+
+async function loadTopBar() {
+    const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + TOP_BAR_KEY + "&select=value&limit=1", { method: "GET" });
+    return normalizeTopBar(rows?.[0]?.value);
+}
+
+// Com cache de 30 s; se o Supabase falhar, a barra fica no automático.
+async function storeTopBar() {
+    try {
+        return await cachedPublic("top_bar", 30 * 1000, loadTopBar);
+    } catch (error) {
+        console.error("Barra do topo:", error.message);
+        return normalizeTopBar(null);
+    }
+}
+
+// O que a barra do topo anuncia: o aviso do painel ou, sem ele, o da promoção no ar de menor
+// valor mínimo que tenha aviso (a lista vem em ordem de valor mínimo). O script.js faz a mesma escolha.
+function topBarMessage(topBar, promotions, now = Date.now()) {
+    return topBar?.text ||
+        (Array.isArray(promotions) ? promotions.find(promotion => promotionLive(promotion, now) && promotion.banner_text)?.banner_text : null) ||
+        null;
+}
+
 function shippingChargeFor(option, productsSubtotal, benefits) {
     const price = Number(option?.price || 0);
     const free = benefits?.free_shipping;
@@ -4318,6 +4349,16 @@ function heroSlidesHtml(slides) {
     }).join("");
 }
 
+// Aviso na barra do topo do index.html (o script.js faz o mesmo quando a página já está aberta).
+function topBarHtml(page, text) {
+    return page
+        .replace('<div class="shipping-bar">', '<div class="shipping-bar has-promo">')
+        .replace('<span class="shipping-bar-msg shipping-bar-promo" id="shippingBarPromo" hidden></span>',
+            () => '<span class="shipping-bar-msg shipping-bar-promo" id="shippingBarPromo">' + escapeAttribute(text) + "</span>")
+        .replace('<span class="shipping-bar-sep shipping-bar-promo" aria-hidden="true" hidden>·</span>',
+            '<span class="shipping-bar-sep shipping-bar-promo" aria-hidden="true">·</span>');
+}
+
 // Página inicial: o servidor já entrega o banner (com tamanho e prioridade) e os produtos
 // dentro do HTML. A loja aparece sem esperar outras requisições e o banner não empurra a página.
 // Troca a prévia da página inicial (título, descrição e foto) pela da bolsa do link.
@@ -4352,13 +4393,18 @@ function productSharePreview(page, product, code) {
 
 app.get("/", async (req, res) => {
     try {
-        const [html, catalog, slides, editorial] = await Promise.all([
+        const [html, catalog, slides, editorial, topBar, promotions] = await Promise.all([
             readSitePage("index.html"),
             getPublicCatalog().catch(error => { console.error("Página inicial — catálogo:", error.message); return null; }),
             cachedPublic("carousel", 60 * 1000, carouselSlides).catch(error => { console.error("Página inicial — carrossel:", error.message); return null; }),
-            cachedPublic("editorial", 60 * 1000, readEditorialImages).catch(error => { console.error("Página inicial — banner do meio:", error.message); return null; })
+            cachedPublic("editorial", 60 * 1000, readEditorialImages).catch(error => { console.error("Página inicial — banner do meio:", error.message); return null; }),
+            storeTopBar(),
+            cachedPublic("promotions", 30 * 1000, loadPromotions).catch(error => { console.error("Página inicial — promoções:", error.message); return null; })
         ]);
         let page = html;
+        // Barra do topo já com o aviso (do painel ou da promoção no ar): não pisca ao abrir.
+        const barMessage = topBarMessage(topBar, promotions);
+        if (barMessage) page = topBarHtml(page, barMessage);
         // Banner do meio: com fotos do painel, troca as do HTML; data-ssr evita que a página peça de novo.
         if (Array.isArray(editorial)) {
             if (editorial.length) page = page.replace(/<!-- BANNER DO MEIO -->[\s\S]*?<!-- FIM DO BANNER DO MEIO -->/, () => editorialSlidesHtml(editorialSlides(editorial)));
@@ -4682,13 +4728,14 @@ function reachedPromotion(promotions, productsSubtotal, now = Date.now()) {
 
 // Página da loja: promoções no ar agora e os benefícios fixos (frete grátis e Pix).
 app.get("/api/promocoes", async (req, res) => {
-    const benefits = await storeBenefits();
+    const [benefits, topBar] = await Promise.all([storeBenefits(), storeTopBar()]);
     try {
         const promotions = await cachedPublic("promotions", 30 * 1000, loadPromotions);
         res.setHeader("Cache-Control", "public, max-age=30");
         return res.json({
             success: true,
             benefits,
+            top_bar: topBar,
             promotions: promotions.filter(promotion => promotionLive(promotion)).map(promotion => ({
                 id: promotion.id,
                 name: promotion.name,
@@ -4701,7 +4748,7 @@ app.get("/api/promocoes", async (req, res) => {
         });
     } catch (error) {
         console.error("Promoções:", error);
-        return res.json({ success: true, benefits, promotions: [] });
+        return res.json({ success: true, benefits, top_bar: topBar, promotions: [] });
     }
 });
 
@@ -4811,9 +4858,30 @@ app.put("/api/admin/store-benefits", requireAdmin, async (req, res) => {
     }
 });
 
+// Aviso da barra do topo (painel, aba Promoções). Em branco, a barra volta ao automático.
+app.put("/api/admin/top-bar", requireAdmin, async (req, res) => {
+    try {
+        const text = topBarText(req.body?.text);
+        if (text.length > TOP_BAR_MAX_LENGTH) {
+            return res.status(400).json({ success: false, message: `O aviso da barra do topo vai até ${TOP_BAR_MAX_LENGTH} letras.` });
+        }
+        const topBar = normalizeTopBar({ text });
+        await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
+            method: "POST",
+            headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+            body: JSON.stringify({ key: TOP_BAR_KEY, value: topBar })
+        });
+        publicCache.delete("top_bar");
+        return res.json({ success: true, top_bar: topBar });
+    } catch (error) {
+        console.error("Admin barra do topo PUT:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível salvar." });
+    }
+});
+
 app.get("/api/admin/promotions", requireAdmin, async (req, res) => {
     try {
-        const benefits = await loadStoreBenefits();
+        const [benefits, topBar] = await Promise.all([loadStoreBenefits(), loadTopBar()]);
         const promotions = await supabaseRequest("promotions?select=*&order=starts_at.desc", { method: "GET" });
         // Pedidos que levaram o presente de cada promoção (o item guarda promotion_id).
         const list = Array.isArray(promotions) ? promotions : [];
@@ -4825,6 +4893,7 @@ app.get("/api/admin/promotions", requireAdmin, async (req, res) => {
         return res.json({
             success: true,
             benefits,
+            top_bar: topBar,
             promotions: list.map((promotion, index) => ({
                 ...promotion,
                 orders: (orders[index] || []).map(order => ({
