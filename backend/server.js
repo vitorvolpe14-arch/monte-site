@@ -4098,7 +4098,7 @@ function olistSalesStatusPayload(state) {
 app.get("/api/admin/olist/sales", requireAdmin, async (req, res) => {
     try {
         const [rows, state] = await Promise.all([
-            supabaseRequest("olist_sales?select=id,numero,data,situacao,total,origem,canal,envio,itens,pagamento,detail_at&from_site=eq.false&order=data.desc.nullslast&limit=5000", { method: "GET" }),
+            supabaseRequest("olist_sales?select=id,numero,data,situacao,total,origem,canal,envio,itens,pagamento,pagamento_info,detail_at&from_site=eq.false&order=data.desc.nullslast&limit=5000", { method: "GET" }),
             readOlistSalesState()
         ]);
         return res.json({ success: true, enabled: OLIST_SYNC_ENABLED, sale_situations: OLIST_SALE_SITUATIONS, sales: Array.isArray(rows) ? rows : [], status: olistSalesStatusPayload(state) });
