@@ -8,7 +8,6 @@ const { pixLinkDiscountPercent, isExpectedPixAmount, paidPriceKey } = require(".
 const { PROMOTION_GIFTS_CEILING, promotionGiftCount } = require("./gift-promotion.js");
 const { OLIST_SALE_SITUATIONS, olistSaleSummary, olistSaleDetail } = require("./olist-sales.js");
 const { infinitePayNet, currentInfinitePayFees, olistStoreNet, cardBillingByMonth, currentMachineFees } = require("./infinitepay-fees.js");
-const { sanitizeReportRow, reportRowKey, reportUntil, sanitizeSummary, mergeCoverage, reportTotals } = require("./infinitepay-report-import.js");
 
 // Este servidor roda no Render (Node) e no Cloudflare Workers (nodejs_compat).
 // No Workers não há arquivos do projeto no disco nem timers fora de uma requisição:
@@ -4119,104 +4118,6 @@ app.get("/api/admin/olist/sales", requireAdmin, async (req, res) => {
     } catch (error) {
         console.error("Vendas Olist — painel:", error);
         return res.status(500).json({ success: false, message: "Não foi possível carregar as vendas da Olist." });
-    }
-});
-
-// Relatório de Vendas da InfinitePay: o painel lê o PDF que o dono baixa no app e envia as
-// transações em partes; o líquido da Visão geral passa a sair daqui nos dias conferidos.
-const INFINITEPAY_REPORT_KEY = "infinitepay_report";
-const INFINITEPAY_TX_FIELDS = "data,hora,meio,tipo,identificador,parcelas,status,valor,liquido,taxa,taxa_percentual,plano";
-
-async function readInfinitePayReportState() {
-    const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + INFINITEPAY_REPORT_KEY + "&select=value&limit=1", { method: "GET" });
-    const value = Array.isArray(rows) && rows[0] ? rows[0].value : null;
-    return value && typeof value === "object" ? value : {};
-}
-
-// O Supabase devolve no máximo 1000 linhas por consulta: lê em páginas.
-async function supabaseAll(path, pageSize = 1000, maxRows = 50000) {
-    const out = [];
-    for (let offset = 0; offset < maxRows; offset += pageSize) {
-        const page = await supabaseRequest(`${path}&limit=${pageSize}&offset=${offset}`, { method: "GET" });
-        const list = Array.isArray(page) ? page : [];
-        out.push(...list);
-        if (list.length < pageSize) break;
-    }
-    return out;
-}
-
-app.get("/api/admin/infinitepay/report", requireAdmin, async (req, res) => {
-    try {
-        const [transactions, state] = await Promise.all([
-            supabaseAll(`infinitepay_transactions?select=${INFINITEPAY_TX_FIELDS}&status=eq.Aprovada&order=key.asc`),
-            readInfinitePayReportState()
-        ]);
-        return res.json({ success: true, transactions, coverage: Array.isArray(state.ranges) ? state.ranges : [], last: state.last || null });
-    } catch (error) {
-        console.error("Relatório InfinitePay — painel:", error);
-        return res.status(500).json({ success: false, message: "Não foi possível carregar o relatório da InfinitePay." });
-    }
-});
-
-app.post("/api/admin/infinitepay/report", requireAdmin, async (req, res) => {
-    try {
-        const body = req.body || {};
-        const batch = String(body.batch || "");
-        const part = Number(body.part), parts = Number(body.parts);
-        const summary = sanitizeSummary(body.summary);
-        if (!/^[a-z0-9-]{8,40}$/.test(batch) || !Number.isInteger(part) || !Number.isInteger(parts) || parts < 1 || parts > 200 || part < 0 || part >= parts) {
-            return res.status(400).json({ success: false, message: "Envio do relatório incompleto. Tente de novo." });
-        }
-        if (!summary) return res.status(400).json({ success: false, message: "Não encontrei o período do relatório. Baixe de novo o Relatório de Vendas no app da InfinitePay." });
-        const raw = Array.isArray(body.rows) ? body.rows : null;
-        if (!raw || raw.length > 1000) return res.status(400).json({ success: false, message: "Envio do relatório incompleto. Tente de novo." });
-        const rows = [];
-        for (const item of raw) {
-            const row = sanitizeReportRow(item);
-            if (!row || row.data < summary.from || row.data > summary.to) {
-                return res.status(400).json({ success: false, message: "Uma linha do relatório veio fora do formato esperado. Nada foi alterado nesta parte." });
-            }
-            rows.push(row);
-        }
-        const now = new Date().toISOString();
-        if (rows.length) {
-            await supabaseRequest("infinitepay_transactions?on_conflict=key", {
-                method: "POST",
-                headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
-                body: JSON.stringify(rows.map(({ n, ...r }) => ({ key: reportRowKey({ ...r, n }), ...r, batch, imported_at: now })))
-            });
-        }
-        if (part < parts - 1) return res.json({ success: true, done: false });
-
-        // Última parte: confere o que esta importação gravou antes de trocar o período.
-        const saved = await supabaseAll(`infinitepay_transactions?select=status,valor,liquido,taxa&batch=eq.${batch}&order=key.asc`);
-        if (saved.length !== summary.count) {
-            return res.status(409).json({ success: false, message: `Chegaram ${saved.length} de ${summary.count} transações. Envie o relatório de novo.` });
-        }
-        const totals = reportTotals(saved);
-        const differs = (a, b) => a !== null && Math.abs(a - b) > 0.005;
-        if (differs(summary.total, totals.total) || differs(summary.fees, totals.fees) || differs(summary.net, totals.net)) {
-            return res.status(409).json({ success: false, message: "Os valores gravados não batem com os totais do relatório. Envie o relatório de novo." });
-        }
-        // Transações antigas do mesmo período que não estão neste relatório saem.
-        await supabaseRequest(`infinitepay_transactions?data=gte.${summary.from}&data=lte.${summary.to}&batch=neq.${batch}`, {
-            method: "DELETE",
-            headers: { "Prefer": "return=minimal" }
-        });
-        const state = await readInfinitePayReportState();
-        const next = {
-            ranges: mergeCoverage(state.ranges, { from: summary.from, to: summary.to, until: reportUntil(summary) }),
-            last: { ...summary, ...totals, imported_at: now }
-        };
-        await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
-            method: "POST",
-            headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
-            body: JSON.stringify({ key: INFINITEPAY_REPORT_KEY, value: next })
-        });
-        return res.json({ success: true, done: true, coverage: next.ranges, last: next.last });
-    } catch (error) {
-        console.error("Relatório InfinitePay — importação:", error);
-        return res.status(500).json({ success: false, message: "Não foi possível gravar o relatório agora. Tente de novo em instantes." });
     }
 });
 

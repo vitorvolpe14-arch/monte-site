@@ -2698,14 +2698,3 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
   .app .dash-date{gap:6px;padding-left:6px}
   .app .dash-date input{flex:1;min-width:0;padding:0 8px}
 }
-
-/* Relatório de Vendas da InfinitePay: situação e envio do PDF (Visão geral) */
-.ip-report{display:flex;align-items:center;justify-content:space-between;gap:12px 18px;margin-top:16px;padding-top:14px;border-top:1px solid var(--ad-line)}
-.ip-report strong{font-size:14px;font-weight:600;color:var(--ad-ink)}
-.ip-report .field-help{margin:4px 0 0;max-width:720px}
-.ip-report .field-help.is-error{color:var(--ad-danger)}
-.ip-report button{flex:none}
-.ip-report button:disabled{opacity:.6;cursor:progress}
-.net-ref.is-missing{font-weight:600;color:var(--ad-wine)}
-.net-table tr.is-missing td{color:var(--ad-muted)}
-@media (max-width:640px){.ip-report{flex-direction:column;align-items:stretch}.ip-report button{width:100%}}
