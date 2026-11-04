@@ -89,4 +89,141 @@ function currentInfinitePayFees() {
     return { since: table.since, plan: table.plan, pix: table.pix, credit: table.credit.slice() };
 }
 
-module.exports = { INFINITEPAY_FEE_TABLES, infinitePayFeeTable, infinitePayNet, currentInfinitePayFees };
+/* =====================================================
+   VENDAS DA LOJA (OLIST) NA MAQUININHA DA INFINITEPAY — ESTIMATIVA
+   As vendas da loja chegam da Olist com o nome do pagamento ("INFINITY PIX",
+   "INFINITY CREDITO-DEBITO"...) e, quando a loja preenche, o meio, a condição e as
+   parcelas (olist_sales.pagamento_info). Daí sai a taxa:
+   - Pix: grátis. Dinheiro, boleto, transferência: sem taxa (não passam pela InfinitePay).
+   - Débito: taxa de débito. Crédito: taxa das parcelas (à vista quando não diz).
+   - Cartão sem dizer se foi débito ou crédito: crédito à vista (o mais comum).
+   A faixa sai do faturamento em cartão do mês anterior (site + loja; o Pix não conta),
+   como a InfinitePay faz. Bandeira: Visa e Mastercard (Elo e Amex pagam um pouco mais).
+   Fonte: https://www.infinitepay.io/taxas, "Maquininha & InfiniteTap", em 1 dia útil.
+===================================================== */
+
+const INFINITEPAY_MACHINE_TABLES = [
+    {
+        since: "2026-01-01",
+        plan: "Maquininha, recebendo em 1 dia útil (Visa e Mastercard)",
+        // Do maior faturamento para o menor; "acima de" = mais que o valor.
+        tiers: [
+            { above: 80000, label: "acima de R$ 80 mil", debit: 0.75, credit: [2.69, 3.94, 4.46, 4.98, 5.49, 5.99, 6.51, 6.99, 7.51, 7.99, 8.49, 8.99] },
+            { above: 40000, label: "acima de R$ 40 mil", debit: 0.79, credit: [2.79, 4.08, 4.65, 5.21, 5.77, 6.32, 6.87, 7.42, 7.96, 8.49, 9.03, 9.56] },
+            { above: 20000, label: "acima de R$ 20 mil", debit: 0.85, credit: [2.89, 4.22, 4.83, 5.44, 6.05, 6.64, 7.24, 7.82, 8.41, 8.98, 9.56, 10.12] },
+            { above: -1, label: "até R$ 20 mil", debit: 1.37, credit: [3.15, 5.39, 6.12, 6.85, 7.57, 8.28, 8.99, 9.69, 10.38, 11.06, 11.74, 12.40] }
+        ]
+    }
+];
+
+function machineTable(when) {
+    const day = String(when || "").slice(0, 10);
+    let pick = INFINITEPAY_MACHINE_TABLES[0];
+    for (const table of INFINITEPAY_MACHINE_TABLES) {
+        if (!day || table.since <= day) pick = table;
+    }
+    return pick;
+}
+
+function machineTier(table, cardBilling) {
+    const value = Number(cardBilling) || 0;
+    return table.tiers.find(tier => value > tier.above) || table.tiers[table.tiers.length - 1];
+}
+
+function plain(value) {
+    return String(value || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
+// Como a venda da loja foi paga: { kind: pix | debit | credit | card | other | unknown, installments }.
+function olistPaymentKind(sale) {
+    if (!sale || !sale.detail_at) return { kind: "unknown", installments: 1 };
+    const info = sale.pagamento_info && typeof sale.pagamento_info === "object" ? sale.pagamento_info : {};
+    const names = [sale.pagamento, info.forma, info.meio, ...(Array.isArray(info.meios_parcelas) ? info.meios_parcelas : [])].map(plain).filter(Boolean);
+    const words = names.join(" | ");
+    const condition = plain(info.condicao);
+    // Um nome que diz só débito (ou só crédito) vale mais que o geral "CREDITO-DEBITO".
+    const onlyDebit = names.some(n => /debito/.test(n) && !/credito/.test(n));
+    const onlyCredit = names.some(n => /credito/.test(n) && !/debito/.test(n));
+    const debit = onlyDebit || (!onlyCredit && /debito/.test(words));
+    const credit = onlyCredit || (!onlyDebit && /credito/.test(words));
+    // "INFINITY PIX" é Pix: o nome da InfinitePay sozinho não quer dizer cartão.
+    const cardWords = debit || credit || /cart|maquin|pos\b|\btap\b/.test(words);
+    const card = cardWords || (/infinit/.test(words) && !/pix/.test(words));
+    const parcelas = Number(info.parcelas) || 0;
+    const byCondition = (() => {
+        const x = condition.match(/(\d{1,2})\s*x/);
+        if (x) return Number(x[1]);
+        const days = condition.match(/\d+/g);
+        return days && days.length > 1 ? days.length : 0;
+    })();
+    const installments = Math.min(12, Math.max(1, parcelas > 1 ? parcelas : byCondition || 1));
+    if (/pix/.test(words) && !cardWords) return { kind: "pix", installments: 1 };
+    if (!card && /dinheiro|especie|boleto|transfer|deposito|ted\b|doc\b/.test(words)) return { kind: "other", installments: 1 };
+    if (debit && !credit) return { kind: "debit", installments: 1 };
+    if (credit && !debit) return { kind: "credit", installments };
+    if (card) return { kind: installments > 1 ? "credit" : "card", installments };
+    // "Múltiplas" ou nome desconhecido: conta como cartão à vista.
+    return { kind: words.trim() ? "card" : "unknown", installments: 1 };
+}
+
+const KIND_LABEL = { pix: "Pix", debit: "Débito", other: "Sem taxa" };
+function olistPaymentLabel(p) {
+    if (KIND_LABEL[p.kind]) return KIND_LABEL[p.kind];
+    if (p.kind === "credit") return p.installments > 1 ? `Crédito ${p.installments}x` : "Crédito à vista";
+    if (p.kind === "card") return "Cartão (crédito à vista)";
+    return "Cartão (sem detalhe)";
+}
+
+// Líquido estimado de uma venda da loja. cardBillingByMonth: { "2026-10": 18500, ... }
+// (faturamento em cartão do mês, site + loja). Sem o mês anterior nos dados, usa o próprio mês.
+function olistStoreNet(sale, cardBillingByMonth = {}) {
+    if (!sale) return null;
+    const sale_ = cents(sale.total);
+    const month = String(sale.data || "").slice(0, 7);
+    const [y, m] = month.split("-").map(Number);
+    const prev = y && m ? (m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`) : "";
+    const billing = Object.prototype.hasOwnProperty.call(cardBillingByMonth, prev) ? cardBillingByMonth[prev] : cardBillingByMonth[month];
+    const table = machineTable(sale.data);
+    const tier = machineTier(table, billing);
+    const payment = olistPaymentKind(sale);
+    const percent = payment.kind === "pix" || payment.kind === "other" ? 0
+        : payment.kind === "debit" ? tier.debit
+        : tier.credit[payment.installments - 1];
+    const fee = Math.round(sale_ * percent / 100);
+    return {
+        method: payment.kind,
+        installments: payment.installments,
+        label: olistPaymentLabel(payment),
+        sale: sale_ / 100,
+        paid: sale_ / 100,
+        interest: 0,
+        fee_percent: percent,
+        fee: fee / 100,
+        net: (sale_ - fee) / 100,
+        cost: fee / 100,
+        estimated: percent > 0 || payment.kind === "unknown",
+        tier: tier.label,
+        plan: table.plan
+    };
+}
+
+// Faturamento em cartão por mês: vendas da loja que não são Pix nem sem taxa + cartão do site.
+function cardBillingByMonth(olistSales = [], sitePayments = []) {
+    const out = {};
+    const add = (month, value) => { if (month) out[month] = Math.round(((out[month] || 0) + (Number(value) || 0)) * 100) / 100; };
+    olistSales.forEach(sale => {
+        const kind = olistPaymentKind(sale).kind;
+        if (kind !== "pix" && kind !== "other") add(String(sale.data || "").slice(0, 7), sale.total);
+    });
+    sitePayments.forEach(p => {
+        if (String(p.capture_method || "").toLowerCase() !== "pix") add(String(p.created_at || "").slice(0, 7), p.paid_amount ?? p.amount);
+    });
+    return out;
+}
+
+function currentMachineFees() {
+    const table = machineTable("");
+    return { since: table.since, plan: table.plan, tiers: table.tiers.map(t => ({ label: t.label, debit: t.debit, credit: t.credit.slice() })) };
+}
+
+module.exports = { INFINITEPAY_FEE_TABLES, INFINITEPAY_MACHINE_TABLES, infinitePayFeeTable, infinitePayNet, currentInfinitePayFees, olistPaymentKind, olistStoreNet, cardBillingByMonth, currentMachineFees };

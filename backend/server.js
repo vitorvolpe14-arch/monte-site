@@ -7,7 +7,7 @@ const cors = require("cors");
 const { pixLinkDiscountPercent, isExpectedPixAmount, paidPriceKey } = require("./pix-discount.js");
 const { PROMOTION_GIFTS_CEILING, promotionGiftCount } = require("./gift-promotion.js");
 const { OLIST_SALE_SITUATIONS, olistSaleSummary, olistSaleDetail } = require("./olist-sales.js");
-const { infinitePayNet, currentInfinitePayFees } = require("./infinitepay-fees.js");
+const { infinitePayNet, currentInfinitePayFees, olistStoreNet, cardBillingByMonth, currentMachineFees } = require("./infinitepay-fees.js");
 
 // Este servidor roda no Render (Node) e no Cloudflare Workers (nodejs_compat).
 // No Workers não há arquivos do projeto no disco nem timers fora de uma requisição:
@@ -4097,11 +4097,24 @@ function olistSalesStatusPayload(state) {
 // Vendas da Olist que não vieram do site (para a Visão geral).
 app.get("/api/admin/olist/sales", requireAdmin, async (req, res) => {
     try {
-        const [rows, state] = await Promise.all([
+        const [rows, state, payments] = await Promise.all([
             supabaseRequest("olist_sales?select=id,numero,data,situacao,total,origem,canal,envio,itens,pagamento,pagamento_info,detail_at&from_site=eq.false&order=data.desc.nullslast&limit=5000", { method: "GET" }),
-            readOlistSalesState()
+            readOlistSalesState(),
+            supabaseRequest("payments?select=capture_method,paid_amount,amount,created_at&status=eq.paid&limit=10000", { method: "GET" }).catch(() => [])
         ]);
-        return res.json({ success: true, enabled: OLIST_SYNC_ENABLED, sale_situations: OLIST_SALE_SITUATIONS, sales: Array.isArray(rows) ? rows : [], status: olistSalesStatusPayload(state) });
+        // Líquido estimado de cada venda da loja na maquininha da InfinitePay (a faixa sai do
+        // faturamento em cartão do mês anterior: vendas da loja + cartão do site).
+        const sales = Array.isArray(rows) ? rows : [];
+        const billing = cardBillingByMonth(sales.filter(s => OLIST_SALE_SITUATIONS.includes(Number(s.situacao))), Array.isArray(payments) ? payments : []);
+        return res.json({
+            success: true,
+            enabled: OLIST_SYNC_ENABLED,
+            sale_situations: OLIST_SALE_SITUATIONS,
+            sales: sales.map(s => ({ ...s, infinitepay: olistStoreNet(s, billing) })),
+            card_billing: billing,
+            machine_fees: currentMachineFees(),
+            status: olistSalesStatusPayload(state)
+        });
     } catch (error) {
         console.error("Vendas Olist — painel:", error);
         return res.status(500).json({ success: false, message: "Não foi possível carregar as vendas da Olist." });

@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20261104-liquido">
+<link rel="stylesheet" href="admin.css?v=20261104-dois-valores">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -106,6 +106,7 @@
         <div class="welcome-revenue">
           <span id="heroLabel">FATURAMENTO DO MÊS</span>
           <strong id="statRevenue">—</strong>
+          <span id="heroNet" class="hero-net"></span>
           <span id="heroDelta" class="delta"></span>
           <small id="statRevenueHint"></small>
         </div>
@@ -137,7 +138,7 @@
         <div id="dashChannelsPanel" class="panel" hidden><div class="panel-head"><div><h2>Canais de venda</h2><p class="field-help">Faturamento do site e de cada canal da Olist no período.</p></div></div><div id="dashChannels" class="rank-list"></div></div>
       </div>
       <div id="dashNetPanel" class="panel dash-net">
-        <div class="panel-head"><div><h2>Valor líquido do site na InfinitePay</h2><p id="dashNetHint" class="field-help"></p></div></div>
+        <div class="panel-head"><div><h2 id="dashNetTitle">Valor líquido na InfinitePay</h2><p id="dashNetHint" class="field-help"></p></div></div>
         <div id="dashNet" class="net-flow"></div>
         <details class="help-more dash-table"><summary>Conferir venda a venda</summary><div id="dashNetTable" class="table-wrap"></div></details>
         <div id="dashNetNotes" class="dash-net-notes"></div>
@@ -358,7 +359,7 @@
 </div></div>
 
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="admin.js?v=20261104-cartao"></script>
+<script src="admin.js?v=20261104-dois-valores"></script>
 <script src="admin-carousel.js?v=20261104-previa-link"></script>
 </body>
 </html>
