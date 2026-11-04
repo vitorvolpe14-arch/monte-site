@@ -6832,9 +6832,9 @@ app.post(
    CLIENTE QUE JÁ COMPROU — DADOS PREENCHIDOS PELO CPF
    A cliente digita o CPF na sacola e o resto é preenchido: o cadastro
    vem da última compra paga no site ou, sem ela, do contato na Olist.
-   Sem código nem senha. Para quem digitar o CPF de outra pessoa não ver
-   os dados dela, o e-mail, o WhatsApp e o número/complemento do endereço
-   voltam escondidos (vi•••••@gmail.com, (85) •••••-3305, •••). O cadastro
+   Sem código nem senha. O endereço volta completo (a dona da loja quer
+   que a cliente confira); o e-mail e o WhatsApp voltam parcialmente
+   escondidos (vi•••••@gmail.com, (85) •••••-3305). O cadastro
    completo fica no servidor (kv_store, customer_profile:<hash do CPF>) e
    uma chave assinada (profile_token) volta com os dados: no checkout, o
    campo que ainda estiver escondido é trocado pelo valor verdadeiro.
@@ -6862,7 +6862,6 @@ function maskedPhone(digits) {
     const d = brazilMobileDigits(digits);
     return d ? "(" + d.slice(0, 2) + ") " + HIDDEN_MARK.repeat(5) + "-" + d.slice(7) : "";
 }
-const maskedText = value => safeString(value) ? HIDDEN_MARK.repeat(3) : "";
 
 // O que a sacola recebe: o cadastro com as partes que identificam a cliente escondidas.
 function maskedCustomerProfile(profile) {
@@ -6874,8 +6873,8 @@ function maskedCustomerProfile(profile) {
         address: {
             cep: profile.address.cep,
             street: profile.address.street,
-            number: maskedText(profile.address.number),
-            complement: maskedText(profile.address.complement),
+            number: profile.address.number,
+            complement: profile.address.complement,
             neighborhood: profile.address.neighborhood,
             city: profile.address.city,
             state: profile.address.state
@@ -7044,8 +7043,9 @@ async function customerWithSavedProfile(customer, token) {
             merged.phone = "(" + profile.phone.slice(0, 2) + ") " + profile.phone.slice(2, 7) + "-" + profile.phone.slice(7);
             merged.whatsapp_phone = profile.phone;
         }
-        if (address.number === masked.address.number) merged.address.number = profile.address.number;
-        if (address.complement === masked.address.complement) merged.address.complement = profile.address.complement;
+        // Número e complemento não ficam mais escondidos; "•••" só vem de aparelho que guardou a versão anterior.
+        if (hidden(address.number)) merged.address.number = profile.address.number;
+        if (hidden(address.complement)) merged.address.complement = profile.address.complement;
     }
     // Sobrou campo escondido (cadastro trocado ou chave vencida): a cliente digita de novo.
     const fields = [["email", merged.email, "customerEmail", "e-mail"], ["phone", merged.phone, "customerPhone", "WhatsApp"],
