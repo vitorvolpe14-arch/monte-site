@@ -6803,6 +6803,216 @@ app.post(
 
 
 /* =====================================================
+   CLIENTE QUE JÁ COMPROU — DADOS PREENCHIDOS NO CHECKOUT
+   A cliente informa o CPF; o cadastro vem da última compra paga no
+   site ou, sem ela, do contato na Olist. Endereço, telefone e e-mail
+   só voltam depois do código de 6 números enviado ao e-mail desse
+   cadastro: quem só sabe o CPF de alguém não vê os dados dela.
+   O código vale 10 minutos e aceita 5 tentativas; fica guardado só
+   o hash (kv_store, chave customer_code:<hash do CPF>).
+===================================================== */
+const CUSTOMER_CODE_TTL_MS = 10 * 60 * 1000;
+const CUSTOMER_CODE_MAX_ATTEMPTS = 5;
+const CUSTOMER_CODE_RESEND_MS = 45 * 1000;
+const CUSTOMER_CODE_MAX_SENDS_PER_HOUR = 5;
+
+const customerLookupRateLimit = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 10 });
+const customerConfirmRateLimit = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 20 });
+
+function validCpf(value) {
+    const cpf = safeString(value).replace(/\D/g, "");
+    if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return "";
+    const digit = length => {
+        let sum = 0;
+        for (let i = 0; i < length; i++) sum += Number(cpf[i]) * (length + 1 - i);
+        const rest = (sum * 10) % 11;
+        return rest === 10 ? 0 : rest;
+    };
+    return digit(9) === Number(cpf[9]) && digit(10) === Number(cpf[10]) ? cpf : "";
+}
+const customerCodeKey = cpf => "customer_code:" + crypto.createHash("sha256").update("monte-customer:" + cpf).digest("hex").slice(0, 40);
+const customerCodeHash = (cpf, code) => crypto.createHmac("sha256", signingKey()).update(cpf + ":" + code).digest("hex");
+const plainEmail = value => {
+    const email = safeString(value).toLowerCase();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) && email.length <= 160 ? email : "";
+};
+// "vitoria@gmail.com" → "vi•••••@gmail.com": a cliente reconhece o e-mail sem ele aparecer inteiro.
+function maskedEmail(email) {
+    const [user, domain] = email.split("@");
+    return user.slice(0, Math.min(2, Math.max(1, user.length - 2))) + "•".repeat(Math.max(3, Math.min(8, user.length - 2))) + "@" + domain;
+}
+
+async function readCustomerCode(cpf) {
+    const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + customerCodeKey(cpf) + "&select=value&limit=1", { method: "GET" });
+    return rows?.[0]?.value || null;
+}
+async function writeCustomerCode(cpf, value) {
+    await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({ key: customerCodeKey(cpf), value })
+    });
+}
+async function deleteCustomerCode(cpf) {
+    await supabaseRequest("kv_store_48db9b7e?key=eq." + customerCodeKey(cpf), { method: "DELETE", headers: { "Prefer": "return=minimal" } });
+}
+
+// Onde está o cadastro da cliente: { source: "site", ref: id do pedido } ou { source: "olist",
+// ref: id do contato }, com o e-mail que recebe o código. O código vai sempre para o e-mail do
+// mesmo cadastro cujos dados serão devolvidos.
+async function findReturningCustomer(cpf) {
+    const orders = await supabaseRequest(
+        "orders?customer_cpf=eq." + cpf + "&paid_at=not.is.null&select=id,customer_email&order=paid_at.desc&limit=1",
+        { method: "GET" }
+    );
+    const order = Array.isArray(orders) ? orders[0] : null;
+    if (order) return { source: "site", ref: order.id, email: plainEmail(order.customer_email) };
+    if (!OLIST_SYNC_ENABLED) return null;
+    try {
+        const contactId = await findOlistContactIdByCpf(cpf);
+        if (!contactId) return null;
+        const contact = await olistRequest("/contatos/" + encodeURIComponent(contactId));
+        return { source: "olist", ref: contactId, email: plainEmail(contact?.email) };
+    } catch (error) {
+        console.error("Cliente — busca na Olist:", error.message);
+        return null;
+    }
+}
+
+// Dados para o checkout, no formato dos campos do site.
+async function returningCustomerProfile(source, ref, cpf) {
+    if (source === "site") {
+        const rows = await supabaseRequest(
+            "orders?id=eq." + encodeURIComponent(ref) + "&customer_cpf=eq." + cpf +
+            "&select=customer_name,customer_email,customer_phone,customer_whatsapp,customer_address&limit=1",
+            { method: "GET" }
+        );
+        const order = Array.isArray(rows) ? rows[0] : null;
+        if (!order) return null;
+        const address = order.customer_address && typeof order.customer_address === "object" ? order.customer_address : {};
+        return {
+            name: safeString(order.customer_name),
+            email: plainEmail(order.customer_email),
+            phone: safeString(order.customer_whatsapp || order.customer_phone).replace(/\D/g, ""),
+            cpf,
+            address: {
+                cep: safeString(address.cep).replace(/\D/g, ""),
+                street: safeString(address.street),
+                number: safeString(address.number),
+                complement: safeString(address.complement),
+                neighborhood: safeString(address.neighborhood),
+                city: safeString(address.city),
+                state: safeString(address.state).toUpperCase()
+            }
+        };
+    }
+    const contact = await olistRequest("/contatos/" + encodeURIComponent(ref));
+    if (safeString(contact?.cpfCnpj).replace(/\D/g, "") !== cpf) return null;
+    const address = contact?.endereco && typeof contact.endereco === "object" ? contact.endereco : {};
+    return {
+        name: safeString(contact.nome),
+        email: plainEmail(contact.email),
+        phone: safeString(contact.celular || contact.telefone).replace(/\D/g, ""),
+        cpf,
+        address: {
+            cep: safeString(address.cep).replace(/\D/g, ""),
+            street: safeString(address.endereco),
+            number: safeString(address.numero),
+            complement: safeString(address.complemento),
+            neighborhood: safeString(address.bairro),
+            city: safeString(address.municipio || address.cidade),
+            state: safeString(address.uf).toUpperCase()
+        }
+    };
+}
+
+async function sendCustomerCodeEmail(email, code) {
+    if (!RESEND_API_KEY || !RESEND_FROM_EMAIL) throw new Error("E-mail não configurado.");
+    const html = "<html><body style=\"margin:0;background:#f7f5f2;font-family:Arial,Helvetica,sans-serif;color:#171717;\">" +
+        "<div style=\"max-width:620px;margin:0 auto;padding:40px 20px;\"><div style=\"background:#111;color:#fff;text-align:center;padding:24px 20px;letter-spacing:6px;font-size:24px;\">MONTÊ</div>" +
+        "<div style=\"background:#fff;padding:38px 30px;text-align:center;\"><p style=\"margin:0 0 12px;font-size:12px;letter-spacing:2px;color:#777;\">SEU CÓDIGO</p>" +
+        "<p style=\"margin:0 0 18px;font-size:36px;letter-spacing:10px;font-weight:600;\">" + escapeEmailHtml(code) + "</p>" +
+        "<p style=\"font-size:15px;line-height:1.7;color:#555;margin:0;\">Use este código na sacola da MONTÊ para preencher seus dados da última compra. Ele vale por 10 minutos.</p>" +
+        "<p style=\"font-size:13px;line-height:1.7;color:#999;margin:18px 0 0;\">Não pediu? É só ignorar este e-mail: sem o código, ninguém vê seus dados.</p></div>" +
+        "<p style=\"text-align:center;font-size:11px;color:#999;margin:20px 0;\">MONTÊ — Bolsas e acessórios</p></div></body></html>";
+    const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({
+            from: RESEND_FROM_NAME + " <" + RESEND_FROM_EMAIL + ">",
+            to: [email],
+            subject: "Seu código MONTÊ: " + code,
+            text: "Seu código MONTÊ: " + code + "\n\nUse na sacola para preencher seus dados da última compra. Vale por 10 minutos.\nNão pediu? É só ignorar este e-mail.",
+            html,
+            tags: [{ name: "type", value: "customer_code" }]
+        })
+    });
+    if (!response.ok) throw new Error("Resend API " + response.status + ": " + (await response.text()).slice(0, 300));
+}
+
+// 1) CPF → envia o código ao e-mail do cadastro (ou diz que não há cadastro).
+app.post("/api/clientes/codigo", customerLookupRateLimit, async (req, res) => {
+    try {
+        const cpf = validCpf(req.body?.cpf);
+        if (!cpf) return res.status(400).json({ success: false, message: "Confira o CPF: ele precisa ter 11 números válidos." });
+        const now = Date.now();
+        const saved = await readCustomerCode(cpf);
+        const sends = (Array.isArray(saved?.sends) ? saved.sends : []).filter(at => now - Number(at) < 60 * 60 * 1000);
+        // Código enviado há pouco e ainda válido: não manda outro e-mail, só lembra para onde foi.
+        if (saved?.email && now - Number(saved.sent_at || 0) < CUSTOMER_CODE_RESEND_MS && now < Number(saved.expires_at || 0)) {
+            return res.json({ success: true, found: true, sent: true, email_hint: maskedEmail(saved.email) });
+        }
+        if (sends.length >= CUSTOMER_CODE_MAX_SENDS_PER_HOUR) {
+            return res.status(429).json({ success: false, message: "Muitos códigos pedidos para este CPF. Tente de novo em 1 hora ou preencha seus dados abaixo." });
+        }
+        const customer = await findReturningCustomer(cpf);
+        if (!customer) return res.json({ success: true, found: false });
+        if (!customer.email) return res.json({ success: true, found: true, sent: false });
+        const code = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+        await writeCustomerCode(cpf, {
+            hash: customerCodeHash(cpf, code), source: customer.source, ref: customer.ref, email: customer.email,
+            attempts: 0, sent_at: now, expires_at: now + CUSTOMER_CODE_TTL_MS, sends: [...sends, now]
+        });
+        await sendCustomerCodeEmail(customer.email, code);
+        return res.json({ success: true, found: true, sent: true, email_hint: maskedEmail(customer.email) });
+    } catch (error) {
+        console.error("Cliente — envio do código:", error);
+        return res.status(502).json({ success: false, message: "Não foi possível enviar o código agora. Preencha seus dados abaixo." });
+    }
+});
+
+// 2) CPF + código → dados para o checkout. Acertou: o código é apagado (vale uma vez).
+app.post("/api/clientes/confirmar", customerConfirmRateLimit, async (req, res) => {
+    try {
+        const cpf = validCpf(req.body?.cpf);
+        const code = safeString(req.body?.code).replace(/\D/g, "");
+        if (!cpf || code.length !== 6) return res.status(400).json({ success: false, message: "Digite o código de 6 números." });
+        const saved = await readCustomerCode(cpf);
+        if (!saved?.hash || Date.now() > Number(saved.expires_at || 0)) {
+            return res.status(400).json({ success: false, expired: true, message: "O código expirou. Toque em reenviar para receber outro." });
+        }
+        if (Number(saved.attempts || 0) >= CUSTOMER_CODE_MAX_ATTEMPTS) {
+            return res.status(429).json({ success: false, expired: true, message: "Muitas tentativas. Toque em reenviar para receber outro código." });
+        }
+        const expected = Buffer.from(String(saved.hash), "hex");
+        const given = Buffer.from(customerCodeHash(cpf, code), "hex");
+        if (expected.length !== given.length || !crypto.timingSafeEqual(expected, given)) {
+            const attempts = Number(saved.attempts || 0) + 1;
+            await writeCustomerCode(cpf, { ...saved, attempts });
+            const left = CUSTOMER_CODE_MAX_ATTEMPTS - attempts;
+            return res.status(400).json({ success: false, message: left > 0 ? "Código incorreto. Confira o e-mail e tente de novo." : "Código incorreto. Toque em reenviar para receber outro.", expired: left <= 0 });
+        }
+        await deleteCustomerCode(cpf);
+        const customer = await returningCustomerProfile(saved.source, saved.ref, cpf);
+        if (!customer) return res.status(404).json({ success: false, message: "Não encontramos mais esse cadastro. Preencha seus dados abaixo." });
+        return res.json({ success: true, customer });
+    } catch (error) {
+        console.error("Cliente — confirmação do código:", error);
+        return res.status(502).json({ success: false, message: "Não foi possível confirmar agora. Tente de novo ou preencha seus dados abaixo." });
+    }
+});
+
+/* =====================================================
    MINHAS COMPRAS — CONSULTA SEGURA POR PEDIDO + E-MAIL
 ===================================================== */
 
