@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20261104-dashboard">
+<link rel="stylesheet" href="admin.css?v=20261104-olist">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -84,11 +84,20 @@
     </section>
 
     <section id="dashboardSection" class="section">
+      <div class="dash-toolbar">
+        <div class="dash-periods dash-sources" role="group" aria-label="Vendas de">
+          <span class="dash-sources-label">Vendas de</span>
+          <button type="button" class="dash-src" data-source="site" aria-pressed="false">Site</button>
+          <button type="button" class="dash-src" data-source="olist" aria-pressed="false">Fora do site (Olist)</button>
+          <button type="button" class="dash-src active" data-source="all" aria-pressed="true">Site + Olist</button>
+        </div>
+        <div class="dash-olist"><span id="olistSalesStatus" class="dash-olist-status" aria-live="polite"></span><button type="button" id="olistSalesSync" class="text-button">ATUALIZAR DA OLIST</button></div>
+      </div>
       <div class="welcome">
         <div class="welcome-copy">
           <p class="eyebrow" id="welcomeDate">MONTÊ</p>
           <h2 id="welcomeTitle">Olá.</h2>
-          <p>Como a loja está indo. Só entram as vendas para clientes; os pedidos de teste ficam de fora.</p>
+          <p>Como a loja está indo: as vendas do site e, se quiser, as de fora do site lançadas na Olist. Os pedidos de teste ficam de fora.</p>
           <div class="welcome-actions">
             <button type="button" data-go="orders">VER PEDIDOS</button>
             <button type="button" class="secondary" data-go="products">VER PRODUTOS</button>
@@ -125,10 +134,11 @@
       <div class="dash-grid dash-grid-two">
         <div class="panel"><div class="panel-head"><div><h2>Formas de pagamento</h2><p class="field-help">Faturamento de cada forma no período.</p></div></div><div id="dashPayments" class="rank-list"></div></div>
         <div class="panel"><div class="panel-head"><div><h2>Como as clientes recebem</h2><p class="field-help">Vendas de cada forma de envio no período.</p></div></div><div id="dashShippingMethods" class="rank-list"></div></div>
+        <div id="dashChannelsPanel" class="panel" hidden><div class="panel-head"><div><h2>Canais de venda</h2><p class="field-help">Faturamento do site e de cada canal da Olist no período.</p></div></div><div id="dashChannels" class="rank-list"></div></div>
       </div>
 
       <div class="dash-block-head">
-        <div><p class="eyebrow">OPERAÇÃO</p><h2>Pedidos</h2></div>
+        <div><p class="eyebrow">OPERAÇÃO</p><h2>Pedidos do site</h2></div>
         <button class="text-button" data-go="orders">Ver todos os pedidos</button>
       </div>
       <div id="dashPipeline" class="pipeline"></div>
@@ -342,7 +352,7 @@
 </div></div>
 
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="admin.js?v=20261104-dashboard"></script>
+<script src="admin.js?v=20261104-olist"></script>
 <script src="admin-carousel.js?v=20261104-previa-link"></script>
 </body>
 </html>

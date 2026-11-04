@@ -81,7 +81,7 @@ async function init(){
 function showLogin(){$("loginView").classList.remove("hidden");$("appView").classList.add("hidden");$("loginEmail").focus()}
 async function login(e){e.preventDefault();$("loginError").textContent="";try{await enterApp(await api("/api/admin/login",{method:"POST",body:JSON.stringify({email:$("loginEmail").value.trim(),password:$("loginPassword").value})}))}catch(e){$("loginError").textContent=e.message}}
 async function logout(){try{await api("/api/admin/logout",{method:"POST"})}catch{}products=[];orders=[];showLogin();$("loginPassword").value=""}
-async function enterApp(s){$("loginView").classList.add("hidden");$("appView").classList.remove("hidden");$("adminEmail").textContent=s.email||"Administrador";if(typeof window.ensureCarouselSharePreview==="function")window.ensureCarouselSharePreview();try{await Promise.all([loadProducts(),loadOrders(),loadStockMovements()]);renderDashboard()}catch(e){console.error("Falha ao carregar dados do painel:",e);$("loginError").textContent="Login realizado, mas houve um erro ao carregar os dados. Atualize a página e tente novamente.";renderDashboard()}}
+async function enterApp(s){$("loginView").classList.add("hidden");$("appView").classList.remove("hidden");$("adminEmail").textContent=s.email||"Administrador";if(typeof window.ensureCarouselSharePreview==="function")window.ensureCarouselSharePreview();loadOlistSales();try{await Promise.all([loadProducts(),loadOrders(),loadStockMovements()]);renderDashboard()}catch(e){console.error("Falha ao carregar dados do painel:",e);$("loginError").textContent="Login realizado, mas houve um erro ao carregar os dados. Atualize a página e tente novamente.";renderDashboard()}}
 function showSection(s){document.querySelectorAll(".section").forEach(x=>x.classList.add("hidden"));$(s+"Section").classList.remove("hidden");document.querySelectorAll(".nav-button").forEach(b=>{const on=b.dataset.section===s;b.classList.toggle("active",on);if(on&&window.matchMedia&&window.matchMedia("(max-width:800px)").matches)b.scrollIntoView({block:"nearest",inline:"center"})});window.scrollTo(0,0);$("pageTitle").textContent={dashboard:"Visão geral",products:"Produtos",carousel:"Banners",orders:"Pedidos",coupons:"Cupons",promotions:"Promoções",stock:"Estoque",analytics:"Analytics & Financeiro"}[s];if(s==="analytics")loadAnalytics();if(s==="products")renderProducts();if(s==="carousel"&&typeof window.loadCarousel==="function")window.loadCarousel();if(s==="orders")renderOrders();if(s==="coupons")loadCoupons();if(s==="promotions")loadPromotions();if(s==="stock"){renderStock();loadStockSyncStatus()}}
 async function loadProducts(){const d=await api("/api/admin/products");products=d.products||[];renderProducts();renderStock();renderDashboard();renderPhotoOptimizerInfo()}
 async function loadStockMovements(){try{const d=await api("/api/admin/stock/movements");renderStockMovements(d.movements||[])}catch(e){setHTML($("stockMovements"), '<p>'+esc(e.message)+'</p>')}}
@@ -730,25 +730,41 @@ registerClickActions({goTo,setOrderTest});
 
 /* =====================================================
    VISÃO GERAL — DASHBOARD
-   Só vendas para clientes: pedidos marcados como teste (is_test) ficam de
-   fora de tudo aqui. "Venda" = pedido pago, em separação, enviado ou
-   entregue; a data da venda é a do pagamento (ou a do pedido). O período
-   (7, 30, 90 dias ou desde o início) vale para os números, o gráfico e as
-   listas da parte "Vendas"; o topo mostra sempre o mês atual.
+   Vendas do site: pedidos pagos, em separação, enviados ou entregues, sem os
+   pedidos de teste (is_test); a data é a do pagamento (ou a do pedido).
+   Vendas de fora do site: os pedidos da Olist que o site não criou
+   (/api/admin/olist/sales), nas situações que contam como venda.
+   "Vendas de" (Site, Fora do site, Site + Olist) vale para o topo, os números,
+   o gráfico e as listas; o período (7, 30, 90 dias ou desde o início) vale para a
+   parte "Vendas". Expedição e últimos pedidos são sempre os pedidos do site.
 ===================================================== */
 const SALE_STATUSES=["paid","processing","shipped","delivered"];
 const DAY_MS=86400000;
-let dashDays=30;
-try{const saved=Number(localStorage.getItem("monteDashDays"));if([0,7,30,90].includes(saved)&&localStorage.getItem("monteDashDays")!==null)dashDays=saved}catch{}
+const DASH_SOURCES={site:"Site",olist:"Fora do site (Olist)",all:"Site + Olist"};
+let dashDays=30,dashSource="all";
+let olistSales=[],olistSaleSituations=[1,3,4,5,6,7],olistSalesStatus=null,olistSalesEnabled=true,olistSalesError="",olistSalesLoaded=false;
+try{const saved=localStorage.getItem("monteDashDays");if(saved!==null&&[0,7,30,90].includes(Number(saved)))dashDays=Number(saved);const src=localStorage.getItem("monteDashSource");if(DASH_SOURCES[src])dashSource=src}catch{}
 function isTestOrder(o){return o&&o.is_test===true}
 function realOrders(){return orders.filter(o=>!isTestOrder(o))}
 function saleTime(o){return new Date(o.paid_at||o.created_at).getTime()}
 function realSales(){return realOrders().filter(o=>SALE_STATUSES.includes(o.status))}
-function sumTotal(list){return list.reduce((n,o)=>n+Number(o.total||0),0)}
 function soldItems(o){const list=Array.isArray(o.order_items)&&o.order_items.length?o.order_items:(Array.isArray(o.items)?o.items:[]);return list.filter(i=>Number(i.total_price??(Number(i.unit_price||i.price||0)*Number(i.quantity||1)))>0)}
-function soldPieces(list){return list.reduce((n,o)=>n+soldItems(o).reduce((m,i)=>m+Number(i.quantity||1),0),0)}
 function startOfDay(t){const d=new Date(t);d.setHours(0,0,0,0);return d.getTime()}
 function plural(n,one,many){return n===1?one:many}
+function paymentLabel(v){const s=String(v||"").trim(),t=s.toLowerCase();if(!t)return "Não informado";if(t.includes("pix"))return "Pix";if(t==="credit_card"||t.includes("créd")||t.includes("cred"))return "Cartão de crédito";if(t==="debit_card"||t.includes("déb")||t.includes("deb"))return "Cartão de débito";if(t.includes("dinheiro"))return "Dinheiro";if(t.includes("boleto"))return "Boleto";if(t.includes("transfer"))return "Transferência";return s.charAt(0).toUpperCase()+s.slice(1)}
+function olistChannel(s){if(Number(s.origem)===1)return "Olist · loja (PDV)";if(s.canal)return "Olist · "+s.canal;return "Olist · pedido de venda"}
+// Venda no mesmo formato para o site e a Olist: data, valor, itens, pagamento, envio e canal.
+function siteSaleRows(){return realSales().map(o=>({source:"site",time:saleTime(o),total:Number(o.total||0),hasItems:true,items:soldItems(o).map(i=>({key:String(i.product_id||i.product_name||"—"),product_id:i.product_id,name:i.product_name||"Produto",qty:Number(i.quantity||1),total:Number(i.total_price??(Number(i.unit_price||0)*Number(i.quantity||1)))})),payment:paymentLabel(o.payment_method),shipping:shippingMethod(o),channel:"Site"}))}
+function productsBySku(){const map=new Map();products.forEach(p=>{if(p.sku)map.set(String(p.sku).toUpperCase(),p);(p.product_variants||[]).forEach(v=>{if(v.sku)map.set(String(v.sku).toUpperCase(),p)})});return map}
+function olistSaleRows(){
+  const ok=new Set(olistSaleSituations.map(Number)),bySku=productsBySku();
+  return olistSales.filter(s=>ok.has(Number(s.situacao))&&s.data).map(s=>({source:"olist",time:new Date(String(s.data).slice(0,10)+"T12:00:00").getTime(),total:Number(s.total||0),hasItems:!!s.detail_at,
+    items:(Array.isArray(s.itens)?s.itens:[]).filter(i=>Number(i.valor)>0).map(i=>{const p=i.sku?bySku.get(String(i.sku).toUpperCase()):null;return {key:p?String(p.id):"olist:"+(i.sku||i.descricao),product_id:p?p.id:null,name:p?p.name:(i.descricao||"Produto"),qty:Number(i.quantidade||1),total:Number(i.valor||0)*Number(i.quantidade||1)}}),
+    payment:s.detail_at?paymentLabel(s.pagamento):"Não informado",shipping:s.envio||(Number(s.origem)===1?"Na loja (PDV)":"Não informado na Olist"),channel:olistChannel(s)}));
+}
+function dashSales(){return dashSource==="site"?siteSaleRows():dashSource==="olist"?olistSaleRows():siteSaleRows().concat(olistSaleRows())}
+function sumTotal(list){return list.reduce((n,s)=>n+Number(s.total||0),0)}
+function soldPieces(list){return list.reduce((n,s)=>n+s.items.reduce((m,i)=>m+i.qty,0),0)}
 // Variação em relação ao período anterior: seta + número + com o quê comparou (a cor nunca vai sozinha).
 function deltaHtml(cur,prev,label){
   if(!prev&&!cur)return `<span class="delta-label">${esc(label)}: sem vendas</span>`;
@@ -758,12 +774,30 @@ function deltaHtml(cur,prev,label){
   return `<span class="delta-value ${dir}">${text}</span> <span class="delta-label">${esc(label)}</span>`;
 }
 function renderDashboard(){
-  const sales=realSales();
+  const sales=dashSales();
+  renderDashboardSource();
   renderDashboardHero(sales);
   renderDashboardTodo();
   renderDashboardPeriod(sales);
   renderDashboardPipeline();
   setHTML($("recentOrders"), orderTable(realOrders().filter(o=>o.status!=="expired").slice(0,6)));
+}
+// "Vendas de" e a situação da leitura da Olist.
+function renderDashboardSource(){
+  document.querySelectorAll(".dash-src").forEach(b=>{const on=b.dataset.source===dashSource;b.classList.toggle("active",on);b.setAttribute("aria-pressed",on?"true":"false")});
+  const box=$("olistSalesStatus");if(!box)return;
+  const st=olistSalesStatus||{},count=olistSaleRows().length,button=$("olistSalesSync");
+  let text;
+  if(!olistSalesEnabled)text="A integração com a Olist está desligada neste servidor.";
+  else if(olistSalesError)text="Olist: "+olistSalesError;
+  else if(!olistSalesLoaded)text="Carregando as vendas da Olist…";
+  else if(st.last_error)text="Olist: "+st.last_error;
+  else if(!st.last_run_at)text="As vendas da Olist ainda não foram lidas. Clique em ATUALIZAR DA OLIST.";
+  else if(st.reading||st.pending_details)text=`Importando as vendas da Olist… ${count} ${plural(count,"venda","vendas")} de fora do site até agora.`;
+  else text=`${count} ${plural(count,"venda","vendas")} de fora do site · Olist lida às ${new Date(st.last_run_at).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})} de ${new Date(st.last_run_at).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}`;
+  box.textContent=text;
+  box.classList.toggle("is-error",!!(olistSalesError||st.last_error));
+  if(button)button.hidden=!olistSalesEnabled;
 }
 function renderDashboardHero(sales){
   const now=new Date(),day=now.getDate();
@@ -771,9 +805,9 @@ function renderDashboardHero(sales){
   const prevStart=new Date(now.getFullYear(),now.getMonth()-1,1);
   const prevDays=new Date(now.getFullYear(),now.getMonth(),0).getDate();
   const prevEnd=new Date(prevStart.getFullYear(),prevStart.getMonth(),Math.min(day,prevDays),now.getHours(),now.getMinutes(),now.getSeconds()).getTime();
-  const cur=sales.filter(o=>saleTime(o)>=start),prev=sales.filter(o=>{const t=saleTime(o);return t>=prevStart.getTime()&&t<prevEnd});
+  const cur=sales.filter(s=>s.time>=start),prev=sales.filter(s=>s.time>=prevStart.getTime()&&s.time<prevEnd);
   const month=now.toLocaleDateString("pt-BR",{month:"long"}),prevMonth=prevStart.toLocaleDateString("pt-BR",{month:"long"});
-  if($("heroLabel"))$("heroLabel").textContent="FATURAMENTO DE "+month.toUpperCase();
+  if($("heroLabel"))$("heroLabel").textContent="FATURAMENTO DE "+month.toUpperCase()+" · "+DASH_SOURCES[dashSource].toUpperCase();
   if(!$("statRevenue"))return;
   const total=sumTotal(cur);
   $("statRevenue").textContent=money(total);
@@ -783,33 +817,35 @@ function renderDashboardHero(sales){
 function dashRange(sales){
   const now=Date.now();
   if(dashDays>0)return{start:startOfDay(now-(dashDays-1)*DAY_MS),end:now,prevStart:startOfDay(now-(2*dashDays-1)*DAY_MS),prevEnd:startOfDay(now-(dashDays-1)*DAY_MS),compare:`vs ${dashDays} dias anteriores`};
-  const first=sales.length?Math.min(...sales.map(saleTime)):now;
+  const first=sales.length?Math.min(...sales.map(s=>s.time)):now;
   return{start:startOfDay(first),end:now,prevStart:null,prevEnd:null,compare:"",since:first};
 }
 function renderDashboardPeriod(sales){
   document.querySelectorAll(".dash-period").forEach(b=>{const on=Number(b.dataset.days)===dashDays;b.classList.toggle("active",on);b.setAttribute("aria-pressed",on?"true":"false")});
-  const r=dashRange(sales),inRange=(o,a,b)=>{const t=saleTime(o);return t>=a&&t<=b};
-  const cur=sales.filter(o=>inRange(o,r.start,r.end)),prev=r.prevStart===null?null:sales.filter(o=>inRange(o,r.prevStart,r.prevEnd-1));
-  const revenue=sumTotal(cur),pieces=soldPieces(cur);
+  const r=dashRange(sales),inRange=(s,a,b)=>s.time>=a&&s.time<=b;
+  const cur=sales.filter(s=>inRange(s,r.start,r.end)),prev=r.prevStart===null?null:sales.filter(s=>inRange(s,r.prevStart,r.prevEnd-1));
+  const revenue=sumTotal(cur),pieces=soldPieces(cur),noItems=cur.filter(s=>!s.hasItems).length;
   const sinceText=r.since?"desde "+new Date(r.since).toLocaleDateString("pt-BR"):"";
   const kpi=(label,value,cmp,sub)=>`<div class="kpi"><span class="kpi-label">${esc(label)}</span><strong class="kpi-value">${esc(value)}</strong><span class="delta">${cmp}</span><small class="kpi-sub">${esc(sub)}</small></div>`;
   const cmp=(c,p)=>prev?deltaHtml(c,p,r.compare):`<span class="delta-label">${esc(sinceText||"desde o início")}</span>`;
   const prevRevenue=prev?sumTotal(prev):0,prevTicket=prev&&prev.length?prevRevenue/prev.length:0;
   setHTML($("dashKpis"),
-    kpi("Faturamento",money(revenue),cmp(revenue,prevRevenue),"total pago pelas clientes, com frete")+
-    kpi("Vendas",fmtInt(cur.length),cmp(cur.length,prev?prev.length:0),"pedidos pagos")+
+    kpi("Faturamento",money(revenue),cmp(revenue,prevRevenue),dashSource==="olist"?"valor dos pedidos na Olist":"total pago pelas clientes, com frete")+
+    kpi("Vendas",fmtInt(cur.length),cmp(cur.length,prev?prev.length:0),dashSource==="site"?"pedidos pagos":"pedidos pagos no site e vendas na Olist")+
     kpi("Ticket médio",money(cur.length?revenue/cur.length:0),cmp(cur.length?revenue/cur.length:0,prevTicket),"valor médio por venda")+
-    kpi("Peças vendidas",fmtInt(pieces),cmp(pieces,prev?soldPieces(prev):0),"sem contar os presentes"));
+    kpi("Peças vendidas",fmtInt(pieces),cmp(pieces,prev?soldPieces(prev):0),noItems?`${noItems} ${plural(noItems,"venda da Olist ainda sem itens","vendas da Olist ainda sem itens")}`:"sem contar os presentes"));
   renderRevenueChart(revenueBins(cur,r));
   renderTopProducts(cur);
-  renderRankList($("dashPayments"),groupSales(cur,o=>({pix:"Pix",credit_card:"Cartão de crédito",debit_card:"Cartão de débito"})[o.payment_method]||(o.payment_method?String(o.payment_method):"Não informado")),"revenue");
-  renderRankList($("dashShippingMethods"),groupSales(cur,o=>shippingMethod(o)),"count");
+  renderRankList($("dashPayments"),groupSales(cur,s=>s.payment),"revenue");
+  renderRankList($("dashShippingMethods"),groupSales(cur,s=>s.shipping),"count");
+  const channels=$("dashChannelsPanel");
+  if(channels){channels.hidden=dashSource==="site";if(dashSource!=="site")renderRankList($("dashChannels"),groupSales(cur,s=>s.channel),"revenue")}
 }
 // Um ponto por dia; períodos longos (mais de 92 dias) viram semanas.
 function revenueBins(list,r){
   const days=Math.max(1,Math.round((startOfDay(r.end)-r.start)/DAY_MS)+1),step=days>92?7:1,bins=[];
-  for(let t=r.start;t<=r.end;t+=step*DAY_MS)bins.push({start:t,end:t+step*DAY_MS,revenue:0,count:0,week:step>1});
-  list.forEach(o=>{const t=saleTime(o),b=bins.find(x=>t>=x.start&&t<x.end);if(b){b.revenue+=Number(o.total||0);b.count++}});
+  for(let t=r.start;t<=r.end;t+=step*DAY_MS)bins.push({start:t,end:t+step*DAY_MS,revenue:0,count:0,site:0,olist:0,week:step>1});
+  list.forEach(s=>{const b=bins.find(x=>s.time>=x.start&&s.time<x.end);if(b){b.revenue+=s.total;b.count++;b[s.source]+=s.total}});
   return bins;
 }
 function shortDate(t){return new Date(t).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}
@@ -819,8 +855,8 @@ function axisMoney(v){return v>=10000?(v/1000).toLocaleString("pt-BR",{maximumFr
 function renderRevenueChart(bins){
   const box=$("dashRevenueChart");if(!box)return;
   box._bins=bins;
-  const total=bins.reduce((n,b)=>n+b.revenue,0),count=bins.reduce((n,b)=>n+b.count,0),withSales=bins.filter(b=>b.count);
-  if($("dashChartHint"))$("dashChartHint").textContent=count?`${money(total)} em ${count} ${plural(count,"venda","vendas")} no período. ${window.matchMedia&&window.matchMedia("(hover: none)").matches?"Toque em uma coluna":"Passe o mouse ou use as setas do teclado"} para ver cada ${bins[0]&&bins[0].week?"semana":"dia"}.`:"Nenhuma venda no período.";
+  const total=bins.reduce((n,b)=>n+b.revenue,0),count=bins.reduce((n,b)=>n+b.count,0),withSales=bins.filter(b=>b.count),both=dashSource==="all";
+  if($("dashChartHint"))$("dashChartHint").textContent=count?`${money(total)} em ${count} ${plural(count,"venda","vendas")} no período (${DASH_SOURCES[dashSource].toLowerCase()}). ${window.matchMedia&&window.matchMedia("(hover: none)").matches?"Toque em uma coluna":"Passe o mouse ou use as setas do teclado"} para ver cada ${bins[0]&&bins[0].week?"semana":"dia"}.`:"Nenhuma venda no período.";
   box.setAttribute("aria-label","Gráfico de colunas do faturamento por "+(bins[0]&&bins[0].week?"semana":"dia")+": "+money(total)+" no período.");
   const W=Math.round(box.clientWidth);
   if(!W){box._pending=true;return}
@@ -838,10 +874,11 @@ function renderRevenueChart(bins){
   });
   let peak="";
   if(maxIdx>=0){const cx=padL+slot*maxIdx+slot/2,tx=Math.min(W-padR-4,Math.max(padL+4,cx)),anchor=tx===cx?"middle":(tx<cx?"end":"start");peak=`<text x="${tx.toFixed(1)}" y="${(y(bins[maxIdx].revenue)-8).toFixed(1)}" text-anchor="${anchor}" class="dc-peak">${esc(money(bins[maxIdx].revenue))}</text>`}
-  setHTML(box,`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true"><g>${grid}</g><line class="dc-cross" x1="0" x2="0" y1="${padT}" y2="${base}" visibility="hidden"/><g>${bars}</g>${peak}<g>${labels}</g></svg><div class="dc-tip" hidden><span class="dc-tip-date"></span><strong class="dc-tip-value"></strong><span class="dc-tip-count"></span></div>`);
+  setHTML(box,`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true"><g>${grid}</g><line class="dc-cross" x1="0" x2="0" y1="${padT}" y2="${base}" visibility="hidden"/><g>${bars}</g>${peak}<g>${labels}</g></svg><div class="dc-tip" hidden><span class="dc-tip-date"></span><strong class="dc-tip-value"></strong><span class="dc-tip-count"></span><span class="dc-tip-split" hidden></span></div>`);
   box._geo={padL,slot,padT,base,W};
   // Tabela: o mesmo conteúdo do gráfico, sem precisar passar o mouse.
-  setHTML($("dashRevenueTable"),withSales.length?`<table class="table"><thead><tr><th>${bins[0].week?"SEMANA":"DIA"}</th><th>VENDAS</th><th>FATURAMENTO</th></tr></thead><tbody>${withSales.slice().reverse().map(b=>`<tr><td>${esc(binLabel(b))}</td><td>${fmtInt(b.count)}</td><td>${money(b.revenue)}</td></tr>`).join("")}<tr class="dc-total"><td>Total</td><td>${fmtInt(count)}</td><td>${money(total)}</td></tr></tbody></table>`:'<p class="field-help">Nenhuma venda no período.</p>');
+  const unit=bins[0]&&bins[0].week?"SEMANA":"DIA";
+  setHTML($("dashRevenueTable"),withSales.length?`<table class="table"><thead><tr><th>${unit}</th><th>VENDAS</th>${both?"<th>SITE</th><th>OLIST</th>":""}<th>FATURAMENTO</th></tr></thead><tbody>${withSales.slice().reverse().map(b=>`<tr><td>${esc(binLabel(b))}</td><td>${fmtInt(b.count)}</td>${both?`<td>${money(b.site)}</td><td>${money(b.olist)}</td>`:""}<td>${money(b.revenue)}</td></tr>`).join("")}<tr class="dc-total"><td>Total</td><td>${fmtInt(count)}</td>${both?`<td>${money(bins.reduce((n,b)=>n+b.site,0))}</td><td>${money(bins.reduce((n,b)=>n+b.olist,0))}</td>`:""}<td>${money(total)}</td></tr></tbody></table>`:'<p class="field-help">Nenhuma venda no período.</p>');
   if(box._active!=null)showChartTip(box,Math.min(box._active,bins.length-1));
 }
 function showChartTip(box,i){
@@ -853,6 +890,7 @@ function showChartTip(box,i){
   tip.querySelector(".dc-tip-date").textContent=binLabel(b);
   tip.querySelector(".dc-tip-value").textContent=money(b.revenue);
   tip.querySelector(".dc-tip-count").textContent=b.count?`${b.count} ${plural(b.count,"venda","vendas")}`:"sem vendas";
+  const split=tip.querySelector(".dc-tip-split");split.hidden=!(dashSource==="all"&&b.count);split.textContent=`Site ${money(b.site)} · Olist ${money(b.olist)}`;
   tip.hidden=false;
   const w=tip.offsetWidth,left=cx+14+w<=g.W?cx+14:Math.max(0,cx-14-w);
   tip.style.left=left+"px";tip.style.top=Math.max(0,g.padT-6)+"px";
@@ -871,17 +909,39 @@ function hideChartTip(box){box._active=null;const tip=box.querySelector(".dc-tip
   box.addEventListener("keydown",e=>{const bins=box._bins||[];if(!bins.length)return;let i=box._active??bins.length-1;if(e.key==="ArrowLeft")i--;else if(e.key==="ArrowRight")i++;else if(e.key==="Home")i=0;else if(e.key==="End")i=bins.length-1;else if(e.key==="Escape"){hideChartTip(box);return}else return;e.preventDefault();showChartTip(box,Math.max(0,Math.min(bins.length-1,i)))});
   // O gráfico acompanha a largura da tela (e aparece certo quando a Visão geral volta a ser mostrada).
   if(window.ResizeObserver){let frame=0;new ResizeObserver(()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{const w=Math.round(box.clientWidth);if(w&&(box._pending||w!==box._width)&&box._bins)renderRevenueChart(box._bins)})}).observe(box)}
-  document.querySelectorAll(".dash-period").forEach(b=>b.addEventListener("click",()=>{dashDays=Number(b.dataset.days)||0;try{localStorage.setItem("monteDashDays",String(dashDays))}catch{}renderDashboardPeriod(realSales())}));
+  document.querySelectorAll(".dash-period").forEach(b=>b.addEventListener("click",()=>{dashDays=Number(b.dataset.days)||0;try{localStorage.setItem("monteDashDays",String(dashDays))}catch{}renderDashboardPeriod(dashSales())}));
+  document.querySelectorAll(".dash-src").forEach(b=>b.addEventListener("click",()=>{dashSource=DASH_SOURCES[b.dataset.source]?b.dataset.source:"all";try{localStorage.setItem("monteDashSource",dashSource)}catch{}renderDashboard()}));
+  const sync=$("olistSalesSync");if(sync)sync.onclick=syncOlistSalesNow;
 })();
+async function loadOlistSales(){
+  try{const d=await api("/api/admin/olist/sales");olistSales=Array.isArray(d.sales)?d.sales:[];if(Array.isArray(d.sale_situations)&&d.sale_situations.length)olistSaleSituations=d.sale_situations;olistSalesStatus=d.status||null;olistSalesEnabled=d.enabled!==false;olistSalesError=""}
+  catch(e){olistSalesError=e.message}
+  olistSalesLoaded=true;renderDashboard();
+}
+// Lê a Olist agora: o servidor lê um lote por chamada; o painel chama até terminar.
+async function syncOlistSalesNow(){
+  const button=$("olistSalesSync"),box=$("olistSalesStatus");if(!button||button.disabled)return;
+  button.disabled=true;button.textContent="LENDO A OLIST...";
+  try{
+    for(let step=0;step<40;step++){
+      const d=await api("/api/admin/olist/sales/sync",{method:"POST",body:"{}"});
+      if(d.status)olistSalesStatus=d.status;
+      if(d.done)break;
+      if(box)box.textContent=d.wait?`A Olist pediu para esperar um pouco. Continuando em ${d.wait} s…`:`Importando as vendas da Olist… ${step+1}º lote lido.`;
+      await sleep(d.wait?d.wait*1000:400);
+    }
+  }catch(e){olistSalesError=e.message}
+  finally{button.disabled=false;button.textContent="ATUALIZAR DA OLIST";await loadOlistSales()}
+}
 function groupSales(list,keyFn){
-  const map=new Map();list.forEach(o=>{const k=keyFn(o),x=map.get(k)||{name:k,revenue:0,count:0};x.revenue+=Number(o.total||0);x.count++;map.set(k,x)});
+  const map=new Map();list.forEach(s=>{const k=keyFn(s),x=map.get(k)||{name:k,revenue:0,count:0};x.revenue+=Number(s.total||0);x.count++;map.set(k,x)});
   return [...map.values()];
 }
 // Barras horizontais em ordem (maior primeiro), uma cor só; o número fica escrito ao lado.
 function renderRankList(box,rows,by,opts={}){
   if(!box)return;
   rows=rows.filter(r=>r[by]>0).sort((a,b)=>b[by]-a[by]||b.revenue-a.revenue).slice(0,opts.limit||6);
-  if(!rows.length){setHTML(box,'<p class="rank-empty">Nenhuma venda no período.</p>');return}
+  if(!rows.length){setHTML(box,`<p class="rank-empty">${esc(opts.empty||"Nenhuma venda no período.")}</p>`);return}
   const total=rows.reduce((n,r)=>n+r[by],0),max=rows[0][by];
   setHTML(box,rows.map(r=>{
     const share=total?Math.round(r[by]/total*100):0;
@@ -893,9 +953,10 @@ function renderRankList(box,rows,by,opts={}){
 }
 function renderTopProducts(list){
   const map=new Map();
-  list.forEach(o=>soldItems(o).forEach(i=>{const key=String(i.product_id||i.product_name||"—"),x=map.get(key)||{name:i.product_name||"Produto",product_id:i.product_id,revenue:0,count:0,pieces:0};x.revenue+=Number(i.total_price??(Number(i.unit_price||0)*Number(i.quantity||1)));x.pieces+=Number(i.quantity||1);x.count++;map.set(key,x)}));
-  const rows=[...map.values()].map(r=>{const p=products.find(x=>String(x.id)===String(r.product_id));return {...r,img:p&&Array.isArray(p.images)&&p.images[0]?smallPhoto(p.images[0]):""}});
-  renderRankList($("dashTopProducts"),rows,"revenue",{limit:5,sub:r=>`${fmtInt(r.pieces)} ${plural(r.pieces,"peça","peças")}`});
+  list.forEach(s=>s.items.forEach(i=>{const x=map.get(i.key)||{name:i.name,product_id:i.product_id,revenue:0,count:0,pieces:0};x.revenue+=i.total;x.pieces+=i.qty;x.count++;map.set(i.key,x)}));
+  const rows=[...map.values()].map(r=>{const p=r.product_id?products.find(x=>String(x.id)===String(r.product_id)):null;return {...r,img:p&&Array.isArray(p.images)&&p.images[0]?smallPhoto(p.images[0]):""}});
+  const noItems=list.filter(s=>!s.hasItems).length;
+  renderRankList($("dashTopProducts"),rows,"revenue",{limit:5,sub:r=>`${fmtInt(r.pieces)} ${plural(r.pieces,"peça","peças")}`,empty:noItems?"Os itens das vendas da Olist ainda estão sendo importados.":"Nenhuma venda no período."});
 }
 // Expedição: onde estão os pedidos pagos agora (não depende do período).
 function renderDashboardPipeline(){
