@@ -2687,3 +2687,14 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
 .hero-net{display:block;margin:2px 0 6px;font-size:15px;font-weight:500;color:rgba(255,255,255,.82)}
 .kpi-net{font-size:13px;font-weight:500;color:var(--ad-ink-2)}
 .order-net{display:block;margin-top:3px;font-size:11px;color:var(--ad-muted);white-space:nowrap}
+
+/* Período das vendas: de uma data a outra */
+.dash-range{display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px 10px;padding:4px 6px 4px 14px;border:1px solid var(--ad-line);border-radius:999px;background:#fff;box-shadow:var(--ad-shadow-sm)}
+.app .dash-date{display:flex;align-items:center;gap:8px;margin:0;font-size:12.5px;font-weight:500;color:var(--ad-muted)}
+.app .dash-date input{width:auto;min-height:34px;margin:0;padding:0 12px;border:0;border-radius:999px;background:var(--ad-soft);color:var(--ad-ink);font:500 13px var(--ad-sans);box-shadow:none}
+.app .dash-date input:focus{outline:2px solid var(--ad-ink);outline-offset:1px}
+@media (max-width:640px){
+  .dash-range{display:grid;grid-template-columns:1fr 1fr;width:100%;padding:6px;border-radius:var(--ad-radius-sm)}
+  .app .dash-date{gap:6px;padding-left:6px}
+  .app .dash-date input{flex:1;min-width:0;padding:0 8px}
+}
