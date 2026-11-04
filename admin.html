@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20261104-bruto-liquido">
+<link rel="stylesheet" href="admin.css?v=20261104-dois-valores">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -85,18 +85,11 @@
 
     <section id="dashboardSection" class="section">
       <div class="dash-toolbar">
-        <div class="dash-filters">
-          <div class="dash-periods dash-sources" role="group" aria-label="Vendas de">
-            <span class="dash-sources-label">Vendas de</span>
-            <button type="button" class="dash-src" data-source="site" aria-pressed="false">Site</button>
-            <button type="button" class="dash-src" data-source="olist" aria-pressed="false">Fora do site (Olist)</button>
-            <button type="button" class="dash-src active" data-source="all" aria-pressed="true">Site + Olist</button>
-          </div>
-          <div class="dash-periods dash-values" role="group" aria-label="Valores">
-            <span class="dash-sources-label">Valores</span>
-            <button type="button" class="dash-val active" data-value="gross" aria-pressed="true">Bruto</button>
-            <button type="button" class="dash-val" data-value="net" aria-pressed="false">Líquido</button>
-          </div>
+        <div class="dash-periods dash-sources" role="group" aria-label="Vendas de">
+          <span class="dash-sources-label">Vendas de</span>
+          <button type="button" class="dash-src" data-source="site" aria-pressed="false">Site</button>
+          <button type="button" class="dash-src" data-source="olist" aria-pressed="false">Fora do site (Olist)</button>
+          <button type="button" class="dash-src active" data-source="all" aria-pressed="true">Site + Olist</button>
         </div>
         <div class="dash-olist"><span id="olistSalesStatus" class="dash-olist-status" aria-live="polite"></span><button type="button" id="olistSalesSync" class="text-button">ATUALIZAR DA OLIST</button></div>
       </div>
@@ -113,6 +106,7 @@
         <div class="welcome-revenue">
           <span id="heroLabel">FATURAMENTO DO MÊS</span>
           <strong id="statRevenue">—</strong>
+          <span id="heroNet" class="hero-net"></span>
           <span id="heroDelta" class="delta"></span>
           <small id="statRevenueHint"></small>
         </div>
@@ -132,16 +126,16 @@
       <div id="dashKpis" class="kpis"></div>
       <div class="dash-grid dash-grid-main">
         <div class="panel dash-chart-panel">
-          <div class="panel-head"><div><h2 data-net-text="Líquido por dia">Faturamento por dia</h2><p id="dashChartHint" class="field-help"></p></div></div>
+          <div class="panel-head"><div><h2>Faturamento por dia</h2><p id="dashChartHint" class="field-help"></p></div></div>
           <div id="dashRevenueChart" class="dash-chart" tabindex="0" aria-describedby="dashChartHint"></div>
           <details class="help-more dash-table"><summary>Ver em tabela</summary><div id="dashRevenueTable" class="table-wrap"></div></details>
         </div>
-        <div class="panel"><div class="panel-head"><div><h2>Mais vendidas</h2><p class="field-help" data-net-text="Peças com mais valor líquido no período (presentes não contam).">Peças com mais faturamento no período (presentes não contam).</p></div></div><div id="dashTopProducts" class="rank-list"></div></div>
+        <div class="panel"><div class="panel-head"><div><h2>Mais vendidas</h2><p class="field-help">Peças com mais faturamento no período (presentes não contam).</p></div></div><div id="dashTopProducts" class="rank-list"></div></div>
       </div>
       <div class="dash-grid dash-grid-two">
-        <div class="panel"><div class="panel-head"><div><h2>Formas de pagamento</h2><p class="field-help" data-net-text="Líquido de cada forma no período, depois das taxas.">Faturamento de cada forma no período.</p></div></div><div id="dashPayments" class="rank-list"></div></div>
+        <div class="panel"><div class="panel-head"><div><h2>Formas de pagamento</h2><p class="field-help">Faturamento de cada forma no período.</p></div></div><div id="dashPayments" class="rank-list"></div></div>
         <div class="panel"><div class="panel-head"><div><h2>Como as clientes recebem</h2><p class="field-help">Vendas de cada forma de envio no período.</p></div></div><div id="dashShippingMethods" class="rank-list"></div></div>
-        <div id="dashChannelsPanel" class="panel" hidden><div class="panel-head"><div><h2>Canais de venda</h2><p class="field-help" data-net-text="Líquido do site e de cada canal da Olist no período.">Faturamento do site e de cada canal da Olist no período.</p></div></div><div id="dashChannels" class="rank-list"></div></div>
+        <div id="dashChannelsPanel" class="panel" hidden><div class="panel-head"><div><h2>Canais de venda</h2><p class="field-help">Faturamento do site e de cada canal da Olist no período.</p></div></div><div id="dashChannels" class="rank-list"></div></div>
       </div>
       <div id="dashNetPanel" class="panel dash-net">
         <div class="panel-head"><div><h2 id="dashNetTitle">Valor líquido na InfinitePay</h2><p id="dashNetHint" class="field-help"></p></div></div>
@@ -365,7 +359,7 @@
 </div></div>
 
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="admin.js?v=20261104-bruto-liquido"></script>
+<script src="admin.js?v=20261104-dois-valores"></script>
 <script src="admin-carousel.js?v=20261104-previa-link"></script>
 </body>
 </html>

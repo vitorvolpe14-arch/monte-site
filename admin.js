@@ -741,9 +741,9 @@ registerClickActions({goTo,setOrderTest});
 const SALE_STATUSES=["paid","processing","shipped","delivered"];
 const DAY_MS=86400000;
 const DASH_SOURCES={site:"Site",olist:"Fora do site (Olist)",all:"Site + Olist"};
-let dashDays=30,dashSource="all",dashValue="gross";
+let dashDays=30,dashSource="all";
 let olistSales=[],olistSaleSituations=[1,3,4,5,6,7],olistSalesStatus=null,olistSalesEnabled=true,olistSalesError="",olistSalesLoaded=false;
-try{const saved=localStorage.getItem("monteDashDays");if(saved!==null&&[0,7,30,90].includes(Number(saved)))dashDays=Number(saved);const src=localStorage.getItem("monteDashSource");if(DASH_SOURCES[src])dashSource=src;const val=localStorage.getItem("monteDashValue");if(val==="net"||val==="gross")dashValue=val}catch{}
+try{const saved=localStorage.getItem("monteDashDays");if(saved!==null&&[0,7,30,90].includes(Number(saved)))dashDays=Number(saved);const src=localStorage.getItem("monteDashSource");if(DASH_SOURCES[src])dashSource=src}catch{}
 function isTestOrder(o){return o&&o.is_test===true}
 function realOrders(){return orders.filter(o=>!isTestOrder(o))}
 function saleTime(o){return new Date(o.paid_at||o.created_at).getTime()}
@@ -763,11 +763,10 @@ function olistSaleRows(){
     payment:s.detail_at?paymentLabel(s.pagamento):"Não informado",shipping:s.envio||(Number(s.origem)===1?"Na loja (PDV)":"Não informado na Olist"),channel:olistChannel(s),pay:s.infinitepay||null,olist:s}));
 }
 function dashRows(){return dashSource==="site"?siteSaleRows():dashSource==="olist"?olistSaleRows():siteSaleRows().concat(olistSaleRows())}
-// "Valores: Líquido": cada venda vale o que fica depois das taxas da InfinitePay (exato no site,
-// estimado na loja); as peças da venda ficam na mesma proporção.
-function netRow(s){const net=s.pay?Number(s.pay.net):s.total,f=s.total?net/s.total:1;return {...s,gross:s.total,total:net,items:s.items.map(i=>({...i,total:i.total*f}))}}
-function dashSales(){const rows=dashRows();return dashValue==="net"?rows.map(netRow):rows}
-function netSubText(){return dashSource==="site"?"depois das taxas da InfinitePay":dashSource==="olist"?"estimado com a taxa da maquininha":"site exato · loja estimada pela maquininha"}
+function dashSales(){return dashRows()}
+// Líquido de uma lista de vendas (exato no site, estimado na loja) e se há estimativa nele.
+function netOf(list){const cents=list.reduce((n,s)=>n+Math.round((s.pay?Number(s.pay.net):Number(s.total||0))*100),0);return {net:cents/100,approx:list.some(s=>s.pay&&s.pay.estimated&&s.pay.fee>0)}}
+function netText(list){const n=netOf(list);return (n.approx?"≈ ":"")+money(n.net)}
 function sumTotal(list){return list.reduce((n,s)=>n+Number(s.total||0),0)}
 function soldPieces(list){return list.reduce((n,s)=>n+s.items.reduce((m,i)=>m+i.qty,0),0)}
 // Variação em relação ao período anterior: seta + número + com o quê comparou (a cor nunca vai sozinha).
@@ -790,8 +789,6 @@ function renderDashboard(){
 // "Vendas de" e a situação da leitura da Olist.
 function renderDashboardSource(){
   document.querySelectorAll(".dash-src").forEach(b=>{const on=b.dataset.source===dashSource;b.classList.toggle("active",on);b.setAttribute("aria-pressed",on?"true":"false")});
-  document.querySelectorAll(".dash-val").forEach(b=>{const on=b.dataset.value===dashValue;b.classList.toggle("active",on);b.setAttribute("aria-pressed",on?"true":"false")});
-  document.querySelectorAll("[data-net-text]").forEach(el=>{if(el.dataset.grossText===undefined)el.dataset.grossText=el.textContent;el.textContent=dashValue==="net"?el.dataset.netText:el.dataset.grossText});
   const box=$("olistSalesStatus");if(!box)return;
   const st=olistSalesStatus||{},count=olistSaleRows().length,button=$("olistSalesSync");
   let text;
@@ -815,12 +812,13 @@ function renderDashboardHero(sales){
   const prevEnd=new Date(prevStart.getFullYear(),prevStart.getMonth(),Math.min(day,prevDays),now.getHours(),now.getMinutes(),now.getSeconds()).getTime();
   const cur=sales.filter(s=>s.time>=start),prev=sales.filter(s=>s.time>=prevStart.getTime()&&s.time<prevEnd);
   const month=now.toLocaleDateString("pt-BR",{month:"long"}),prevMonth=prevStart.toLocaleDateString("pt-BR",{month:"long"});
-  if($("heroLabel"))$("heroLabel").textContent=(dashValue==="net"?"LÍQUIDO DE ":"FATURAMENTO DE ")+month.toUpperCase()+" · "+DASH_SOURCES[dashSource].toUpperCase();
+  if($("heroLabel"))$("heroLabel").textContent="FATURAMENTO DE "+month.toUpperCase()+" · "+DASH_SOURCES[dashSource].toUpperCase();
   if(!$("statRevenue"))return;
   const total=sumTotal(cur);
   $("statRevenue").textContent=money(total);
   setHTML($("heroDelta"), deltaHtml(total,sumTotal(prev),`vs ${day===1?"1º":"1º a "+Math.min(day,prevDays)} de ${prevMonth}`));
-  $("statRevenueHint").textContent=cur.length?`${cur.length} ${plural(cur.length,"venda","vendas")} · ticket médio ${money(total/cur.length)}${dashValue==="net"?" · "+netSubText():""}`:"Nenhuma venda este mês ainda";
+  if($("heroNet"))$("heroNet").textContent=cur.length?`Líquido na InfinitePay: ${netText(cur)}`:"";
+  $("statRevenueHint").textContent=cur.length?`${cur.length} ${plural(cur.length,"venda","vendas")} · ticket médio ${money(total/cur.length)}`:"Nenhuma venda este mês ainda";
 }
 function dashRange(sales){
   const now=Date.now();
@@ -834,13 +832,13 @@ function renderDashboardPeriod(sales){
   const cur=sales.filter(s=>inRange(s,r.start,r.end)),prev=r.prevStart===null?null:sales.filter(s=>inRange(s,r.prevStart,r.prevEnd-1));
   const revenue=sumTotal(cur),pieces=soldPieces(cur),noItems=cur.filter(s=>!s.hasItems).length;
   const sinceText=r.since?"desde "+new Date(r.since).toLocaleDateString("pt-BR"):"";
-  const kpi=(label,value,cmp,sub)=>`<div class="kpi"><span class="kpi-label">${esc(label)}</span><strong class="kpi-value">${esc(value)}</strong><span class="delta">${cmp}</span><small class="kpi-sub">${esc(sub)}</small></div>`;
+  const kpi=(label,value,cmp,sub,extra="")=>`<div class="kpi"><span class="kpi-label">${esc(label)}</span><strong class="kpi-value">${esc(value)}</strong>${extra}<span class="delta">${cmp}</span><small class="kpi-sub">${esc(sub)}</small></div>`;
   const cmp=(c,p)=>prev?deltaHtml(c,p,r.compare):`<span class="delta-label">${esc(sinceText||"desde o início")}</span>`;
   const prevRevenue=prev?sumTotal(prev):0,prevTicket=prev&&prev.length?prevRevenue/prev.length:0;
   setHTML($("dashKpis"),
-    kpi(dashValue==="net"?"Líquido":"Faturamento",money(revenue),cmp(revenue,prevRevenue),dashValue==="net"?netSubText():dashSource==="olist"?"valor dos pedidos na Olist":"total pago pelas clientes, com frete")+
+    kpi("Faturamento",money(revenue),cmp(revenue,prevRevenue),dashSource==="olist"?"valor dos pedidos na Olist":"total pago pelas clientes, com frete",cur.length?`<span class="kpi-net">líquido ${esc(netText(cur))}</span>`:"")+
     kpi("Vendas",fmtInt(cur.length),cmp(cur.length,prev?prev.length:0),dashSource==="site"?"pedidos pagos":"pedidos pagos no site e vendas na Olist")+
-    kpi("Ticket médio",money(cur.length?revenue/cur.length:0),cmp(cur.length?revenue/cur.length:0,prevTicket),dashValue==="net"?"líquido médio por venda":"valor médio por venda")+
+    kpi("Ticket médio",money(cur.length?revenue/cur.length:0),cmp(cur.length?revenue/cur.length:0,prevTicket),"valor médio por venda")+
     kpi("Peças vendidas",fmtInt(pieces),cmp(pieces,prev?soldPieces(prev):0),noItems?`${noItems} ${plural(noItems,"venda da Olist ainda sem itens","vendas da Olist ainda sem itens")}`:"sem contar os presentes"));
   renderRevenueChart(revenueBins(cur,r));
   renderTopProducts(cur);
@@ -866,7 +864,7 @@ function renderRevenueChart(bins){
   box._bins=bins;
   const total=bins.reduce((n,b)=>n+b.revenue,0),count=bins.reduce((n,b)=>n+b.count,0),withSales=bins.filter(b=>b.count),both=dashSource==="all";
   if($("dashChartHint"))$("dashChartHint").textContent=count?`${money(total)} em ${count} ${plural(count,"venda","vendas")} no período (${DASH_SOURCES[dashSource].toLowerCase()}). ${window.matchMedia&&window.matchMedia("(hover: none)").matches?"Toque em uma coluna":"Passe o mouse ou use as setas do teclado"} para ver cada ${bins[0]&&bins[0].week?"semana":"dia"}.`:"Nenhuma venda no período.";
-  box.setAttribute("aria-label","Gráfico de colunas do "+(dashValue==="net"?"líquido":"faturamento")+" por "+(bins[0]&&bins[0].week?"semana":"dia")+": "+money(total)+" no período.");
+  box.setAttribute("aria-label","Gráfico de colunas do faturamento por "+(bins[0]&&bins[0].week?"semana":"dia")+": "+money(total)+" no período.");
   const W=Math.round(box.clientWidth);
   if(!W){box._pending=true;return}
   box._pending=false;box._width=W;
@@ -887,7 +885,7 @@ function renderRevenueChart(bins){
   box._geo={padL,slot,padT,base,W};
   // Tabela: o mesmo conteúdo do gráfico, sem precisar passar o mouse.
   const unit=bins[0]&&bins[0].week?"SEMANA":"DIA";
-  setHTML($("dashRevenueTable"),withSales.length?`<table class="table"><thead><tr><th>${unit}</th><th>VENDAS</th>${both?"<th>SITE</th><th>OLIST</th>":""}<th>${dashValue==="net"?"LÍQUIDO":"FATURAMENTO"}</th></tr></thead><tbody>${withSales.slice().reverse().map(b=>`<tr><td>${esc(binLabel(b))}</td><td>${fmtInt(b.count)}</td>${both?`<td>${money(b.site)}</td><td>${money(b.olist)}</td>`:""}<td>${money(b.revenue)}</td></tr>`).join("")}<tr class="dc-total"><td>Total</td><td>${fmtInt(count)}</td>${both?`<td>${money(bins.reduce((n,b)=>n+b.site,0))}</td><td>${money(bins.reduce((n,b)=>n+b.olist,0))}</td>`:""}<td>${money(total)}</td></tr></tbody></table>`:'<p class="field-help">Nenhuma venda no período.</p>');
+  setHTML($("dashRevenueTable"),withSales.length?`<table class="table"><thead><tr><th>${unit}</th><th>VENDAS</th>${both?"<th>SITE</th><th>OLIST</th>":""}<th>FATURAMENTO</th></tr></thead><tbody>${withSales.slice().reverse().map(b=>`<tr><td>${esc(binLabel(b))}</td><td>${fmtInt(b.count)}</td>${both?`<td>${money(b.site)}</td><td>${money(b.olist)}</td>`:""}<td>${money(b.revenue)}</td></tr>`).join("")}<tr class="dc-total"><td>Total</td><td>${fmtInt(count)}</td>${both?`<td>${money(bins.reduce((n,b)=>n+b.site,0))}</td><td>${money(bins.reduce((n,b)=>n+b.olist,0))}</td>`:""}<td>${money(total)}</td></tr></tbody></table>`:'<p class="field-help">Nenhuma venda no período.</p>');
   if(box._active!=null)showChartTip(box,Math.min(box._active,bins.length-1));
 }
 function showChartTip(box,i){
@@ -920,7 +918,6 @@ function hideChartTip(box){box._active=null;const tip=box.querySelector(".dc-tip
   if(window.ResizeObserver){let frame=0;new ResizeObserver(()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{const w=Math.round(box.clientWidth);if(w&&(box._pending||w!==box._width)&&box._bins)renderRevenueChart(box._bins)})}).observe(box)}
   document.querySelectorAll(".dash-period").forEach(b=>b.addEventListener("click",()=>{dashDays=Number(b.dataset.days)||0;try{localStorage.setItem("monteDashDays",String(dashDays))}catch{}renderDashboardPeriod(dashSales())}));
   document.querySelectorAll(".dash-src").forEach(b=>b.addEventListener("click",()=>{dashSource=DASH_SOURCES[b.dataset.source]?b.dataset.source:"all";try{localStorage.setItem("monteDashSource",dashSource)}catch{}renderDashboard()}));
-  document.querySelectorAll(".dash-val").forEach(b=>b.addEventListener("click",()=>{dashValue=b.dataset.value==="net"?"net":"gross";try{localStorage.setItem("monteDashValue",dashValue)}catch{}renderDashboard()}));
   const sync=$("olistSalesSync");if(sync)sync.onclick=syncOlistSalesNow;
 })();
 async function loadOlistSales(){
