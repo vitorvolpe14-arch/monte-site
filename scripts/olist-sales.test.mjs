@@ -1,0 +1,82 @@
+// Testes do resumo das vendas da Olist para a Visão geral (backend/olist-sales.js).
+// Rodar: node --test scripts/*.test.mjs
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { OLIST_SALE_SITUATIONS, olistSaleDate, olistMoney, olistSaleSummary, olistSaleDetail } = require("../backend/olist-sales.js");
+
+test("data do pedido em vários formatos", () => {
+    assert.equal(olistSaleDate("2026-10-08"), "2026-10-08");
+    assert.equal(olistSaleDate("2026-10-08 14:06:00"), "2026-10-08");
+    assert.equal(olistSaleDate("08/10/2026"), "2026-10-08");
+    assert.equal(olistSaleDate(""), null);
+    assert.equal(olistSaleDate(null), null);
+});
+
+test("valor em reais", () => {
+    assert.equal(olistMoney(514), 514);
+    assert.equal(olistMoney("514.00"), 514);
+    assert.equal(olistMoney("1234.5"), 1234.5);
+    assert.equal(olistMoney("1.234,56"), 1234.56);
+    assert.equal(olistMoney("R$ 89,90"), 89.9);
+    assert.equal(olistMoney(""), 0);
+    assert.equal(olistMoney(null), 0);
+});
+
+test("venda feita fora do site (PDV)", () => {
+    const row = olistSaleSummary({
+        id: 900123, numeroPedido: 57, situacao: 1, dataCriacao: "2026-11-02", valor: "389.00", origemPedido: 1,
+        ecommerce: { id: null, nome: null, numeroPedidoEcommerce: null },
+        cliente: { nome: "Cliente da loja", cpfCnpj: "123.456.789-00", email: "x@y.z" },
+        transportador: { formaEnvio: { id: 1, nome: "Retirada" } }
+    });
+    assert.deepEqual(row, {
+        id: 900123, numero: 57, data: "2026-11-02", situacao: 1, total: 389, origem: 1,
+        canal: null, numero_ecommerce: null, envio: "Retirada", from_site: false
+    });
+    // Nenhum dado pessoal da cliente vai para o banco.
+    assert.ok(!JSON.stringify(row).includes("123.456.789-00"));
+    assert.ok(!JSON.stringify(row).includes("Cliente da loja"));
+});
+
+test("pedido que o site criou na Olist não conta como fora do site", () => {
+    assert.equal(olistSaleSummary({ id: 1, situacao: 3, ecommerce: { numeroPedidoEcommerce: "MONTE-1730000000000-abc" } }).from_site, true);
+    assert.equal(olistSaleSummary({ id: 2, situacao: 3, ecommerce: { numeroPedidoEcommerce: "monte-123" } }).from_site, true);
+    // Pelo id guardado no pedido do site, mesmo sem o número do e-commerce.
+    assert.equal(olistSaleSummary({ id: 777, situacao: 3, ecommerce: {} }, new Set(["777"])).from_site, true);
+    assert.equal(olistSaleSummary({ id: 778, situacao: 3, ecommerce: { numeroPedidoEcommerce: "MLB-99" , nome: "Mercado Livre"} }, new Set(["777"])).from_site, false);
+});
+
+test("canal de venda informado na Olist", () => {
+    assert.equal(olistSaleSummary({ id: 3, ecommerce: { nome: "Mercado Livre", canalVenda: "" } }).canal, "Mercado Livre");
+    assert.equal(olistSaleSummary({ id: 4, ecommerce: { nome: "Loja X", canalVenda: "Instagram" } }).canal, "Instagram");
+});
+
+test("itens e pagamento do detalhe", () => {
+    const d = olistSaleDetail({
+        id: 900123,
+        itens: [
+            { produto: { id: 1, sku: "MT-100-P", descricao: "Bolsa Paris Preta" }, quantidade: 2, valorUnitario: "389.00" },
+            { produto: { id: 2, sku: "", descricao: "" }, quantidade: 0, valorUnitario: null }
+        ],
+        pagamento: { formaRecebimento: { id: 5, nome: "Pix" }, parcelas: [] }
+    });
+    assert.deepEqual(d, {
+        id: 900123,
+        itens: [
+            { sku: "MT-100-P", descricao: "Bolsa Paris Preta", quantidade: 2, valor: 389 },
+            { sku: null, descricao: "Produto", quantidade: 1, valor: 0 }
+        ],
+        pagamento: "Pix"
+    });
+    assert.equal(olistSaleDetail({ id: 1, pagamento: { meioPagamento: "Cartão de crédito" } }).pagamento, "Cartão de crédito");
+    assert.equal(olistSaleDetail({ id: 1, pagamento: { parcelas: [{ formaRecebimento: { nome: "Dinheiro" } }] } }).pagamento, "Dinheiro");
+    assert.equal(olistSaleDetail({ id: 1 }).pagamento, null);
+});
+
+test("situações que contam como venda", () => {
+    assert.deepEqual(OLIST_SALE_SITUATIONS, [1, 3, 4, 5, 6, 7]);
+    [0, 2, 8, 9, 10].forEach(s => assert.ok(!OLIST_SALE_SITUATIONS.includes(s)));
+});

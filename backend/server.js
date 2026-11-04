@@ -6,6 +6,7 @@ const path = require("path");
 const cors = require("cors");
 const { pixLinkDiscountPercent, isExpectedPixAmount, paidPriceKey } = require("./pix-discount.js");
 const { PROMOTION_GIFTS_CEILING, promotionGiftCount } = require("./gift-promotion.js");
+const { OLIST_SALE_SITUATIONS, olistSaleSummary, olistSaleDetail } = require("./olist-sales.js");
 
 // Este servidor roda no Render (Node) e no Cloudflare Workers (nodejs_compat).
 // No Workers não há arquivos do projeto no disco nem timers fora de uma requisição:
@@ -3952,6 +3953,165 @@ app.put("/api/admin/olist/sync-settings", requireAdmin, async (req, res) => {
     }
 });
 
+/* =====================================================
+   VENDAS DA OLIST NA VISÃO GERAL
+   O servidor lê os pedidos da Olist e guarda um resumo em olist_sales (sem dados
+   pessoais), para o painel mostrar também o que foi vendido fora do site. A lista vem
+   em páginas de 100 (mais novos primeiro): a cada execução, a primeira página; uma vez
+   por dia, todas as páginas (a leitura continua de onde parou na execução seguinte).
+   Depois, os itens e o pagamento de cada venda de fora do site (um pedido por
+   chamada). Os pedidos que o próprio site criou na Olist (MONTE-... ou o id guardado
+   no pedido) ficam com from_site e não contam como "fora do site".
+   Cada execução respeita a cota de chamadas (Cloudflare: 50 por execução).
+===================================================== */
+const OLIST_SALES_STATE_KEY = "olist_sales_sync";
+const OLIST_SALES_PAGE = 100;
+const OLIST_SALES_FULL_EVERY_MS = 24 * 60 * 60 * 1000;
+const OLIST_SALES_RUN_EVERY_MS = 14 * 60 * 1000;
+// Resumo e detalhe de cada pedido: backend/olist-sales.js.
+async function readOlistSalesState() {
+    const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + OLIST_SALES_STATE_KEY + "&select=value&limit=1", { method: "GET" });
+    return (Array.isArray(rows) && rows[0]?.value) || {};
+}
+async function writeOlistSalesState(state) {
+    await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({ key: OLIST_SALES_STATE_KEY, value: { ...state, updated_at: new Date().toISOString() } })
+    });
+}
+async function upsertOlistSales(rows) {
+    if (!rows.length) return;
+    await supabaseRequest("olist_sales?on_conflict=id", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify(rows)
+    });
+}
+
+// Uma execução da importação. "due" = só roda se já passou o intervalo ou se ainda há o que ler.
+async function syncOlistSales({ calls = 18, due = false } = {}) {
+    if (!OLIST_SYNC_ENABLED) return { skipped: "disabled", calls: 0 };
+    const budget = createCallBudget(calls);
+    const usedCalls = () => calls - budget.left;
+    if (!budget.has(6)) return { skipped: "budget", calls: 0 };
+    budget.use();
+    const state = await readOlistSalesState();
+    const now = Date.now();
+    const backlog = state.cursor != null || state.pending_details > 0 || !state.full_at;
+    if (due && !backlog && now - (Date.parse(state.last_run_at || "") || 0) < OLIST_SALES_RUN_EVERY_MS) return { skipped: "rest", calls: usedCalls(), state };
+    if (now < (Number(state.wait_until) || 0)) return { skipped: "wait", calls: usedCalls(), state };
+
+    const next = { ...state, last_run_at: new Date().toISOString(), last_error: null };
+    const listed = [], details = [];
+    budget.use(); // gravação do estado no fim
+    try {
+        await ensureOlistAccess(budget);
+        budget.use();
+        const siteRows = await supabaseRequest("orders?select=olist_order_id&olist_order_id=not.is.null", { method: "GET" });
+        const siteOlistIds = new Set((Array.isArray(siteRows) ? siteRows : []).map(r => String(r.olist_order_id)));
+
+        // 1) Lista: a leitura completa do dia (continua do cursor) ou só a primeira página.
+        let offset = state.cursor != null ? Number(state.cursor) || 0 : 0;
+        const full = state.cursor != null || !state.full_at || now - Number(state.full_at) > OLIST_SALES_FULL_EVERY_MS;
+        // Sem leitura completa pendente, a primeira página é relida no máximo a cada 10 minutos
+        // (enquanto faltam detalhes, a cota vai para eles).
+        const listNow = full || now - (Date.parse(state.listed_at || "") || 0) >= 10 * 60 * 1000;
+        if (listNow) next.listed_at = new Date().toISOString();
+        let pages = 0;
+        while (listNow && budget.has(4) && pages < (full ? 4 : 1)) {
+            budget.use();
+            const data = await olistRequest("/pedidos?orderBy=desc&limit=" + OLIST_SALES_PAGE + "&offset=" + offset);
+            const items = olistItemsFromResponse(data).filter(o => Number(o?.id) > 0);
+            const stamp = new Date().toISOString();
+            items.forEach(o => listed.push({ ...olistSaleSummary(o, siteOlistIds), updated_at: stamp }));
+            pages++;
+            const total = Number(data?.paginacao?.total);
+            offset += items.length;
+            const ended = items.length < OLIST_SALES_PAGE || (Number.isFinite(total) && offset >= total);
+            if (Number.isFinite(total)) next.total_olist = total;
+            if (!full) break;
+            if (ended) { next.cursor = null; next.full_at = Date.now(); break; }
+            next.cursor = offset;
+        }
+        if (listed.length) { budget.use(); await upsertOlistSales(listed); }
+
+        // 2) Detalhes (itens e pagamento) das vendas de fora do site que ainda não têm.
+        if (budget.has(3)) {
+            budget.use();
+            const missing = await supabaseRequest(
+                "olist_sales?select=id&from_site=eq.false&detail_at=is.null&situacao=in.(" + OLIST_SALE_SITUATIONS.join(",") + ")&order=data.desc.nullslast&limit=41",
+                { method: "GET" }
+            );
+            const ids = (Array.isArray(missing) ? missing : []).map(r => r.id);
+            for (const id of ids) {
+                if (!budget.has(2)) break;
+                budget.use();
+                try {
+                    details.push({ ...olistSaleDetail({ ...(await olistRequest("/pedidos/" + encodeURIComponent(id))), id }), detail_at: new Date().toISOString() });
+                } catch (error) {
+                    if (error?.status !== 404 && error?.status !== 400) throw error;
+                    // Pedido que não existe mais: fica sem itens, para não tentar de novo a cada execução.
+                    details.push({ id: Number(id), itens: [], pagamento: null, detail_at: new Date().toISOString() });
+                }
+            }
+            if (details.length) { budget.use(); await upsertOlistSales(details); }
+            next.pending_details = Math.max(0, ids.length - details.length);
+        }
+    } catch (error) {
+        if (error?.budget) {
+            // Cota da execução acabou: o resto fica para a próxima.
+        } else {
+            next.last_error = safeString(error?.message).slice(0, 300) || "Erro ao ler a Olist.";
+            if (error?.status === 429) next.wait_until = Date.now() + OLIST_RATE_LIMIT_DELAY_MS;
+            if (/OLIST_AUTH/.test(next.last_error)) next.last_error = "A Olist pediu para reconectar. Use RECONECTAR OLIST em Estoque.";
+            console.error("Vendas Olist:", next.last_error);
+        }
+    }
+    try { await writeOlistSalesState(next); } catch (error) { console.error("Vendas Olist — estado:", error.message); }
+    return { calls: usedCalls(), listed: listed.length, details: details.length, state: next, done: next.cursor == null && !next.pending_details && !next.last_error };
+}
+
+function olistSalesStatusPayload(state) {
+    return {
+        last_run_at: state.last_run_at || null,
+        full_at: state.full_at ? new Date(Number(state.full_at)).toISOString() : null,
+        reading: state.cursor != null || !state.full_at,
+        pending_details: Number(state.pending_details) || 0,
+        total_olist: Number.isFinite(Number(state.total_olist)) ? Number(state.total_olist) : null,
+        last_error: state.last_error || null
+    };
+}
+
+// Vendas da Olist que não vieram do site (para a Visão geral).
+app.get("/api/admin/olist/sales", requireAdmin, async (req, res) => {
+    try {
+        const [rows, state] = await Promise.all([
+            supabaseRequest("olist_sales?select=id,numero,data,situacao,total,origem,canal,envio,itens,pagamento,detail_at&from_site=eq.false&order=data.desc.nullslast&limit=5000", { method: "GET" }),
+            readOlistSalesState()
+        ]);
+        return res.json({ success: true, enabled: OLIST_SYNC_ENABLED, sale_situations: OLIST_SALE_SITUATIONS, sales: Array.isArray(rows) ? rows : [], status: olistSalesStatusPayload(state) });
+    } catch (error) {
+        console.error("Vendas Olist — painel:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível carregar as vendas da Olist." });
+    }
+});
+
+// O painel chama em sequência até done (cada chamada lê um lote).
+app.post("/api/admin/olist/sales/sync", requireAdmin, async (req, res) => {
+    try {
+        const result = await syncOlistSales({ calls: WORKER_CALL_LIMIT - 6 });
+        if (result.skipped === "disabled") return res.status(409).json({ success: false, message: "A integração com a Olist está desligada neste servidor." });
+        if (result.skipped === "wait") return res.json({ success: true, done: false, wait: Math.ceil(((Number(result.state.wait_until) || Date.now()) - Date.now()) / 1000), status: olistSalesStatusPayload(result.state) });
+        if (result.skipped) return res.status(503).json({ success: false, message: "Não foi possível ler a Olist agora. Tente de novo em instantes." });
+        if (result.state.last_error) return res.status(502).json({ success: false, message: result.state.last_error, status: olistSalesStatusPayload(result.state) });
+        return res.json({ success: true, done: result.done, listed: result.listed, details: result.details, status: olistSalesStatusPayload(result.state) });
+    } catch (error) {
+        console.error("Vendas Olist — atualizar:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível ler a Olist agora." });
+    }
+});
+
 app.put("/api/admin/products/:id/variants",requireAdmin,async(req,res)=>{
     try{
         const productId=safeString(req.params.id);
@@ -7869,8 +8029,9 @@ async function refreshOlistAccess() {
 }
 
 // Tarefas periódicas. No Render rodam em timers; no Cloudflare, pelos Cron Triggers
-// do wrangler.jsonc ("* * * * *" = um pedido pago pendente e um lote da conferência
-// Olist → site (estoque, preço e cores); a cada 3 horas = acesso Olist). Cada execução tem 50 chamadas externas:
+// do wrangler.jsonc ("* * * * *" = um pedido pago pendente, um lote da conferência
+// Olist → site (estoque, preço e cores) e, a cada 5 minutos, as vendas da Olist para a
+// Visão geral; a cada 3 horas = acesso Olist). Cada execução tem 50 chamadas externas:
 // o pedido vai primeiro e o lote de estoque usa o que sobrar.
 // Prazo de guarda (Política de Privacidade): estatísticas da loja por 13 meses e sacolas salvas
 // (com o contato digitado no checkout) por 6 meses. Os eventos saem junto com a sessão (cascata).
@@ -7910,6 +8071,11 @@ async function runScheduledTask(cron) {
         if (new Date().getUTCMinutes() % 5 === 2) {
             used += await runCustomerUpkeep(Math.min(25, WORKER_CALL_LIMIT - 4 - used - 17)).catch(() => 25);
         }
+        // A cada 5 minutos: vendas da Olist para a Visão geral (só quando já passou o intervalo
+        // ou ainda há o que ler). Sobram pelo menos 16 chamadas para o lote de estoque.
+        if (new Date().getUTCMinutes() % 5 === 4) {
+            used += (await syncOlistSales({ calls: Math.min(18, WORKER_CALL_LIMIT - 4 - used - 16), due: true }).catch(() => ({ calls: 18 })))?.calls || 0;
+        }
         return syncOlistStockBatch({ calls: WORKER_CALL_LIMIT - 4 - used })
             .catch(error => console.error("Estoque Olist:", error.message));
     }
@@ -7944,6 +8110,9 @@ function startNodeServer() {
 
             // Pedidos sem pagamento antigos e lembretes por e-mail, a cada 5 minutos.
             setInterval(() => runCustomerUpkeep(40).catch(() => {}), 5 * 60 * 1000);
+
+            // Vendas da Olist para a Visão geral, a cada 5 minutos (quando é a hora ou há o que ler).
+            setInterval(() => syncOlistSales({ calls: 40, due: true }).catch(() => {}), 5 * 60 * 1000);
         }
     );
 }
@@ -7974,4 +8143,4 @@ app.use((error, req, res, next) => {
 // "node server.js" (Render) sobe o servidor; o Worker importa o app (backend/worker.js).
 if (!IS_WORKERS && require.main === module) startNodeServer();
 
-module.exports = { app, runScheduledTask, runCustomerUpkeep, setSiteAssets, setBackgroundRunner, serveMediaRequest };
+module.exports = { app, runScheduledTask, runCustomerUpkeep, setSiteAssets, setBackgroundRunner, serveMediaRequest, syncOlistSales };
