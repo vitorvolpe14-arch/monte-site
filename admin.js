@@ -735,15 +735,15 @@ registerClickActions({goTo,setOrderTest});
    Vendas de fora do site: os pedidos da Olist que o site não criou
    (/api/admin/olist/sales), nas situações que contam como venda.
    "Vendas de" (Site, Fora do site, Site + Olist) vale para o topo, os números,
-   o gráfico e as listas; o período (7, 30, 90 dias ou desde o início) vale para a
-   parte "Vendas". Expedição e últimos pedidos são sempre os pedidos do site.
+   o gráfico e as listas; o período (de uma data a outra; começa no dia 1º do mês até
+   hoje) vale para a parte "Vendas". Expedição e últimos pedidos são sempre os pedidos do site.
 ===================================================== */
 const SALE_STATUSES=["paid","processing","shipped","delivered"];
 const DAY_MS=86400000;
 const DASH_SOURCES={site:"Site",olist:"Fora do site (Olist)",all:"Site + Olist"};
-let dashDays=30,dashSource="all";
+let dashFrom="",dashTo="",dashSource="all";
 let olistSales=[],olistSaleSituations=[1,3,4,5,6,7],olistSalesStatus=null,olistSalesEnabled=true,olistSalesError="",olistSalesLoaded=false;
-try{const saved=localStorage.getItem("monteDashDays");if(saved!==null&&[0,7,30,90].includes(Number(saved)))dashDays=Number(saved);const src=localStorage.getItem("monteDashSource");if(DASH_SOURCES[src])dashSource=src}catch{}
+try{const src=localStorage.getItem("monteDashSource");if(DASH_SOURCES[src])dashSource=src}catch{}
 function isTestOrder(o){return o&&o.is_test===true}
 function realOrders(){return orders.filter(o=>!isTestOrder(o))}
 function saleTime(o){return new Date(o.paid_at||o.created_at).getTime()}
@@ -820,20 +820,34 @@ function renderDashboardHero(sales){
   if($("heroNet"))$("heroNet").textContent=cur.length?`Líquido na InfinitePay: ${netText(cur)}`:"";
   $("statRevenueHint").textContent=cur.length?`${cur.length} ${plural(cur.length,"venda","vendas")} · ticket médio ${money(total/cur.length)}`:"Nenhuma venda este mês ainda";
 }
-function dashRange(sales){
-  const now=Date.now();
-  if(dashDays>0)return{start:startOfDay(now-(dashDays-1)*DAY_MS),end:now,prevStart:startOfDay(now-(2*dashDays-1)*DAY_MS),prevEnd:startOfDay(now-(dashDays-1)*DAY_MS),compare:`vs ${dashDays} dias anteriores`};
-  const first=sales.length?Math.min(...sales.map(s=>s.time)):now;
-  return{start:startOfDay(first),end:now,prevStart:null,prevEnd:null,compare:"",since:first};
+// Datas no formato dos campos (AAAA-MM-DD), no fuso do navegador.
+function ymd(t){const d=new Date(t);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
+function fromYmd(v){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v||""));return m?new Date(Number(m[1]),Number(m[2])-1,Number(m[3])):null}
+function brDate(t){return new Date(t).toLocaleDateString("pt-BR")}
+// Na comparação, sem o ano quando é o ano atual (cabe numa linha no celular).
+function brShort(t){const d=new Date(t);return d.getFullYear()===new Date().getFullYear()?d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"}):brDate(t)}
+// Período escolhido: de uma data a outra (as duas inclusas; padrão: dia 1º do mês até hoje).
+// A comparação é com o período anterior do mesmo tamanho, logo antes dele.
+function dashRange(){
+  const today=new Date();today.setHours(0,0,0,0);
+  let from=fromYmd(dashFrom)||new Date(today.getFullYear(),today.getMonth(),1),to=fromYmd(dashTo)||today;
+  if(to>today)to=today;
+  if(from>to)[from,to]=[to,from];
+  const days=Math.round((to-from)/DAY_MS)+1;
+  const prevFrom=new Date(from.getFullYear(),from.getMonth(),from.getDate()-days),prevTo=new Date(from.getFullYear(),from.getMonth(),from.getDate()-1);
+  const end=new Date(to.getFullYear(),to.getMonth(),to.getDate()+1).getTime()-1;
+  return{start:from.getTime(),end,prevStart:prevFrom.getTime(),prevEnd:from.getTime(),days,from:ymd(from),to:ymd(to),max:ymd(today),
+    label:days===1?"em "+brDate(from):`de ${brDate(from)} a ${brDate(to)}`,compare:days===1?"vs "+brShort(prevFrom):`vs ${brShort(prevFrom)} a ${brShort(prevTo)}`};
 }
 function renderDashboardPeriod(sales){
-  document.querySelectorAll(".dash-period").forEach(b=>{const on=Number(b.dataset.days)===dashDays;b.classList.toggle("active",on);b.setAttribute("aria-pressed",on?"true":"false")});
-  const r=dashRange(sales),inRange=(s,a,b)=>s.time>=a&&s.time<=b;
+  const r=dashRange(),inRange=(s,a,b)=>s.time>=a&&s.time<=b;
+  const fromInput=$("dashFrom"),toInput=$("dashTo");
+  if(fromInput){fromInput.value=r.from;fromInput.max=r.max}
+  if(toInput){toInput.value=r.to;toInput.max=r.max}
   const cur=sales.filter(s=>inRange(s,r.start,r.end)),prev=r.prevStart===null?null:sales.filter(s=>inRange(s,r.prevStart,r.prevEnd-1));
   const revenue=sumTotal(cur),pieces=soldPieces(cur),noItems=cur.filter(s=>!s.hasItems).length;
-  const sinceText=r.since?"desde "+new Date(r.since).toLocaleDateString("pt-BR"):"";
   const kpi=(label,value,cmp,sub,extra="")=>`<div class="kpi"><span class="kpi-label">${esc(label)}</span><strong class="kpi-value">${esc(value)}</strong>${extra}<span class="delta">${cmp}</span><small class="kpi-sub">${esc(sub)}</small></div>`;
-  const cmp=(c,p)=>prev?deltaHtml(c,p,r.compare):`<span class="delta-label">${esc(sinceText||"desde o início")}</span>`;
+  const cmp=(c,p)=>deltaHtml(c,p,r.compare);
   const prevRevenue=prev?sumTotal(prev):0,prevTicket=prev&&prev.length?prevRevenue/prev.length:0;
   setHTML($("dashKpis"),
     kpi("Faturamento",money(revenue),cmp(revenue,prevRevenue),dashSource==="olist"?"valor dos pedidos na Olist":"total pago pelas clientes, com frete",cur.length?`<span class="kpi-net">líquido ${esc(netText(cur))}</span>`:"")+
@@ -916,7 +930,9 @@ function hideChartTip(box){box._active=null;const tip=box.querySelector(".dc-tip
   box.addEventListener("keydown",e=>{const bins=box._bins||[];if(!bins.length)return;let i=box._active??bins.length-1;if(e.key==="ArrowLeft")i--;else if(e.key==="ArrowRight")i++;else if(e.key==="Home")i=0;else if(e.key==="End")i=bins.length-1;else if(e.key==="Escape"){hideChartTip(box);return}else return;e.preventDefault();showChartTip(box,Math.max(0,Math.min(bins.length-1,i)))});
   // O gráfico acompanha a largura da tela (e aparece certo quando a Visão geral volta a ser mostrada).
   if(window.ResizeObserver){let frame=0;new ResizeObserver(()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{const w=Math.round(box.clientWidth);if(w&&(box._pending||w!==box._width)&&box._bins)renderRevenueChart(box._bins)})}).observe(box)}
-  document.querySelectorAll(".dash-period").forEach(b=>b.addEventListener("click",()=>{dashDays=Number(b.dataset.days)||0;try{localStorage.setItem("monteDashDays",String(dashDays))}catch{}renderDashboardPeriod(dashSales())}));
+  // De / até: ao trocar uma data, a parte "Vendas" é refeita (datas trocadas são acertadas).
+  const pickDates=()=>{dashFrom=$("dashFrom").value||"";dashTo=$("dashTo").value||"";renderDashboardPeriod(dashSales())};
+  ["dashFrom","dashTo"].forEach(id=>{const el=$(id);if(el)el.addEventListener("change",pickDates)});
   document.querySelectorAll(".dash-src").forEach(b=>b.addEventListener("click",()=>{dashSource=DASH_SOURCES[b.dataset.source]?b.dataset.source:"all";try{localStorage.setItem("monteDashSource",dashSource)}catch{}renderDashboard()}));
   const sync=$("olistSalesSync");if(sync)sync.onclick=syncOlistSalesNow;
 })();
@@ -971,7 +987,7 @@ function renderDashboardNet(r){
   const sale=sumPay(rows,"sale"),paid=sumPay(rows,"paid"),interest=sumPay(rows,"interest"),fee=sumPay(rows,"fee"),net=sumPay(rows,"net");
   const est=rows.filter(s=>s.pay.estimated),estFee=sumPay(est,"fee");
   const withInterest=rows.filter(s=>s.pay.interest>0).length,pix=rows.filter(s=>s.pay.method==="pix").length;
-  const period=dashDays?`nos últimos ${dashDays} dias`:(r.since?"desde "+new Date(r.since).toLocaleDateString("pt-BR"):"desde o início");
+  const period=r.label;
   const who={site:"Vendas do site",olist:"Vendas da loja (Olist)",all:"Vendas do site e da loja"}[dashSource];
   $("dashNetTitle").textContent=dashSource==="site"?"Valor líquido do site na InfinitePay":dashSource==="olist"?"Valor líquido da loja na InfinitePay":"Valor líquido na InfinitePay";
   $("dashNetHint").textContent=`${who} ${period}, depois das taxas da InfinitePay, para conferir com o app dela.${dashSource!=="site"?" Na loja, o que a Olist não detalha (débito ou forma de pagamento não informada) fica estimado (≈).":""}`;

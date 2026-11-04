@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20261104-dois-valores">
+<link rel="stylesheet" href="admin.css?v=20261104-datas">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -116,11 +116,9 @@
 
       <div class="dash-block-head">
         <div><p class="eyebrow">DESEMPENHO</p><h2>Vendas</h2></div>
-        <div class="dash-periods" role="group" aria-label="Período das vendas">
-          <button type="button" class="dash-period" data-days="7" aria-pressed="false">7 dias</button>
-          <button type="button" class="dash-period active" data-days="30" aria-pressed="true">30 dias</button>
-          <button type="button" class="dash-period" data-days="90" aria-pressed="false">90 dias</button>
-          <button type="button" class="dash-period" data-days="0" aria-pressed="false">Desde o início</button>
+        <div class="dash-range" role="group" aria-label="Período das vendas">
+          <label class="dash-date"><span>De</span><input type="date" id="dashFrom" aria-label="Data inicial"></label>
+          <label class="dash-date"><span>até</span><input type="date" id="dashTo" aria-label="Data final"></label>
         </div>
       </div>
       <div id="dashKpis" class="kpis"></div>
@@ -359,7 +357,7 @@
 </div></div>
 
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="admin.js?v=20261104-taxas-app"></script>
+<script src="admin.js?v=20261104-datas"></script>
 <script src="admin-carousel.js?v=20261104-previa-link"></script>
 </body>
 </html>
