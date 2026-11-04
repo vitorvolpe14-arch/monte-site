@@ -2112,7 +2112,7 @@ button,input,select,textarea{font-family:var(--ad-sans)}
   font-size:11px;
   transition:background .2s ease,color .2s ease,border-color .2s ease,box-shadow .2s ease,transform .2s ease;
 }
-.app button:not(.secondary):not(.nav-button):not(.link-button):not(.text-button):not(.danger-button):not(.image-remove):not(.remove-variant):not(.stat):not(.subtab):not(.todo-item):hover,
+.app button:not(.secondary):not(.nav-button):not(.link-button):not(.text-button):not(.danger-button):not(.image-remove):not(.remove-variant):not(.stat):not(.subtab):not(.todo-item):not(.dash-period):not(.pipeline-step):hover,
 .modal button:not(.secondary):not(.danger-button):not(.image-remove):not(.remove-variant):hover,
 #loginForm button:hover{background:#333;box-shadow:0 8px 20px -10px rgba(0,0,0,.55)}
 .app button.secondary,.app .text-button,.modal button.secondary{background:#fff;color:var(--ad-ink);border:1px solid var(--ad-line-strong)}
@@ -2260,31 +2260,104 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
 .app .welcome-actions button:hover{background:#ececec;box-shadow:none}
 .app .welcome-actions button.secondary{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.35)}
 .app .welcome-actions button.secondary:hover{background:rgba(255,255,255,.1);color:#fff;border-color:#fff}
-.welcome-revenue{align-self:end;justify-self:end;text-align:right;display:grid;gap:8px;position:relative;z-index:1}
-.welcome-revenue span{font-size:9.5px;letter-spacing:.24em;color:rgba(255,255,255,.55)}
-.welcome-revenue strong{font:400 clamp(36px,4vw,54px)/1 var(--ad-serif);color:var(--ad-light);letter-spacing:-.02em}
-.welcome-revenue small{font-size:12px;color:rgba(255,255,255,.55)}
+.welcome-revenue{align-self:center;justify-self:end;display:grid;justify-items:end;gap:10px;text-align:right;position:relative;z-index:1}
+.welcome-revenue #heroLabel{font-size:10px;letter-spacing:.24em;color:rgba(255,255,255,.6)}
+.welcome-revenue strong{font:600 clamp(40px,4.4vw,58px)/1 var(--ad-sans);letter-spacing:-.03em;color:var(--ad-light)}
+.welcome-revenue small{font-size:12.5px;color:rgba(255,255,255,.6)}
+.welcome .delta{justify-content:flex-end;font-size:13px}
+.welcome .delta-value.up{color:#86d9a6}
+.welcome .delta-value.down{color:#f2a7b2}
+.welcome .delta-value.flat,.welcome .delta-label{color:rgba(255,255,255,.62)}
 
-.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:0 0 16px}
-.app button.stat{position:relative;display:flex;flex-direction:column;align-items:flex-start;width:100%;min-height:0;margin:0;padding:20px 22px;border:1px solid var(--ad-line);border-radius:var(--ad-radius);background:#fff;color:var(--ad-ink);text-align:left;letter-spacing:0;font-size:14px;cursor:pointer;box-shadow:var(--ad-shadow-sm)}
-.app button.stat:hover{background:#fff;border-color:var(--ad-ink-2);box-shadow:var(--ad-shadow);transform:translateY(-2px)}
-.app button.stat::before{display:none}
-.app button.stat::after{content:"→";position:absolute;top:18px;right:20px;font-size:15px;color:var(--ad-muted);opacity:0;transition:opacity .2s ease,transform .2s ease;transform:translateX(-4px)}
-.app button.stat:hover::after{opacity:1;transform:none}
-.stat span{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ad-muted);font-weight:500}
-.stat strong{display:block;margin:14px 0 8px;font:400 38px/1 var(--ad-serif)}
-.stat small{font-size:12px;color:var(--ad-muted);line-height:1.4}
-.dashboard-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
-.dashboard-grid>.panel{margin:0}
-.todo-panel{order:-1}
-.todo-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
-.app .todo-item{display:flex;align-items:center;gap:14px;width:100%;min-height:0;padding:14px 16px;border:1px solid var(--ad-line);border-radius:12px;background:var(--ad-soft);color:var(--ad-ink);text-align:left;font-size:13px;font-weight:400;letter-spacing:0;box-shadow:none}
-.app .todo-item:hover{background:#fff;border-color:var(--ad-ink);box-shadow:none}
-.todo-item strong{min-width:30px;font:400 26px/1 var(--ad-serif)}
+/* Precisa da sua atenção: só aparece com alguma pendência. */
+.todo-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin:0 0 8px}
+.todo-title{grid-column:1/-1;margin:6px 0 0;font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--ad-muted);font-weight:500}
+.app .todo-item{display:flex;align-items:center;gap:14px;width:100%;min-height:0;padding:14px 16px;border:1px solid var(--ad-line);border-left:3px solid var(--ad-wine);border-radius:12px;background:#fff;color:var(--ad-ink);text-align:left;font-size:13px;font-weight:400;letter-spacing:0;box-shadow:var(--ad-shadow-sm)}
+.app .todo-item:hover,.app button.todo-item:hover{background:#fff;border-color:var(--ad-ink);border-left-color:var(--ad-wine);box-shadow:var(--ad-shadow)}
+.todo-item strong{min-width:28px;font:600 24px/1 var(--ad-sans)}
 .todo-item span{flex:1;line-height:1.4}
 .todo-item i{font-style:normal;font-size:20px;line-height:1;color:var(--ad-muted)}
-.todo-empty{display:flex;gap:12px;align-items:flex-start;margin:0;padding:16px;border-radius:12px;background:var(--ad-soft);font-size:13px;line-height:1.55;color:var(--ad-ink-2)}
-.todo-empty::before{content:"✓";display:grid;place-items:center;flex:none;width:26px;height:26px;border-radius:50%;background:var(--ad-ink);color:#fff;font-size:13px}
+.todo-empty{grid-column:1/-1;display:flex;gap:12px;align-items:center;margin:0;padding:12px 16px;border:1px solid var(--ad-line);border-radius:12px;background:#fff;font-size:13px;line-height:1.5;color:var(--ad-ink-2)}
+.todo-empty::before{content:"✓";display:grid;place-items:center;flex:none;width:24px;height:24px;border-radius:50%;background:var(--ad-ink);color:#fff;font-size:12px}
+
+/* Blocos da visão geral: título e, em Vendas, o período (vale para tudo abaixo dele). */
+.dash-block-head{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:12px 20px;margin:34px 0 16px}
+.dash-block-head .eyebrow{margin:0 0 6px}
+.dash-block-head h2{margin:0;font:400 28px/1.1 var(--ad-serif);letter-spacing:-.015em}
+.dash-periods{display:inline-flex;gap:2px;padding:4px;border:1px solid var(--ad-line);border-radius:999px;background:#fff;box-shadow:var(--ad-shadow-sm)}
+.app button.dash-period{min-height:34px;padding:0 15px;border:0;border-radius:999px;background:transparent;color:var(--ad-ink-2);font-size:12.5px;font-weight:500;letter-spacing:.01em;white-space:nowrap;box-shadow:none}
+.app button.dash-period:hover{background:var(--ad-soft);color:var(--ad-ink);box-shadow:none}
+.app button.dash-period.active,.app button.dash-period.active:hover{background:var(--ad-ink);color:#fff}
+
+/* Números do período: rótulo, valor, variação (seta + texto) e o que conta. */
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:0 0 16px}
+.kpi{display:flex;flex-direction:column;gap:6px;min-width:0;padding:20px 22px;border:1px solid var(--ad-line);border-radius:var(--ad-radius);background:#fff;box-shadow:var(--ad-shadow-sm)}
+.kpi-label{font-size:13px;font-weight:500;color:var(--ad-ink-2)}
+.kpi-value{margin:4px 0 2px;font:600 30px/1.1 var(--ad-sans);letter-spacing:-.02em;color:var(--ad-ink);white-space:nowrap}
+.kpi-sub{font-size:12px;line-height:1.4;color:var(--ad-muted)}
+.delta{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 6px;font-size:12.5px}
+.delta-value{font-weight:600;white-space:nowrap}
+.delta-value.up{color:#2f7d4f}
+.delta-value.down{color:var(--ad-danger)}
+.delta-value.flat,.delta-label{color:var(--ad-muted)}
+
+.dash-grid{display:grid;gap:16px;margin:0 0 16px}
+.dash-grid>.panel{min-width:0;margin:0}
+.dash-grid-main{grid-template-columns:minmax(0,1.85fr) minmax(280px,1fr)}
+.dash-grid-two{grid-template-columns:repeat(2,minmax(0,1fr))}
+
+/* Gráfico de faturamento: colunas finas pretas, grade clara, dica ao passar o mouse. */
+.dash-chart{position:relative;min-height:220px;border-radius:8px;outline:none;touch-action:pan-y}
+.dash-chart:focus-visible{box-shadow:0 0 0 2px var(--ad-ink)}
+.dash-chart svg{display:block;width:100%;height:auto;overflow:visible}
+.dc-grid{stroke:#ededed;stroke-width:1;shape-rendering:crispEdges}
+.dc-base{stroke:#cfcfcf}
+.dc-tick{font:11px var(--ad-sans);fill:var(--ad-muted);font-variant-numeric:tabular-nums}
+.dc-bar{fill:var(--ad-ink);transition:fill .15s ease}
+.dc-bar.is-active{fill:#5c5c5c}
+.dc-cross{stroke:var(--ad-line-strong);stroke-width:1;shape-rendering:crispEdges}
+.dc-peak{font:600 12px var(--ad-sans);fill:var(--ad-ink)}
+.dc-tip{position:absolute;z-index:3;display:grid;gap:2px;min-width:128px;padding:10px 12px;border-radius:10px;background:var(--ad-ink);color:#fff;font-size:12px;line-height:1.35;box-shadow:0 12px 28px -12px rgba(0,0,0,.5);pointer-events:none;white-space:nowrap}
+.dc-tip-value{font:600 16px/1.2 var(--ad-sans)}
+.dc-tip-date,.dc-tip-count{color:rgba(255,255,255,.68)}
+.dc-tip-date{text-transform:capitalize}
+.dash-table{margin-top:12px}
+.dash-table .table{margin-top:8px}
+.dc-total td{font-weight:600;border-top:1px solid var(--ad-line-strong)}
+
+/* Listas em barras (mais vendidas, pagamento, envio): maior primeiro, uma cor só. */
+.rank-list{display:grid;gap:16px}
+.rank-row{display:flex;align-items:center;gap:12px;min-width:0}
+.rank-thumb{flex:none;width:44px;height:44px;overflow:hidden;border-radius:10px;background:#f2f2f2}
+.rank-thumb img{display:block;width:100%;height:100%;object-fit:cover}
+.rank-body{display:grid;gap:6px;flex:1;min-width:0}
+.rank-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;min-width:0}
+.rank-name{min-width:0;overflow:hidden;font-size:13.5px;color:var(--ad-ink);white-space:nowrap;text-overflow:ellipsis}
+.rank-value{flex:none;font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums}
+.rank-track{height:8px;overflow:hidden;border-radius:999px;background:#efefef}
+.rank-track i{display:block;width:0;height:100%;border-radius:999px;background:var(--ad-ink);transition:width .4s ease}
+.rank-sub{font-size:12px;color:var(--ad-muted)}
+.rank-empty{margin:0;padding:18px 0;font-size:13px;color:var(--ad-muted)}
+
+/* Expedição: onde estão os pedidos pagos agora. */
+.pipeline{display:flex;align-items:stretch;gap:8px;margin:0 0 16px}
+.app button.pipeline-step{display:grid;flex:1;justify-items:start;gap:4px;min-width:0;min-height:0;padding:16px 18px;border:1px solid var(--ad-line);border-radius:14px;background:#fff;color:var(--ad-ink);text-align:left;font-size:13px;font-weight:400;letter-spacing:0;box-shadow:var(--ad-shadow-sm)}
+.app button.pipeline-step:hover{background:#fff;border-color:var(--ad-ink);box-shadow:var(--ad-shadow)}
+.pipeline-label{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:500;color:var(--ad-ink-2)}
+.pipeline-step.has-items .pipeline-label::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--ad-wine)}
+.pipeline-step strong{font:600 26px/1.1 var(--ad-sans)}
+.pipeline-step small{font-size:12px;color:var(--ad-muted)}
+.pipeline-arrow{align-self:center;flex:none;color:var(--ad-faint);font-size:16px}
+
+/* Pedidos de teste */
+.orders-toggles{display:flex;flex-wrap:wrap;gap:8px 26px;margin:0 0 14px}
+.orders-toggles .orders-expired-toggle{margin:0}
+.chip.chip-test{background:#f3e9c6;color:#5c4a12}
+.test-card{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px 18px;margin:0 0 12px;border-color:#e3d29a;background:#fdfaf0}
+.test-card h3{margin:0 0 4px}
+.test-card p{margin:0}
+.test-line{margin:0 0 10px;text-align:right}
+.modal .link-button.test-link,.app .link-button.test-link{font-family:var(--ad-sans)!important;font-size:12.5px!important;color:var(--ad-muted)!important;text-decoration:underline!important;text-underline-offset:3px}
 
 /* ---------- Produtos ---------- */
 .toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px 16px;margin:0 0 14px}
@@ -2439,8 +2512,10 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
   .auth-side{min-height:260px;padding:36px 36px 84px}
   .auth-card{margin:-48px auto 40px;position:relative}
   .welcome{grid-template-columns:1fr}
-  .welcome-revenue{justify-self:start;text-align:left}
-  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .welcome-revenue{justify-self:start;justify-items:start;text-align:left}
+  .welcome .delta{justify-content:flex-start}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dash-grid-main{grid-template-columns:1fr}
 }
 
 /* ---------- Celular ---------- */
@@ -2486,11 +2561,22 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
   .coupon-form-actions{flex-direction:column-reverse;align-items:stretch}
 
   .welcome{padding:26px 22px}
-  .stats{gap:10px}
-  .app button.stat{padding:16px}
-  .stat strong{font-size:30px;margin:10px 0 6px}
-  .stat small{font-size:11px}
-  .stat span{font-size:9.5px;letter-spacing:.14em}
+  .dash-block-head{margin:28px 0 14px}
+  .dash-block-head h2{font-size:24px}
+  .dash-periods{width:100%;overflow-x:auto;scrollbar-width:none}
+  .app button.dash-period{flex:1 0 auto;padding:0 12px}
+  .kpis{gap:10px}
+  .kpi{padding:16px;gap:4px}
+  .kpi-value{font-size:21px}
+  .kpi-label{font-size:12.5px}
+  .kpi-sub{font-size:11.5px}
+  .delta{font-size:12px}
+  .dash-grid-two{grid-template-columns:1fr}
+  .pipeline{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .pipeline-arrow{display:none}
+  .app button.pipeline-step{padding:14px}
+  .pipeline-step strong{font-size:22px}
+  .test-line{text-align:left}
 
   .toolbar input{max-width:none}
   .toolbar-count{width:100%}

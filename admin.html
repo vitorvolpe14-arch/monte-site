@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20261104-painel-organizado">
+<link rel="stylesheet" href="admin.css?v=20261104-dashboard">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -88,28 +88,51 @@
         <div class="welcome-copy">
           <p class="eyebrow" id="welcomeDate">MONTÊ</p>
           <h2 id="welcomeTitle">Olá.</h2>
-          <p>Um resumo da loja para começar o dia.</p>
+          <p>Como a loja está indo. Só entram as vendas para clientes; os pedidos de teste ficam de fora.</p>
           <div class="welcome-actions">
-            <button type="button" data-go="products">VER PRODUTOS</button>
-            <button type="button" class="secondary" data-go="orders">VER PEDIDOS</button>
+            <button type="button" data-go="orders">VER PEDIDOS</button>
+            <button type="button" class="secondary" data-go="products">VER PRODUTOS</button>
           </div>
         </div>
         <div class="welcome-revenue">
-          <span>FATURAMENTO DOS PEDIDOS PAGOS</span>
+          <span id="heroLabel">FATURAMENTO DO MÊS</span>
           <strong id="statRevenue">—</strong>
+          <span id="heroDelta" class="delta"></span>
           <small id="statRevenueHint"></small>
         </div>
       </div>
-      <div class="stats">
-        <button type="button" class="stat" data-go="products"><span>Produtos ativos</span><strong id="statProducts">—</strong><small>à venda no site</small></button>
-        <button type="button" class="stat" data-go="orders"><span>Pedidos</span><strong id="statOrders">—</strong><small>sem contar os expirados</small></button>
-        <button type="button" class="stat" data-go="orders"><span>Pedidos pagos</span><strong id="statPaid">—</strong><small>pagos, em separação, enviados e entregues</small></button>
-        <button type="button" class="stat" data-go="stock"><span>Estoque baixo</span><strong id="statLowStock">—</strong><small>cores ativas com até 2 peças</small></button>
+
+      <div id="dashboardTodo" class="todo-list" aria-live="polite"></div>
+
+      <div class="dash-block-head">
+        <div><p class="eyebrow">DESEMPENHO</p><h2>Vendas</h2></div>
+        <div class="dash-periods" role="group" aria-label="Período das vendas">
+          <button type="button" class="dash-period" data-days="7" aria-pressed="false">7 dias</button>
+          <button type="button" class="dash-period active" data-days="30" aria-pressed="true">30 dias</button>
+          <button type="button" class="dash-period" data-days="90" aria-pressed="false">90 dias</button>
+          <button type="button" class="dash-period" data-days="0" aria-pressed="false">Desde o início</button>
+        </div>
       </div>
-      <div class="dashboard-grid">
-        <div class="panel"><div class="panel-head"><h2>Últimos pedidos</h2><button class="text-button" data-go="orders">Ver todos</button></div><div id="recentOrders" class="table-wrap"></div></div>
-        <div class="panel todo-panel"><div class="panel-head"><h2>Precisa da sua atenção</h2></div><div id="dashboardTodo" class="todo-list"><p class="field-help">Carregando…</p></div></div>
+      <div id="dashKpis" class="kpis"></div>
+      <div class="dash-grid dash-grid-main">
+        <div class="panel dash-chart-panel">
+          <div class="panel-head"><div><h2>Faturamento por dia</h2><p id="dashChartHint" class="field-help"></p></div></div>
+          <div id="dashRevenueChart" class="dash-chart" tabindex="0" aria-describedby="dashChartHint"></div>
+          <details class="help-more dash-table"><summary>Ver em tabela</summary><div id="dashRevenueTable" class="table-wrap"></div></details>
+        </div>
+        <div class="panel"><div class="panel-head"><div><h2>Mais vendidas</h2><p class="field-help">Peças com mais faturamento no período (presentes não contam).</p></div></div><div id="dashTopProducts" class="rank-list"></div></div>
       </div>
+      <div class="dash-grid dash-grid-two">
+        <div class="panel"><div class="panel-head"><div><h2>Formas de pagamento</h2><p class="field-help">Faturamento de cada forma no período.</p></div></div><div id="dashPayments" class="rank-list"></div></div>
+        <div class="panel"><div class="panel-head"><div><h2>Como as clientes recebem</h2><p class="field-help">Vendas de cada forma de envio no período.</p></div></div><div id="dashShippingMethods" class="rank-list"></div></div>
+      </div>
+
+      <div class="dash-block-head">
+        <div><p class="eyebrow">OPERAÇÃO</p><h2>Pedidos</h2></div>
+        <button class="text-button" data-go="orders">Ver todos os pedidos</button>
+      </div>
+      <div id="dashPipeline" class="pipeline"></div>
+      <div class="panel"><div class="panel-head"><h2>Últimos pedidos</h2></div><div id="recentOrders" class="table-wrap"></div></div>
     </section>
 
     <section id="productsSection" class="section hidden">
@@ -122,7 +145,7 @@
 
     <section id="ordersSection" class="section hidden">
       <div class="section-head"><div class="section-head-text"><p class="eyebrow">VENDAS</p><h1>Pedidos</h1><p class="section-desc">Pagamento, separação e envio de cada compra. Clique no pedido para ver os detalhes.</p></div><div class="section-head-actions"><button id="refreshOrders" class="secondary">ATUALIZAR</button></div></div>
-      <label id="ordersExpiredToggle" class="orders-expired-toggle" hidden></label>
+      <div class="orders-toggles"><label id="ordersExpiredToggle" class="orders-expired-toggle" hidden></label><label id="ordersTestToggle" class="orders-expired-toggle" hidden></label></div>
       <div id="ordersTable" class="panel table-wrap"></div>
     </section>
 
@@ -319,7 +342,7 @@
 </div></div>
 
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="admin.js?v=20261104-painel-organizado"></script>
+<script src="admin.js?v=20261104-dashboard"></script>
 <script src="admin-carousel.js?v=20261104-previa-link"></script>
 </body>
 </html>
