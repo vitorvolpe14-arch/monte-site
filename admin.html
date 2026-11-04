@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20261104-avisos">
+<link rel="stylesheet" href="admin.css?v=20261104-painel-organizado">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -28,23 +28,29 @@
 
 <div id="appView" class="app hidden">
   <aside class="sidebar">
-    <div class="brand"><svg class="brand-logo" viewBox="8 -90.3 402.4 91.8" role="img" aria-label="MONTÊ"><path d="M22.5 0L8.0 0L8.0-72.6L12.6-72.6L40.8-41.2L69.0-72.6L73.5-72.6L73.5 0L59.0 0L59.1-39.9L40.8-20.7L22.5-39.9L22.5 0Z M107.9-22.3Q105.5-29.0 105.5-35.9Q105.5-42.8 107.9-49.4Q110.3-56.0 114.8-61.2Q119.2-66.4 126.4-69.5Q133.6-72.7 142.5-72.7Q151.4-72.7 158.6-69.5Q165.8-66.4 170.2-61.2Q174.7-56.0 177.1-49.4Q179.5-42.8 179.5-35.9Q179.5-29.0 177.1-22.3Q174.7-15.7 170.2-10.5Q165.8-5.4 158.6-2.2Q151.4 1.0 142.5 1.0Q133.6 1.0 126.4-2.2Q119.2-5.4 114.8-10.5Q110.3-15.7 107.9-22.3ZM122.4-44.0Q121.0-40.0 121.0-35.9Q121.0-31.8 122.4-27.8Q123.8-23.8 126.4-20.7Q129.0-17.6 133.1-15.7Q137.3-13.8 142.5-13.8Q147.7-13.8 151.8-15.7Q156.0-17.6 158.6-20.7Q161.2-23.8 162.6-27.8Q164.0-31.8 164.0-35.9Q164.0-40.0 162.6-44.0Q161.2-48.0 158.6-51.1Q156.0-54.2 151.8-56.1Q147.7-58.0 142.5-58.0Q137.3-58.0 133.1-56.1Q129.0-54.2 126.4-51.1Q123.8-48.0 122.4-44.0Z M225.6 0L211.3 0L211.3-73.0L215.1-73.0L251.2-31.0L251.2-71.4L265.6-71.4L265.6 1.5L261.8 1.5L225.6-38.9L225.6 0Z M312.0-57.2L294.2-57.2L294.2-71.4L344.1-71.4L344.1-57.2L326.3-57.2L326.3 0L312.0 0L312.0-57.2Z M388.1-76.9L373.2-76.9L387.1-90.3L396.2-90.3L410.3-76.9L395.3-76.9L391.6-81.4L388.1-76.9ZM410.4 0L373.4 0L373.4-71.5L409.2-71.5L409.2-57.2L387.7-57.2L387.7-42.9L406.5-42.9L406.5-28.6L387.7-28.6L387.7-14.3L410.4-14.3L410.4 0Z"/></svg></div><p class="sidebar-label">GESTÃO</p>
-    <button class="nav-button active" data-section="dashboard"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg><span>Visão geral</span></button>
-    <button class="nav-button" data-section="products"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1.2 11.2a1.5 1.5 0 0 1-1.5 1.3H7.7a1.5 1.5 0 0 1-1.5-1.3z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg><span>Produtos</span></button>
-    <button class="nav-button" data-section="carousel"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg><span>Banners</span></button>
-    <button class="nav-button" data-section="orders"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12v17l-3-1.8-3 1.8-3-1.8-3 1.8z"/><path d="M9 8.5h6M9 12h6M9 15.5h3.5"/></svg><span>Pedidos</span></button>
-    <button class="nav-button" data-section="coupons"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8.5V6A1.5 1.5 0 0 1 5 4.5h14A1.5 1.5 0 0 1 20.5 6v2.5a3.5 3.5 0 0 0 0 7V18a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18v-2.5a3.5 3.5 0 0 0 0-7z"/><path d="M9.5 14.5l5-5M9.75 9.75h.01M14.25 14.25h.01"/></svg><span>Cupons</span></button>
-    <button class="nav-button" data-section="promotions"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="9" width="17" height="11.5" rx="1.5"/><path d="M2.5 9h19v-3h-19zM12 6v14.5M12 6c-1.6-3.2-5.6-3.4-5.6-1 0 1.6 3.2 1 5.6 1zM12 6c1.6-3.2 5.6-3.4 5.6-1 0 1.6-3.2 1-5.6 1z"/></svg><span>Promoções</span></button>
-    <button class="nav-button" data-section="stock"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5 12 12l8.5-4.5M12 12v9"/></svg><span>Estoque</span></button>
-    <button class="nav-button" data-section="analytics"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5h16"/><path d="M5.5 15l4-4.5 3.5 3 5.5-6.5"/><path d="M15 7h3.5v3.5"/></svg><span>Analytics</span></button>
+    <div class="brand"><svg class="brand-logo" viewBox="8 -90.3 402.4 91.8" role="img" aria-label="MONTÊ"><path d="M22.5 0L8.0 0L8.0-72.6L12.6-72.6L40.8-41.2L69.0-72.6L73.5-72.6L73.5 0L59.0 0L59.1-39.9L40.8-20.7L22.5-39.9L22.5 0Z M107.9-22.3Q105.5-29.0 105.5-35.9Q105.5-42.8 107.9-49.4Q110.3-56.0 114.8-61.2Q119.2-66.4 126.4-69.5Q133.6-72.7 142.5-72.7Q151.4-72.7 158.6-69.5Q165.8-66.4 170.2-61.2Q174.7-56.0 177.1-49.4Q179.5-42.8 179.5-35.9Q179.5-29.0 177.1-22.3Q174.7-15.7 170.2-10.5Q165.8-5.4 158.6-2.2Q151.4 1.0 142.5 1.0Q133.6 1.0 126.4-2.2Q119.2-5.4 114.8-10.5Q110.3-15.7 107.9-22.3ZM122.4-44.0Q121.0-40.0 121.0-35.9Q121.0-31.8 122.4-27.8Q123.8-23.8 126.4-20.7Q129.0-17.6 133.1-15.7Q137.3-13.8 142.5-13.8Q147.7-13.8 151.8-15.7Q156.0-17.6 158.6-20.7Q161.2-23.8 162.6-27.8Q164.0-31.8 164.0-35.9Q164.0-40.0 162.6-44.0Q161.2-48.0 158.6-51.1Q156.0-54.2 151.8-56.1Q147.7-58.0 142.5-58.0Q137.3-58.0 133.1-56.1Q129.0-54.2 126.4-51.1Q123.8-48.0 122.4-44.0Z M225.6 0L211.3 0L211.3-73.0L215.1-73.0L251.2-31.0L251.2-71.4L265.6-71.4L265.6 1.5L261.8 1.5L225.6-38.9L225.6 0Z M312.0-57.2L294.2-57.2L294.2-71.4L344.1-71.4L344.1-57.2L326.3-57.2L326.3 0L312.0 0L312.0-57.2Z M388.1-76.9L373.2-76.9L387.1-90.3L396.2-90.3L410.3-76.9L395.3-76.9L391.6-81.4L388.1-76.9ZM410.4 0L373.4 0L373.4-71.5L409.2-71.5L409.2-57.2L387.7-57.2L387.7-42.9L406.5-42.9L406.5-28.6L387.7-28.6L387.7-14.3L410.4-14.3L410.4 0Z"/></svg></div>
+    <nav class="sidebar-nav" aria-label="Seções do painel">
+      <p class="sidebar-label">PAINEL</p>
+      <button class="nav-button active" data-section="dashboard"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg><span>Visão geral</span></button>
+      <button class="nav-button" data-section="analytics"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5h16"/><path d="M5.5 15l4-4.5 3.5 3 5.5-6.5"/><path d="M15 7h3.5v3.5"/></svg><span>Analytics</span></button>
+      <p class="sidebar-label">VENDAS</p>
+      <button class="nav-button" data-section="orders"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12v17l-3-1.8-3 1.8-3-1.8-3 1.8z"/><path d="M9 8.5h6M9 12h6M9 15.5h3.5"/></svg><span>Pedidos</span><b id="navOrdersBadge" class="nav-badge" title="Pedidos pagos para separar e enviar" hidden></b></button>
+      <button class="nav-button" data-section="coupons"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8.5V6A1.5 1.5 0 0 1 5 4.5h14A1.5 1.5 0 0 1 20.5 6v2.5a3.5 3.5 0 0 0 0 7V18a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18v-2.5a3.5 3.5 0 0 0 0-7z"/><path d="M9.5 14.5l5-5M9.75 9.75h.01M14.25 14.25h.01"/></svg><span>Cupons</span></button>
+      <button class="nav-button" data-section="promotions"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="9" width="17" height="11.5" rx="1.5"/><path d="M2.5 9h19v-3h-19zM12 6v14.5M12 6c-1.6-3.2-5.6-3.4-5.6-1 0 1.6 3.2 1 5.6 1zM12 6c1.6-3.2 5.6-3.4 5.6-1 0 1.6-3.2 1-5.6 1z"/></svg><span>Promoções</span></button>
+      <p class="sidebar-label">CATÁLOGO</p>
+      <button class="nav-button" data-section="products"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1.2 11.2a1.5 1.5 0 0 1-1.5 1.3H7.7a1.5 1.5 0 0 1-1.5-1.3z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg><span>Produtos</span></button>
+      <button class="nav-button" data-section="stock"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5 12 12l8.5-4.5M12 12v9"/></svg><span>Estoque</span></button>
+      <p class="sidebar-label">SITE</p>
+      <button class="nav-button" data-section="carousel"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg><span>Banners</span></button>
+    </nav>
     <div class="sidebar-bottom"><a href="/" target="_blank" rel="noopener"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 19V7.5A1.5 1.5 0 0 1 5.5 6H10"/></svg><span>Ver site</span></a><button id="logoutButton"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H15"/><path d="M10 16l-4-4 4-4M6 12h10"/></svg><span>Sair</span></button></div>
   </aside>
 
   <main class="main">
-    <header class="topbar"><div><p class="eyebrow">MONTÊ</p><h1 id="pageTitle">Visão geral</h1></div><span id="adminEmail" class="admin-email"></span></header>
+    <header class="topbar"><nav class="crumbs" aria-label="Você está em"><span>Gestão</span><span class="crumbs-sep" aria-hidden="true">/</span><strong id="pageTitle">Visão geral</strong></nav><span id="adminEmail" class="admin-email"></span></header>
 
     <section id="carouselSection" class="section hidden">
-      <div class="section-actions"><div><p class="eyebrow">HOME</p><h2>Banners da página inicial</h2></div></div>
+      <div class="section-head"><div class="section-head-text"><p class="eyebrow">SITE</p><h1>Banners da página inicial</h1><p class="section-desc">As fotos do carrossel do topo e do banner do meio. Nada muda no site até você salvar.</p></div></div>
       <div class="panel">
         <div class="panel-head"><div><h2>Carrossel do topo</h2><p class="field-help">A primeira foto aparece primeiro no site. Arraste para alterar a ordem. A primeira foto também é a imagem da prévia quando você manda o link da loja (WhatsApp, Instagram); o painel faz sozinho uma versão leve dela.</p></div></div>
         <div id="carouselImageDropzone" class="product-image-dropzone" tabindex="0" role="button" aria-label="Adicionar fotos ao carrossel">
@@ -95,32 +101,37 @@
         </div>
       </div>
       <div class="stats">
-        <div class="stat"><span>Produtos ativos</span><strong id="statProducts">—</strong></div>
-        <div class="stat"><span>Pedidos</span><strong id="statOrders">—</strong></div>
-        <div class="stat"><span>Pedidos pagos</span><strong id="statPaid">—</strong></div>
-        <div class="stat"><span>Estoque baixo</span><strong id="statLowStock">—</strong></div>
+        <button type="button" class="stat" data-go="products"><span>Produtos ativos</span><strong id="statProducts">—</strong><small>à venda no site</small></button>
+        <button type="button" class="stat" data-go="orders"><span>Pedidos</span><strong id="statOrders">—</strong><small>sem contar os expirados</small></button>
+        <button type="button" class="stat" data-go="orders"><span>Pedidos pagos</span><strong id="statPaid">—</strong><small>pagos, em separação, enviados e entregues</small></button>
+        <button type="button" class="stat" data-go="stock"><span>Estoque baixo</span><strong id="statLowStock">—</strong><small>cores ativas com até 2 peças</small></button>
       </div>
-      <div class="panel"><div class="panel-head"><h2>Últimos pedidos</h2><button class="text-button" data-go="orders">Ver todos</button></div><div id="recentOrders" class="table-wrap"></div></div>
+      <div class="dashboard-grid">
+        <div class="panel"><div class="panel-head"><h2>Últimos pedidos</h2><button class="text-button" data-go="orders">Ver todos</button></div><div id="recentOrders" class="table-wrap"></div></div>
+        <div class="panel todo-panel"><div class="panel-head"><h2>Precisa da sua atenção</h2></div><div id="dashboardTodo" class="todo-list"><p class="field-help">Carregando…</p></div></div>
+      </div>
     </section>
 
     <section id="productsSection" class="section hidden">
-      <div class="section-actions"><div><p class="eyebrow">CATÁLOGO</p><h2>Produtos</h2></div><button id="newProductButton">+ NOVO PRODUTO</button></div>
-      <div class="toolbar"><input id="productSearch" placeholder="Buscar por nome ou SKU..."></div>
-      <div class="photo-optimizer"><div><strong>Fotos mais leves</strong><p id="optimizePhotosStatus" class="field-help">Conferindo as fotos…</p></div><button id="optimizePhotosButton" type="button" class="secondary" hidden>OTIMIZAR FOTOS DO SITE</button></div>
-      <div id="olistCleanupBar" class="olist-cleanup-bar hidden"><div><strong id="olistCleanupTitle"></strong><span id="olistCleanupInfo" class="field-help"></span></div><div class="olist-cleanup-actions"><label class="olist-filter"><input id="olistOnlyFilter" type="checkbox"> Mostrar só Olist</label><button id="deleteOlistProductsButton" type="button" class="danger-button">EXCLUIR PRODUTOS DA OLIST</button></div></div>
+      <div class="section-head"><div class="section-head-text"><p class="eyebrow">CATÁLOGO</p><h1>Produtos</h1><p class="section-desc">Fotos, preços, cores e estoque de cada peça da loja.</p></div><div class="section-head-actions"><button id="newProductButton">+ NOVO PRODUTO</button></div></div>
+      <div class="toolbar"><input id="productSearch" type="search" placeholder="Buscar por nome ou SKU..." aria-label="Buscar produtos por nome ou SKU"><span id="productsCount" class="toolbar-count" aria-live="polite"></span></div>
+      <div class="photo-optimizer notice"><div><strong>Fotos mais leves</strong><p id="optimizePhotosStatus" class="field-help">Conferindo as fotos…</p></div><button id="optimizePhotosButton" type="button" class="secondary" hidden>OTIMIZAR FOTOS DO SITE</button></div>
+      <div id="olistCleanupBar" class="olist-cleanup-bar notice hidden"><div><strong id="olistCleanupTitle"></strong><span id="olistCleanupInfo" class="field-help"></span></div><div class="olist-cleanup-actions"><label class="olist-filter"><input id="olistOnlyFilter" type="checkbox"> Mostrar só Olist</label><button id="deleteOlistProductsButton" type="button" class="danger-button">EXCLUIR PRODUTOS DA OLIST</button></div></div>
       <div id="productsGrid" class="product-admin-grid"></div>
     </section>
 
     <section id="ordersSection" class="section hidden">
-      <div class="section-actions"><div><p class="eyebrow">VENDAS</p><h2>Pedidos</h2></div><button id="refreshOrders" class="secondary">ATUALIZAR</button></div>
+      <div class="section-head"><div class="section-head-text"><p class="eyebrow">VENDAS</p><h1>Pedidos</h1><p class="section-desc">Pagamento, separação e envio de cada compra. Clique no pedido para ver os detalhes.</p></div><div class="section-head-actions"><button id="refreshOrders" class="secondary">ATUALIZAR</button></div></div>
       <label id="ordersExpiredToggle" class="orders-expired-toggle" hidden></label>
       <div id="ordersTable" class="panel table-wrap"></div>
     </section>
 
     <section id="couponsSection" class="section hidden">
-      <div class="section-actions"><div><p class="eyebrow">VENDAS</p><h2>Cupons</h2></div><button id="refreshCoupons" class="secondary">ATUALIZAR</button></div>
-      <div class="panel coupon-form-panel">
-        <div class="panel-head"><div><h2 id="couponFormTitle">Novo cupom</h2><p class="field-help">O cupom vale nas peças (o frete fica integral) e, no Pix, soma com os 5%. Cada pessoa (CPF ou e-mail) usa o cupom uma vez só. Com 1 pessoa, é um cupom único: depois de usado, ninguém mais usa.</p></div></div>
+      <div class="section-head"><div class="section-head-text"><p class="eyebrow">VENDAS</p><h1>Cupons</h1><p class="section-desc">Códigos de desconto nas peças, com validade e limite de pessoas.</p></div><div class="section-head-actions"><button id="refreshCoupons" class="secondary">ATUALIZAR</button><button id="newCouponButton" type="button">+ NOVO CUPOM</button></div></div>
+      <details id="couponFormPanel" class="panel form-drawer coupon-form-panel">
+        <summary class="form-drawer-summary"><span class="drawer-plus" aria-hidden="true">+</span><span class="drawer-text"><span class="drawer-title" id="couponFormTitle">Novo cupom</span><span class="field-help">Código, desconto, validade e quantas pessoas podem usar.</span></span><span class="drawer-chevron" aria-hidden="true"></span></summary>
+        <div class="form-drawer-body">
+        <p class="field-help">O cupom vale nas peças (o frete fica integral) e, no Pix, soma com os 5%. Cada pessoa (CPF ou e-mail) usa o cupom uma vez só. Com 1 pessoa, é um cupom único: depois de usado, ninguém mais usa.</p>
         <form id="couponForm" autocomplete="off">
           <input id="couponId" type="hidden">
           <div class="form-grid coupon-form-grid">
@@ -137,15 +148,22 @@
           <div id="couponFormError" class="error"></div>
           <div class="modal-actions coupon-form-actions"><button type="button" id="cancelCouponEdit" class="secondary hidden">CANCELAR EDIÇÃO</button><button type="submit" id="saveCouponButton">CRIAR CUPOM</button></div>
         </form>
-      </div>
+        </div>
+      </details>
       <div id="couponsError" class="error"></div>
       <div id="couponsList" class="coupons-list"></div>
     </section>
 
     <section id="promotionsSection" class="section hidden">
-      <div class="section-actions"><div><p class="eyebrow">VENDAS</p><h2>Promoções</h2></div><button id="refreshPromotions" class="secondary">ATUALIZAR</button></div>
+      <div class="section-head"><div class="section-head-text"><p class="eyebrow">VENDAS</p><h1>Promoções</h1><p class="section-desc">Presentes por valor de compra, avisos da barra do topo e os benefícios da loja.</p></div><div class="section-head-actions"><button id="refreshPromotions" class="secondary">ATUALIZAR</button><button id="newPromoButton" type="button">+ NOVA PROMOÇÃO</button></div></div>
+      <div class="subtabs" role="tablist" aria-label="Partes de Promoções">
+        <button type="button" class="subtab active" role="tab" aria-selected="true" data-subtab="gifts">Presentes</button>
+        <button type="button" class="subtab" role="tab" aria-selected="false" data-subtab="topbar">Barra do topo</button>
+        <button type="button" class="subtab" role="tab" aria-selected="false" data-subtab="benefits">Frete grátis e Pix</button>
+      </div>
+      <div class="subpanel" data-subpanel="topbar" role="tabpanel" hidden>
       <div class="panel top-bar-panel">
-        <div class="panel-head"><div><h2>Barra do topo do site</h2><p class="field-help">A faixa preta no alto da loja. Coloque um ou mais avisos: com mais de um, eles se alternam no site a cada 4 segundos. No computador, os avisos aparecem ao lado do frete grátis e do Pix; no celular, só eles. Sem nenhum aviso, a barra volta ao automático: os avisos das promoções de presente no ar (se houver) ou o frete grátis e o Pix.</p></div></div>
+        <div class="panel-head"><div><h2>Barra do topo do site</h2><p class="field-help">A faixa preta no alto da loja. Coloque um ou mais avisos: com mais de um, eles se alternam no site a cada 4 segundos.</p><details class="help-more"><summary>Como funciona</summary><p>No computador, os avisos aparecem ao lado do frete grátis e do Pix; no celular, só eles. Sem nenhum aviso, a barra volta ao automático: os avisos das promoções de presente no ar (se houver) ou o frete grátis e o Pix.</p></details></div></div>
         <form id="topBarForm" class="top-bar-form" autocomplete="off">
           <div class="top-bar-preview" aria-live="polite"><span class="top-bar-preview-label" id="topBarPreviewNote">Como aparece no site</span><div class="top-bar-preview-strip"><span id="topBarPreview"></span></div></div>
           <div id="topBarList" class="top-bar-list"></div>
@@ -153,6 +171,8 @@
           <div class="top-bar-actions"><span id="topBarMessage" class="field-help"></span><button type="button" id="clearTopBarButton" class="secondary">DEIXAR AUTOMÁTICO</button><button type="submit" id="saveTopBarButton">SALVAR BARRA DO TOPO</button></div>
         </form>
       </div>
+      </div>
+      <div class="subpanel" data-subpanel="benefits" role="tabpanel" hidden>
       <div class="panel benefits-panel">
         <div class="panel-head"><div><h2>Benefícios da loja</h2><p class="field-help">Valem o tempo todo, até você desligar. O site, a sacola e a barra do topo mostram os valores daqui.</p></div></div>
         <form id="benefitsForm" class="benefits-grid" autocomplete="off">
@@ -169,9 +189,13 @@
           <div class="benefits-actions"><span id="benefitsMessage" class="field-help"></span><button type="submit" id="saveBenefitsButton">SALVAR BENEFÍCIOS</button></div>
         </form>
       </div>
-      <h3 class="promo-subtitle">Promoções de presente</h3>
-      <div class="panel promo-form-panel">
-        <div class="panel-head"><div><h2 id="promoFormTitle">Nova promoção</h2><p class="field-help">A cliente ganha uma peça da categoria escolhida (ela escolhe o modelo e a cor, entre as que têm estoque) quando as peças da compra somam o valor mínimo. Conta o preço das peças no site: o frete e os descontos do Pix e do cupom não entram na conta. Marcando “um presente a cada valor mínimo”, ela ganha um presente a cada vez que a compra soma esse valor (R$ 998 = 2 presentes numa promoção de R$ 499) e escolhe cada um. A promoção entra no ar e sai sozinha nas datas que você marcar. Com mais de uma promoção no mesmo período, elas viram degraus na sacola (ex.: cinto a partir de R$ 499, bolsa a partir de R$ 999) e vale o presente do maior degrau alcançado.</p></div></div>
+      </div>
+      <div class="subpanel" data-subpanel="gifts" role="tabpanel">
+      <details id="promoFormPanel" class="panel form-drawer promo-form-panel">
+        <summary class="form-drawer-summary"><span class="drawer-plus" aria-hidden="true">+</span><span class="drawer-text"><span class="drawer-title" id="promoFormTitle">Nova promoção</span><span class="field-help">Um presente da categoria escolhida nas compras a partir de um valor, entre duas datas.</span></span><span class="drawer-chevron" aria-hidden="true"></span></summary>
+        <div class="form-drawer-body">
+        <p class="field-help">A cliente ganha uma peça da categoria escolhida (ela escolhe o modelo e a cor, entre as que têm estoque) quando as peças da compra somam o valor mínimo. Conta o preço das peças no site: o frete e os descontos do Pix e do cupom não entram na conta.</p>
+        <details class="help-more"><summary>Como funciona</summary><p>Marcando “um presente a cada valor mínimo”, ela ganha um presente a cada vez que a compra soma esse valor (R$ 998 = 2 presentes numa promoção de R$ 499) e escolhe cada um. A promoção entra no ar e sai sozinha nas datas que você marcar. Com mais de uma promoção no mesmo período, elas viram degraus na sacola (ex.: cinto a partir de R$ 499, bolsa a partir de R$ 999) e vale o presente do maior degrau alcançado.</p></details>
         <form id="promoForm" autocomplete="off">
           <input id="promoId" type="hidden">
           <div class="form-grid promo-form-grid">
@@ -182,30 +206,42 @@
             <label>Termina em<input id="promoEndsAt" type="datetime-local" required></label>
             <label class="full-width sku-toggle"><input id="promoEvery" type="checkbox"> Um presente a cada valor mínimo (R$ 998 em peças = 2 presentes, R$ 1.497 = 3…)</label>
             <label>Máximo de presentes por pedido (opcional)<input id="promoMaxGifts" type="number" step="1" min="1" max="20" placeholder="Em branco = sem limite"></label>
-            <label class="full-width">Aviso na barra do topo do site (opcional; aparece quando a “Barra do topo do site”, acima, está no automático)<input id="promoBanner" maxlength="90" placeholder="Ex.: NOVEMBRO: GANHE UM CINTO NAS COMPRAS A PARTIR DE R$ 499"></label>
+            <label class="full-width">Aviso na barra do topo do site (opcional; aparece quando a aba “Barra do topo” está no automático)<input id="promoBanner" maxlength="90" placeholder="Ex.: NOVEMBRO: GANHE UM CINTO NAS COMPRAS A PARTIR DE R$ 499"></label>
             <label class="full-width">Regra do presente para a cliente (opcional)<input id="promoTerms" maxlength="200" placeholder="Ex.: Não fazemos troca de brinde."></label>
           </div>
           <div class="checks"><label><input id="promoActive" type="checkbox" checked> Promoção ativa (desmarque para pausar sem apagar)</label></div>
           <div id="promoFormError" class="error"></div>
           <div class="modal-actions coupon-form-actions"><button type="button" id="cancelPromoEdit" class="secondary hidden">CANCELAR EDIÇÃO</button><button type="submit" id="savePromoButton">CRIAR PROMOÇÃO</button></div>
         </form>
-      </div>
+        </div>
+      </details>
       <div id="promotionsError" class="error"></div>
       <div id="promotionsList" class="coupons-list"></div>
+      </div>
     </section>
 
-<section id="analyticsSection" class="section hidden">
-<div class="section-actions"><div><p class="eyebrow">INTELIGÊNCIA DO SITE</p><h2>Analytics & Financeiro</h2></div><div class="analytics-toolbar"><select id="analyticsDays"><option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option></select><button id="refreshAnalytics" class="secondary">ATUALIZAR</button></div></div>
-<div id="analyticsError" class="error"></div><div id="analyticsKpis" class="analytics-kpis"></div>
-<div class="analytics-grid"><div class="panel"><div class="panel-head"><h2>Visitas e faturamento</h2></div><div id="analyticsChart" class="analytics-chart"></div></div><div class="panel"><div class="panel-head"><h2>Funil de compra</h2></div><div id="analyticsFunnel" class="analytics-funnel"></div></div></div>
-<div class="analytics-grid"><div class="panel"><div class="panel-head"><h2>Abandono de carrinho</h2></div><div id="analyticsCarts"></div></div><div class="panel"><div class="panel-head"><h2>Formas de pagamento</h2></div><div id="analyticsPayments"></div></div></div>
-<div class="analytics-grid"><div class="panel"><div class="panel-head"><h2>Produtos mais vendidos</h2></div><div id="analyticsTopProducts"></div></div><div class="panel"><div class="panel-head"><h2>Pedidos do período</h2></div><div id="analyticsOrders"></div></div></div>
-<div class="panel"><div class="panel-head"><h2>Carrinhos recentes</h2></div><div id="analyticsRecentCarts"></div></div>
-</section>
+    <section id="analyticsSection" class="section hidden">
+      <div class="section-head"><div class="section-head-text"><p class="eyebrow">PAINEL</p><h1>Analytics &amp; Financeiro</h1><p class="section-desc">Visitas, vendas e funil de compra no período escolhido.</p></div><div class="section-head-actions analytics-toolbar"><select id="analyticsDays" aria-label="Período"><option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option></select><button id="refreshAnalytics" class="secondary">ATUALIZAR</button></div></div>
+      <div id="analyticsError" class="error"></div><div id="analyticsKpis" class="analytics-kpis"></div>
+      <div class="analytics-grid"><div class="panel"><div class="panel-head"><h2>Visitas e faturamento</h2></div><div id="analyticsChart" class="analytics-chart"></div></div><div class="panel"><div class="panel-head"><h2>Funil de compra</h2></div><div id="analyticsFunnel" class="analytics-funnel"></div></div></div>
+      <div class="analytics-grid"><div class="panel"><div class="panel-head"><h2>Abandono de carrinho</h2></div><div id="analyticsCarts"></div></div><div class="panel"><div class="panel-head"><h2>Formas de pagamento</h2></div><div id="analyticsPayments"></div></div></div>
+      <div class="analytics-grid"><div class="panel"><div class="panel-head"><h2>Produtos mais vendidos</h2></div><div id="analyticsTopProducts"></div></div><div class="panel"><div class="panel-head"><h2>Pedidos do período</h2></div><div id="analyticsOrders"></div></div></div>
+      <div class="panel"><div class="panel-head"><h2>Carrinhos recentes</h2></div><div id="analyticsRecentCarts"></div></div>
+    </section>
+
     <section id="stockSection" class="section hidden">
-      <div class="section-actions"><div><p class="eyebrow">INVENTÁRIO</p><h2>Estoque</h2></div></div>
+      <div class="section-head"><div class="section-head-text"><p class="eyebrow">CATÁLOGO</p><h1>Estoque</h1><p class="section-desc">Peças de cada cor, a sincronização com a Olist e o histórico de movimentações.</p></div></div>
+      <div class="subtabs" role="tablist" aria-label="Partes de Estoque">
+        <button type="button" class="subtab active" role="tab" aria-selected="true" data-subtab="stock">Estoque por cor</button>
+        <button type="button" class="subtab" role="tab" aria-selected="false" data-subtab="olist">Olist</button>
+        <button type="button" class="subtab" role="tab" aria-selected="false" data-subtab="history">Histórico</button>
+      </div>
+      <div class="subpanel" data-subpanel="stock" role="tabpanel">
+        <div class="panel"><div class="panel-head"><div><h2>Estoque por cor</h2><p class="field-help">Peças disponíveis em cada cor. Use AJUSTAR para repor ou corrigir; o ajuste entra no histórico.</p></div></div><div id="stockTable" class="table-wrap"></div></div>
+      </div>
+      <div class="subpanel" data-subpanel="olist" role="tabpanel" hidden>
       <div class="panel stock-sync-panel">
-        <div class="panel-head"><div><h2>Olist → site</h2><p class="field-help">A Olist manda: o site confere cada produto na Olist o dia todo, em pequenos lotes (uma rodada completa a cada poucos minutos), e deixa o site igual: estoque de cada cor (sobe e desce), preço e promoção, e cores. Vendas do site que a Olist ainda não registrou ficam descontadas, para a peça não ser vendida duas vezes. Nome, descrição e fotos continuam sendo os do site, e nada é alterado na Olist. As peças são reconhecidas pelo SKU.</p></div><button id="stockSyncButton" type="button">SINCRONIZAR AGORA</button></div>
+        <div class="panel-head"><div><h2>Olist → site</h2><p class="field-help">O site confere cada produto na Olist o dia todo e deixa o estoque, o preço e as cores iguais aos da Olist. Nada é alterado na Olist.</p><details class="help-more"><summary>Como funciona</summary><p>A Olist manda: o site confere cada produto na Olist o dia todo, em pequenos lotes (uma rodada completa a cada poucos minutos), e deixa o site igual: estoque de cada cor (sobe e desce), preço e promoção, e cores. Vendas do site que a Olist ainda não registrou ficam descontadas, para a peça não ser vendida duas vezes. Nome, descrição e fotos continuam sendo os do site, e nada é alterado na Olist. As peças são reconhecidas pelo SKU.</p></details></div><button id="stockSyncButton" type="button">SINCRONIZAR AGORA</button></div>
         <div class="olist-sync-options"><label class="sku-toggle"><input id="olistSyncPrices" type="checkbox" checked> Atualizar preço e promoção pela Olist</label><label class="sku-toggle"><input id="olistSyncColors" type="checkbox" checked> Atualizar cores pela Olist (nome da cor e cores novas)</label><span id="olistSyncOptionsMsg" class="field-help"></span></div>
         <div id="stockSyncStatus" class="stock-sync-status"></div>
         <div id="olistConference" class="olist-conference"></div>
@@ -214,22 +250,31 @@
         <div class="panel-head"><div><h2>SKUs site × Olist</h2><p class="field-help">Compara os SKUs dos produtos do site com os da Olist. Se houver diferença, corrige só no site, apenas nos produtos que já existem. Nada é alterado na Olist.</p></div><div class="sku-head-actions"><a class="secondary-link" href="/api/olist/auth" target="_blank" rel="noopener">RECONECTAR OLIST</a><button id="compareSkuButton" type="button">COMPARAR COM A OLIST</button></div></div>
         <div id="skuSyncResult"></div>
       </div>
-      <div id="stockTable" class="panel table-wrap"></div><div class="panel stock-history-panel"><div class="panel-head"><h2>Histórico de movimentações</h2><button id="refreshStock" class="secondary">ATUALIZAR</button></div><div id="stockMovements" class="table-wrap"></div></div>
+      </div>
+      <div class="subpanel" data-subpanel="history" role="tabpanel" hidden>
+        <div class="panel stock-history-panel"><div class="panel-head"><div><h2>Histórico de movimentações</h2><p class="field-help">As últimas 100 movimentações de estoque (entradas, vendas e ajustes), da mais recente para a mais antiga.</p></div><button id="refreshStock" class="secondary">ATUALIZAR</button></div><div id="stockMovements" class="table-wrap"></div></div>
+      </div>
     </section>
   </main>
 </div>
 
 <div id="productModal" class="modal hidden"><div class="modal-card">
-  <div class="modal-head"><h2 id="modalTitle">Novo produto</h2><button id="closeModal">×</button></div>
+  <div class="modal-head"><div><p class="eyebrow">CATÁLOGO</p><h2 id="modalTitle">Novo produto</h2></div><button id="closeModal" type="button" aria-label="Fechar">×</button></div>
   <form id="productForm">
     <input id="productId" type="hidden">
-    <div class="form-grid">
-      <label>Nome<input id="productName" required></label><label>SKU<input id="productSku"></label>
-      <label>Categoria<select id="productCategory"><option value="bolsas">Bolsas</option><option value="acessorios">Acessórios</option><option value="cintos">Cintos</option></select></label>
-      <label>Preço<input id="productPrice" type="number" step="0.01" min="0" required></label>
-      <label>Preço promocional<input id="productSalePrice" type="number" step="0.01" min="0"></label>
-      <div class="full-width image-upload-field">
-        <label>Fotos do produto</label>
+    <fieldset class="form-block">
+      <legend>Informações</legend>
+      <div class="form-grid product-info-grid">
+        <label class="full-width">Nome<input id="productName" required></label>
+        <label>SKU<input id="productSku"></label>
+        <label>Categoria<select id="productCategory"><option value="bolsas">Bolsas</option><option value="acessorios">Acessórios</option><option value="cintos">Cintos</option></select></label>
+        <label>Preço<input id="productPrice" type="number" step="0.01" min="0" required></label>
+        <label>Preço promocional<input id="productSalePrice" type="number" step="0.01" min="0"></label>
+      </div>
+    </fieldset>
+    <fieldset class="form-block">
+      <legend>Fotos</legend>
+      <div class="image-upload-field">
         <div id="productImageDropzone" class="product-image-dropzone" tabindex="0" role="button" aria-label="Adicionar fotos do produto">
           <input id="productImageFiles" type="file" accept="image/*,.jpg,.jpeg,.png,.webp" multiple>
           <div class="dropzone-icon">＋</div>
@@ -240,33 +285,41 @@
         <small id="productImageUploadStatus" class="field-help"></small>
         <div id="productImageManager" class="product-image-manager"></div>
       </div>
-      <div class="shipping-dimensions full-width">
-        <div class="shipping-dimensions-title">DADOS PARA CÁLCULO DE FRETE</div>
-        <small class="field-help">Informe as medidas aproximadas do produto embalado. Esses dados serão usados para calcular o frete no SuperFrete.</small>
-        <div class="form-grid shipping-dimensions-grid">
-          <label>Peso (kg)<input id="productShippingWeight" type="number" step="0.001" min="0.001" placeholder="Ex.: 0,800"></label>
-          <label>Altura (cm)<input id="productShippingHeight" type="number" step="0.01" min="0.1" placeholder="Ex.: 12"></label>
-          <label>Largura (cm)<input id="productShippingWidth" type="number" step="0.01" min="0.1" placeholder="Ex.: 25"></label>
-          <label>Comprimento (cm)<input id="productShippingLength" type="number" step="0.01" min="0.1" placeholder="Ex.: 32"></label>
-        </div>
+    </fieldset>
+    <fieldset class="form-block">
+      <legend>Descrição e vitrine</legend>
+      <label>Descrição<textarea id="productDescription" rows="4"></textarea></label>
+      <div class="checks"><label><input id="productNew" type="checkbox"> Marcar como novidade</label><label><input id="productSale" type="checkbox"> Mostrar em SALE</label><label><input id="productPresale" type="checkbox"> Pré-venda (bolsa que ainda vai chegar)</label><label><input id="productActive" type="checkbox" checked> Produto ativo</label></div>
+      <details class="help-more presale-help"><summary>Como funciona a pré-venda</summary><p>O produto aparece na aba <strong>Pré-venda</strong> do site com o destaque “Garanta a sua!” e o aviso de entrega em 10 dias úteis. Em cada cor, coloque no estoque quantas peças podem ser vendidas antes de chegar. Enquanto estiver em pré-venda, a Olist não mexe no estoque, no preço nem nas cores deste produto; quando as bolsas chegarem, desmarque a pré-venda.</p></details>
+    </fieldset>
+    <fieldset class="form-block">
+      <legend>Cores, SKU e estoque</legend>
+      <div class="variants-head"><p class="field-help">Uma linha por cor: nome da cor, SKU e quantas peças há no estoque.</p><button type="button" id="addVariant" class="secondary">+ COR</button></div>
+      <div class="variant-row variant-row-head" aria-hidden="true"><span>Cor</span><span>SKU da cor</span><span>Estoque</span><span></span></div>
+      <div id="variantsList"></div>
+    </fieldset>
+    <fieldset class="form-block shipping-dimensions">
+      <legend>Frete</legend>
+      <small class="field-help">Informe as medidas aproximadas do produto embalado. Esses dados serão usados para calcular o frete no SuperFrete.</small>
+      <div class="form-grid shipping-dimensions-grid">
+        <label>Peso (kg)<input id="productShippingWeight" type="number" step="0.001" min="0.001" placeholder="Ex.: 0,800"></label>
+        <label>Altura (cm)<input id="productShippingHeight" type="number" step="0.01" min="0.1" placeholder="Ex.: 12"></label>
+        <label>Largura (cm)<input id="productShippingWidth" type="number" step="0.01" min="0.1" placeholder="Ex.: 25"></label>
+        <label>Comprimento (cm)<input id="productShippingLength" type="number" step="0.01" min="0.1" placeholder="Ex.: 32"></label>
       </div>
-    </div>
-    <label>Descrição<textarea id="productDescription" rows="4"></textarea></label>
-    <div class="checks"><label><input id="productNew" type="checkbox"> Marcar como novidade</label><label><input id="productSale" type="checkbox"> Mostrar em SALE</label><label><input id="productPresale" type="checkbox"> Pré-venda (bolsa que ainda vai chegar)</label><label><input id="productActive" type="checkbox" checked> Produto ativo</label></div>
-    <p class="field-help presale-help">Pré-venda: o produto aparece na aba <strong>Pré-venda</strong> do site com o destaque “Garanta a sua!” e o aviso de entrega em 10 dias úteis. Em cada cor, coloque no estoque quantas peças podem ser vendidas antes de chegar. Enquanto estiver em pré-venda, a Olist não mexe no estoque, no preço nem nas cores deste produto; quando as bolsas chegarem, desmarque a pré-venda.</p>
-    <div class="variants-head"><h3>Cores, SKU e estoque</h3><button type="button" id="addVariant" class="secondary">+ COR</button></div>
-    <div id="variantsList"></div><div id="formError" class="error"></div>
+    </fieldset>
+    <div id="formError" class="error"></div>
     <div class="modal-actions product-modal-actions"><button type="button" id="deleteProductButton" class="danger-button hidden">EXCLUIR PRODUTO</button><button type="button" id="cancelProduct" class="secondary">CANCELAR</button><button type="submit">SALVAR PRODUTO</button></div>
   </form>
 </div></div>
 
 <div id="orderModal" class="modal hidden"><div class="modal-card order-modal-card">
-  <div class="modal-head"><div><p class="eyebrow">PEDIDO</p><h2 id="orderModalTitle">—</h2></div><button id="closeOrderModal">×</button></div>
+  <div class="modal-head"><div><p class="eyebrow">PEDIDO</p><h2 id="orderModalTitle">—</h2></div><button id="closeOrderModal" type="button" aria-label="Fechar">×</button></div>
   <div id="orderDetails"></div>
 </div></div>
 
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="admin.js?v=20261104-presentes"></script>
+<script src="admin.js?v=20261104-painel-organizado"></script>
 <script src="admin-carousel.js?v=20261104-previa-link"></script>
 </body>
 </html>
