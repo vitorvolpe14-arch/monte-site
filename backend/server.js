@@ -6838,6 +6838,8 @@ app.post(
    completo fica no servidor (kv_store, customer_profile:<hash do CPF>) e
    uma chave assinada (profile_token) volta com os dados: no checkout, o
    campo que ainda estiver escondido é trocado pelo valor verdadeiro.
+   Quando a cliente digita o e-mail (ou o WhatsApp) do cadastro, tudo
+   aparece completo para ela conferir (POST /api/clientes/conferir).
 ===================================================== */
 const CUSTOMER_PROFILE_TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 const CUSTOMER_LOOKUP_MAX_PER_HOUR = 20;
@@ -6972,11 +6974,51 @@ app.post("/api/clientes/buscar", customerLookupRateLimit, async (req, res) => {
             success: true,
             found: true,
             customer: maskedCustomerProfile(profile),
+            // Com o que a cliente confirma para ver tudo completo (o e-mail ou, sem ele, o WhatsApp).
+            confirm_with: profile.email ? "email" : (profile.phone ? "phone" : null),
             profile_token: createSignedToken({ purpose: "customer_profile", cpf }, CUSTOMER_PROFILE_TOKEN_TTL_MS)
         });
     } catch (error) {
         console.error("Cliente — busca pelo CPF:", error);
         return res.status(502).json({ success: false, message: "Não foi possível buscar seu cadastro agora. Preencha seus dados abaixo." });
+    }
+});
+
+// A cliente digita o e-mail (ou o WhatsApp) do cadastro e vê tudo completo para conferir. Quem
+// só sabe o CPF não sabe o e-mail inteiro: até 5 tentativas erradas por CPF por hora.
+const CUSTOMER_CONFIRM_MAX_FAILURES = 5;
+const customerConfirmKey = cpf => "customer_confirm:" + crypto.createHash("sha256").update("monte-customer:" + cpf).digest("hex").slice(0, 40);
+app.post("/api/clientes/conferir", customerLookupRateLimit, async (req, res) => {
+    try {
+        const cpf = safeString(req.body?.cpf).replace(/\D/g, "");
+        const data = verifySignedToken(req.body?.profile_token);
+        if (!isValidCpf(cpf) || data?.purpose !== "customer_profile" || data.cpf !== cpf) {
+            return res.status(400).json({ success: false, match: false });
+        }
+        const key = customerConfirmKey(cpf);
+        const tries = (await supabaseRequest("kv_store_48db9b7e?key=eq." + key + "&select=value&limit=1", { method: "GET" }))?.[0]?.value || {};
+        const fresh = !(Date.now() - Number(tries.first_at || 0) < 60 * 60 * 1000);
+        if (!fresh && Number(tries.count || 0) >= CUSTOMER_CONFIRM_MAX_FAILURES) {
+            return res.status(429).json({ success: false, match: false });
+        }
+        const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + customerProfileKey(cpf) + "&select=value&limit=1", { method: "GET" });
+        const profile = rows?.[0]?.value?.profile || null;
+        const email = plainEmail(req.body?.email);
+        const phone = brazilMobileDigits(req.body?.phone);
+        const match = !!profile && ((email && profile.email && email === profile.email) || (phone && profile.phone && phone === profile.phone));
+        if (!match) {
+            await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
+                method: "POST",
+                headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+                body: JSON.stringify({ key, value: { count: fresh ? 1 : Number(tries.count || 0) + 1, first_at: fresh ? Date.now() : Number(tries.first_at) } })
+            });
+            return res.json({ success: true, match: false });
+        }
+        if (tries.count) await supabaseRequest("kv_store_48db9b7e?key=eq." + key, { method: "DELETE", headers: { "Prefer": "return=minimal" } }).catch(() => {});
+        return res.json({ success: true, match: true, customer: profile });
+    } catch (error) {
+        console.error("Cliente — conferir dados:", error);
+        return res.status(502).json({ success: false, match: false });
     }
 });
 
