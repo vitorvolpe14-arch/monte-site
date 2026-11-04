@@ -71,9 +71,21 @@ function olistSaleDetail(detail) {
         valor: olistMoney(item?.valorUnitario)
     }));
     const pagamento = detail?.pagamento || {};
-    const parcela = Array.isArray(pagamento.parcelas) ? pagamento.parcelas[0] || {} : {};
+    const parcelas = Array.isArray(pagamento.parcelas) ? pagamento.parcelas : [];
+    const parcela = parcelas[0] || {};
     const meio = [pagamento.meioPagamento, pagamento.formaRecebimento, parcela.meioPagamento, parcela.formaRecebimento].map(name).find(Boolean) || "";
-    return { id: Number(detail.id), itens, pagamento: meio.slice(0, 60) || null };
+    // Como foi pago (para estimar a taxa da maquininha): forma, meio, condição e parcelas.
+    // Só nomes e números; as observações das parcelas ficam de fora.
+    const short = v => name(v).slice(0, 60) || null;
+    const pagamentoInfo = {
+        forma: short(pagamento.formaRecebimento),
+        meio: short(pagamento.meioPagamento),
+        condicao: text(pagamento.condicaoPagamento).slice(0, 60) || null,
+        parcelas: parcelas.length,
+        meios_parcelas: [...new Set(parcelas.flatMap(p => [short(p?.meioPagamento), short(p?.formaRecebimento)]).filter(Boolean))].slice(0, 5),
+        dias: parcelas.slice(0, 12).map(p => intOrNull(p?.dias))
+    };
+    return { id: Number(detail.id), itens, pagamento: meio.slice(0, 60) || null, pagamento_info: pagamentoInfo };
 }
 
 module.exports = { OLIST_SALE_SITUATIONS, olistSaleDate, olistMoney, olistSaleSummary, olistSaleDetail };

@@ -69,8 +69,22 @@ test("itens e pagamento do detalhe", () => {
             { sku: "MT-100-P", descricao: "Bolsa Paris Preta", quantidade: 2, valor: 389 },
             { sku: null, descricao: "Produto", quantidade: 1, valor: 0 }
         ],
-        pagamento: "Pix"
+        pagamento: "Pix",
+        pagamento_info: { forma: "Pix", meio: null, condicao: null, parcelas: 0, meios_parcelas: [], dias: [] }
     });
+    // Cartão na maquininha em 3x: guarda a condição e as parcelas, sem as observações.
+    const c = olistSaleDetail({
+        id: 2,
+        pagamento: {
+            formaRecebimento: { id: 9, nome: "INFINITY CREDITO-DEBITO" },
+            meioPagamento: { id: 3, nome: "Cartão de crédito" },
+            condicaoPagamento: "30 60 90",
+            parcelas: [1, 2, 3].map(n => ({ dias: n * 30, valor: 163, observacoes: "Cliente Fulana CPF 000", meioPagamento: { nome: "Cartão de crédito" }, formaRecebimento: { nome: "INFINITY CREDITO-DEBITO" } }))
+        }
+    });
+    assert.equal(c.pagamento, "Cartão de crédito");
+    assert.deepEqual(c.pagamento_info, { forma: "INFINITY CREDITO-DEBITO", meio: "Cartão de crédito", condicao: "30 60 90", parcelas: 3, meios_parcelas: ["Cartão de crédito", "INFINITY CREDITO-DEBITO"], dias: [30, 60, 90] });
+    assert.ok(!JSON.stringify(c).includes("Fulana"));
     assert.equal(olistSaleDetail({ id: 1, pagamento: { meioPagamento: "Cartão de crédito" } }).pagamento, "Cartão de crédito");
     assert.equal(olistSaleDetail({ id: 1, pagamento: { parcelas: [{ formaRecebimento: { nome: "Dinheiro" } }] } }).pagamento, "Dinheiro");
     assert.equal(olistSaleDetail({ id: 1 }).pagamento, null);
