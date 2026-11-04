@@ -1996,14 +1996,28 @@ async function carouselSlides(){
       supabaseRequest("kv_store_48db9b7e",{method:"POST",body:JSON.stringify({key:CAROUSEL_KV_KEY,value}),headers:{"Prefer":"resolution=merge-duplicates,return=minimal"}}).catch(()=>{});
     }
   }
-  return config.images.map(url=>{const src=siteMediaPath(url);return {src,small:smallImageUrl(src),width:sizes[url]?.[0]||null,height:sizes[url]?.[1]||null}});
+  const share=carouselShare(config);
+  return config.images.map((url,i)=>{const src=siteMediaPath(url);return {src,small:smallImageUrl(src),width:sizes[url]?.[0]||null,height:sizes[url]?.[1]||null,...(i===0&&share?{share:siteMediaPath(share.url)}:{})}});
+}
+
+// Prévia do link da loja (WhatsApp, Instagram...): a primeira foto do carrossel do topo em JPEG
+// leve de 1200 × 630, feita pelo navegador do painel (as fotos do carrossel vão sem conversão, e o
+// WhatsApp costuma não mostrar imagem de prévia pesada, acima de ~300 KB). Fica na configuração
+// do carrossel como { share: { source, url } } e só vale enquanto "source" for a primeira foto;
+// sem ela, a prévia usa a primeira foto como está.
+const CAROUSEL_SHARE_SIZE=[1200,630];
+const CAROUSEL_SHARE_MAX_BYTES=600*1024;
+function carouselShare(config){
+  const share=config?.stored?.share;
+  const url=canonicalProductImageUrl(share?.url);
+  return url&&typeof share.source==="string"&&share.source===config.images[0]?{source:share.source,url}:null;
 }
 app.get("/api/carousel",async(req,res)=>{
   try{const slides=await cachedPublic("carousel",60*1000,carouselSlides);return res.json({success:true,images:slides.map(s=>s.src),slides})}
   catch(e){console.error("Public carousel GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar o carrossel."})}
 });
 app.get("/api/admin/carousel",requireAdmin,async(req,res)=>{
-  try{const config=await readCarouselConfig();return res.json({success:true,images:config.images,sizes:config.sizes})}
+  try{const config=await readCarouselConfig();return res.json({success:true,images:config.images,sizes:config.sizes,share:carouselShare(config)})}
   catch(e){console.error("Admin carousel GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar o carrossel."})}
 });
 app.put("/api/admin/carousel",requireAdmin,async(req,res)=>{
@@ -2012,10 +2026,12 @@ app.put("/api/admin/carousel",requireAdmin,async(req,res)=>{
     if(!images.length)return res.status(400).json({success:false,message:"Adicione pelo menos uma foto ao carrossel."});
     const previous=await readCarouselConfig().catch(()=>({sizes:{}}));
     const sizes=normalizeCarouselSizes({...previous.sizes,...(req.body?.sizes||{})},images);
-    const body=JSON.stringify({key:CAROUSEL_KV_KEY,value:{images,sizes,updated_at:new Date().toISOString()}});
+    // A prévia do link continua valendo se a primeira foto não mudou; se mudou, o painel faz outra.
+    const share=previous.stored?.share?.source===images[0]?previous.stored.share:undefined;
+    const body=JSON.stringify({key:CAROUSEL_KV_KEY,value:{images,sizes,...(share?{share}:{}),updated_at:new Date().toISOString()}});
     await supabaseRequest("kv_store_48db9b7e",{method:"POST",body,headers:{"Prefer":"resolution=merge-duplicates,return=representation"}});
     publicCache.delete("carousel");
-    return res.json({success:true,images,sizes});
+    return res.json({success:true,images,sizes,share:carouselShare({images,stored:{share}})});
   }catch(e){console.error("Admin carousel PUT:",e);return res.status(500).json({success:false,message:adminErrorMessage(e,"Não foi possível salvar o carrossel.")})}
 });
 
@@ -2473,6 +2489,35 @@ app.post("/api/admin/uploads/carousel-image", requireAdmin, async (req,res)=>{
     console.error("Admin carousel image upload:",e);
     return res.status(400).json({success:false,message:adminErrorMessage(e,"Não foi possível enviar a imagem.")});
   }
+});
+
+// Prévia do link da loja feita pelo painel a partir da primeira foto do carrossel (ver carouselShare).
+app.post("/api/admin/uploads/carousel-share", requireAdmin, async (req, res) => {
+    try {
+        if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY não configurada no backend.");
+        const source = safeString(req.body?.source);
+        const changed = () => res.status(409).json({ success: false, message: "A primeira foto do carrossel mudou. Salve o carrossel de novo." });
+        if (!source || source !== (await readCarouselConfig()).images[0]) return changed();
+        const buffer = Buffer.from(safeString(req.body?.data_base64).replace(/^data:[^;]+;base64,/, ""), "base64");
+        const info = await validateImageBuffer(buffer, "image/jpeg");
+        if (info.width !== CAROUSEL_SHARE_SIZE[0] || info.height !== CAROUSEL_SHARE_SIZE[1]) throw new Error("A prévia do link precisa ter 1200 × 630.");
+        if (buffer.length > CAROUSEL_SHARE_MAX_BYTES) throw new Error("A prévia do link ficou grande demais.");
+        const url = await uploadStorageObject("carousel/share/" + Date.now() + "-" + crypto.randomBytes(5).toString("hex") + ".jpg", "image/jpeg", buffer);
+        // Lê de novo: o carrossel pode ter sido salvo enquanto a foto subia.
+        const latest = await readCarouselConfig();
+        if (latest.images[0] !== source) return changed();
+        const share = { source, url };
+        await supabaseRequest("kv_store_48db9b7e", {
+            method: "POST",
+            body: JSON.stringify({ key: CAROUSEL_KV_KEY, value: { ...(latest.stored || { images: latest.images, sizes: latest.sizes }), share } }),
+            headers: { "Prefer": "resolution=merge-duplicates,return=minimal" }
+        });
+        publicCache.delete("carousel");
+        return res.status(201).json({ success: true, share });
+    } catch (error) {
+        console.error("Admin carousel share image:", error);
+        return res.status(400).json({ success: false, message: adminErrorMessage(error, "Não foi possível fazer a prévia do link.") });
+    }
 });
 
 app.post("/api/admin/uploads/product-image", requireAdmin, async (req, res) => {
@@ -4359,6 +4404,28 @@ function topBarHtml(page, text) {
             '<span class="shipping-bar-sep shipping-bar-promo" aria-hidden="true">·</span>');
 }
 
+// Prévia do link da loja (WhatsApp, Instagram...): a primeira foto do carrossel do topo, na
+// versão leve de 1200 × 630 quando o painel já fez (carouselShare), ou como está.
+function homeSharePreview(page, slide) {
+    const src = slide?.share || slide?.src;
+    const image = src ? publicImageUrl(src) : "";
+    if (!image) return page;
+    const type = /\.png$/i.test(src) ? "image/png" : /\.webp$/i.test(src) ? "image/webp" : "image/jpeg";
+    const [width, height] = slide.share ? CAROUSEL_SHARE_SIZE : [slide.width, slide.height];
+    const meta = (pattern, value) => { page = page.replace(pattern, (tag, before) => before + xmlEscape(String(value)) + '">'); };
+    meta(/(<meta property="og:image" content=")[^"]*">/, image);
+    meta(/(<meta property="og:image:secure_url" content=")[^"]*">/, image);
+    meta(/(<meta name="twitter:image" content=")[^"]*">/, image);
+    meta(/(<meta property="og:image:type" content=")[^"]*">/, type);
+    if (width && height) {
+        meta(/(<meta property="og:image:width" content=")[^"]*">/, width);
+        meta(/(<meta property="og:image:height" content=")[^"]*">/, height);
+    } else {
+        page = page.replace(/\s*<meta property="og:image:(width|height)" content="[^"]*">/g, "");
+    }
+    return page;
+}
+
 // Página inicial: o servidor já entrega o banner (com tamanho e prioridade) e os produtos
 // dentro do HTML. A loja aparece sem esperar outras requisições e o banner não empurra a página.
 // Troca a prévia da página inicial (título, descrição e foto) pela da bolsa do link.
@@ -4429,6 +4496,7 @@ app.get("/", async (req, res) => {
             ? catalog.find(product => product.short_code === shareCode)
             : null;
         if (sharedProduct) page = productSharePreview(page, sharedProduct, shareCode);
+        else if (Array.isArray(slides) && slides.length) page = homeSharePreview(page, slides[0]);
         res.setHeader("Cache-Control", "no-cache");
         return res.status(200).type("html").send(page);
     } catch (error) {

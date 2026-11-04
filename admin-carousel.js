@@ -87,6 +87,7 @@ function bannerManager(o){
       draft=Array.isArray(d.images)?d.images:draft;
       render();
       setStatus(o.savedMessage);
+      if(o.afterSave)o.afterSave(d);
     }catch(e){
       setStatus(e.message,true);
     }finally{
@@ -158,6 +159,7 @@ function bannerManager(o){
         draft=Array.isArray(d.images)?d.images:[];
         render();
         setStatus(o.loadedMessage?o.loadedMessage(d):"");
+        if(o.afterLoad)o.afterLoad(d);
       }catch(e){setStatus(e.message,true)}
     }
   };
@@ -181,6 +183,40 @@ async function uploadCarouselImages(files){
   return {urls};
 }
 
+// Prévia do link da loja (WhatsApp, Instagram): a primeira foto do carrossel em JPEG leve de
+// 1200 × 630, feita aqui no navegador quando a primeira foto muda (ou ainda não tem prévia).
+// Sem ela, o site usa a primeira foto como está, que pode ser pesada demais para o WhatsApp.
+const SHARE_W=1200,SHARE_H=630,SHARE_MAX_BYTES=280*1024;
+let carouselShareJob="";
+async function carouselShareJpeg(url){
+  const image=await loadImageSource(await fetchPhotoBlob(url));
+  const w=image.naturalWidth||image.width,h=image.naturalHeight||image.height;
+  const canvas=document.createElement("canvas");canvas.width=SHARE_W;canvas.height=SHARE_H;
+  const ctx=canvas.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,SHARE_W,SHARE_H);
+  ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high";
+  // Preenche 1200 × 630 sem deformar (corta as bordas que sobrarem, centralizado).
+  const scale=Math.max(SHARE_W/w,SHARE_H/h),dw=w*scale,dh=h*scale;
+  ctx.drawImage(image,(SHARE_W-dw)/2,(SHARE_H-dh)/2,dw,dh);
+  if(typeof image.close==="function")image.close();
+  for(const quality of [.86,.78,.7,.6]){
+    const blob=await canvasBlob(canvas,"image/jpeg",quality);
+    if(blob&&blob.type==="image/jpeg"&&blob.size<=SHARE_MAX_BYTES)return blob;
+  }
+  throw new Error("a prévia ficou grande demais");
+}
+async function ensureCarouselShare(d){
+  const first=Array.isArray(d?.images)?d.images[0]:"";
+  if(!first||d?.share?.source===first||carouselShareJob===first)return;
+  carouselShareJob=first;
+  try{
+    const blob=await carouselShareJpeg(first);
+    await api("/api/admin/uploads/carousel-share",{method:"POST",body:JSON.stringify({source:first,data_base64:await readFileAsDataUrl(blob)})});
+  }catch(e){console.warn("Prévia do link da loja não foi feita:",e.message)}
+  finally{if(carouselShareJob===first)carouselShareJob=""}
+}
+// Ao entrar no painel: faz a prévia se ainda não existe (por exemplo, carrossel salvo antes).
+window.ensureCarouselSharePreview=async function(){try{await ensureCarouselShare(await api("/api/admin/carousel"))}catch{}};
+
 // Banner do meio: o espaço no site é 2:1; foto em outra proporção tem as bordas cortadas.
 async function uploadEditorialImages(files){
   const urls=[],notes=[];
@@ -200,7 +236,9 @@ const homeCarouselManager=bannerManager({
   saveLabel:"SALVAR CARROSSEL",
   sendingMessage:"Enviando foto(s)...",
   savedMessage:"Carrossel salvo com sucesso.",
-  upload:uploadCarouselImages
+  upload:uploadCarouselImages,
+  afterLoad:ensureCarouselShare,
+  afterSave:ensureCarouselShare
 });
 
 const editorialBannerManager=bannerManager({
