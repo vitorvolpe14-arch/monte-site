@@ -974,7 +974,7 @@ function renderDashboardNet(r){
   const period=dashDays?`nos últimos ${dashDays} dias`:(r.since?"desde "+new Date(r.since).toLocaleDateString("pt-BR"):"desde o início");
   const who={site:"Vendas do site",olist:"Vendas da loja (Olist)",all:"Vendas do site e da loja"}[dashSource];
   $("dashNetTitle").textContent=dashSource==="site"?"Valor líquido do site na InfinitePay":dashSource==="olist"?"Valor líquido da loja na InfinitePay":"Valor líquido na InfinitePay";
-  $("dashNetHint").textContent=`${who} ${period}, depois das taxas da InfinitePay, para conferir com o app dela.${dashSource!=="site"?" Na loja o líquido é estimado (≈): a Olist não informa a taxa da maquininha.":""}`;
+  $("dashNetHint").textContent=`${who} ${period}, depois das taxas da InfinitePay, para conferir com o app dela.${dashSource!=="site"?" Na loja, o que a Olist não detalha (débito ou forma de pagamento não informada) fica estimado (≈).":""}`;
   const step=(label,value,sub,cls="")=>`<div class="net-step${cls}"><span>${esc(label)}</span><strong>${esc(value)}</strong><small>${esc(sub)}</small></div>`;
   setHTML($("dashNet"),
     step(dashSource==="site"?"Vendido no site":dashSource==="olist"?"Vendido na loja":"Vendido",money(sale),rows.length?`${fmtInt(rows.length)} ${plural(rows.length,"venda","vendas")} · valor dos pedidos`:"nenhuma venda no período")+
@@ -1000,14 +1000,13 @@ function renderDashboardNet(r){
   const noDetail=rows.filter(s=>s.source==="olist"&&s.pay.method==="unknown").length;
   if(noDetail)notes.push(`${fmtInt(noDetail)} ${plural(noDetail,"venda da loja ainda está","vendas da loja ainda estão")} sem o detalhe do pagamento na importação: ${plural(noDetail,"conta","contam")} como cartão à vista até o detalhe chegar.`);
   const f=infinitePayFees,mf=machineFees,tables=[];
-  if(dashSource!=="olist"&&f&&Array.isArray(f.credit))tables.push(`<p class="field-help"><strong>Site</strong> (${esc(lowerFirst(f.plan||"link de pagamento"))}): Pix ${f.pix?feePct(f.pix):"grátis"}; crédito ${f.credit.map((v,i)=>`${i?i+1+"x":"à vista"} ${feePct(v)}`).join(" · ")}. A taxa é sobre o valor pago pela cliente; nas vendas parceladas com juros, a cliente paga a diferença.</p>`);
+  // Site e loja no crédito: a mesma tabela do link de pagamento (conferido com o app da InfinitePay).
+  if(f&&Array.isArray(f.credit))tables.push(`<p class="field-help"><strong>${dashSource==="site"?"Site":dashSource==="olist"?"Loja no crédito":"Site e loja no crédito"}</strong> (${esc(lowerFirst(f.plan||"link de pagamento"))}): Pix ${f.pix?feePct(f.pix):"grátis"}; crédito ${f.credit.map((v,i)=>`${i?i+1+"x":"à vista"} ${feePct(v)}`).join(" · ")}. A taxa é sobre o valor pago pela cliente, com os centavos cortados, como no app. Nas vendas parceladas com juros, a cliente paga a diferença.</p>`);
   if(dashSource!=="site"&&mf&&Array.isArray(mf.tiers)){
     const used=[...new Map(rows.filter(s=>s.source==="olist"&&s.pay.tier).map(s=>[new Date(s.time).toISOString().slice(0,7),s.pay.tier])).entries()].sort((a,b)=>a[0]<b[0]?-1:1);
-    tables.push(`<p class="field-help"><strong>Loja</strong> (${esc(lowerFirst(mf.plan||"maquininha"))}): Pix grátis. A faixa sai do faturamento em cartão do mês anterior (site + loja; o Pix não conta)${used.length?": "+esc(used.map(([m,t])=>monthLabel(m)+" "+t).join(" · ")):""}.</p>`+
-      mf.tiers.map(t=>`<p class="field-help">${esc(t.label.charAt(0).toUpperCase()+t.label.slice(1))}: débito ${feePct(t.debit)} · crédito ${t.credit.map((v,i)=>`${i?i+1+"x":"à vista"} ${feePct(v)}`).join(" · ")}</p>`).join("")+
-      `<p class="field-help">Quando a Olist não diz se foi débito ou crédito, conta crédito à vista. Elo e Amex cobram um pouco mais. Para o valor exato da loja, confira as taxas no app da InfinitePay.</p>`);
+    tables.push(`<p class="field-help"><strong>Loja no débito</strong> (${esc(lowerFirst(mf.plan||"maquininha"))}, estimado): ${mf.tiers.map(t=>`${esc(t.label)} ${feePct(t.debit)}`).join(" · ")}. A faixa sai do faturamento em cartão do mês anterior (site + loja; o Pix não conta)${used.length?": "+esc(used.map(([m,t])=>monthLabel(m)+" "+t).join(" · ")):""}.</p>`+
+      `<p class="field-help">Quando a Olist não diz se foi débito ou crédito, conta crédito à vista (≈). O valor de cada venda da loja é o da Olist: se for diferente do cobrado no app, o líquido muda junto.</p>`);
   }
-  if(tables.length)tables.push('<p class="field-help">Pode haver diferença de centavos em relação ao app.</p>');
   setHTML($("dashNetNotes"),notes.map(t=>`<p class="field-help">${esc(t)}</p>`).join("")+(tables.length?`<details class="help-more"><summary>Taxas usadas na conta</summary>${tables.join("")}</details>`:""));
 }
 function groupSales(list,keyFn){
