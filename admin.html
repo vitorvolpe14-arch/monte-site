@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20261031-envio">
+<link rel="stylesheet" href="admin.css?v=20261104-barra-topo">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -144,6 +144,14 @@
 
     <section id="promotionsSection" class="section hidden">
       <div class="section-actions"><div><p class="eyebrow">VENDAS</p><h2>Promoções</h2></div><button id="refreshPromotions" class="secondary">ATUALIZAR</button></div>
+      <div class="panel top-bar-panel">
+        <div class="panel-head"><div><h2>Barra do topo do site</h2><p class="field-help">A faixa preta no alto da loja. No computador, o aviso aparece ao lado do frete grátis e do Pix; no celular, só ele. Deixe em branco para a barra voltar ao automático: o aviso da promoção de presente no ar (se houver) ou o frete grátis e o Pix.</p></div></div>
+        <form id="topBarForm" class="top-bar-form" autocomplete="off">
+          <div class="top-bar-preview" aria-live="polite"><span class="top-bar-preview-label" id="topBarPreviewNote">Como aparece no site</span><div class="top-bar-preview-strip"><span id="topBarPreview"></span></div></div>
+          <label>Aviso da barra<input id="topBarText" maxlength="90" placeholder="Ex.: BLACK FRIDAY: 15% OFF EM TODA A LOJA"></label>
+          <div class="top-bar-actions"><span id="topBarCount" class="field-help">0/90</span><span id="topBarMessage" class="field-help"></span><button type="button" id="clearTopBarButton" class="secondary">DEIXAR AUTOMÁTICO</button><button type="submit" id="saveTopBarButton">SALVAR BARRA DO TOPO</button></div>
+        </form>
+      </div>
       <div class="panel benefits-panel">
         <div class="panel-head"><div><h2>Benefícios da loja</h2><p class="field-help">Valem o tempo todo, até você desligar. O site, a sacola e a barra do topo mostram os valores daqui.</p></div></div>
         <form id="benefitsForm" class="benefits-grid" autocomplete="off">
@@ -171,7 +179,7 @@
             <label>Valor mínimo em peças (R$)<input id="promoMin" type="number" step="0.01" min="0.01" required placeholder="Ex.: 499"></label>
             <label>Começa em<input id="promoStartsAt" type="datetime-local" required></label>
             <label>Termina em<input id="promoEndsAt" type="datetime-local" required></label>
-            <label class="full-width">Aviso na barra do topo do site (opcional)<input id="promoBanner" maxlength="90" placeholder="Ex.: NOVEMBRO: GANHE UM CINTO NAS COMPRAS A PARTIR DE R$ 499"></label>
+            <label class="full-width">Aviso na barra do topo do site (opcional; aparece quando a “Barra do topo do site”, acima, está no automático)<input id="promoBanner" maxlength="90" placeholder="Ex.: NOVEMBRO: GANHE UM CINTO NAS COMPRAS A PARTIR DE R$ 499"></label>
             <label class="full-width">Regra do presente para a cliente (opcional)<input id="promoTerms" maxlength="200" placeholder="Ex.: Não fazemos troca de brinde."></label>
           </div>
           <div class="checks"><label><input id="promoActive" type="checkbox" checked> Promoção ativa (desmarque para pausar sem apagar)</label></div>
@@ -255,7 +263,7 @@
 </div></div>
 
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="admin.js?v=20261031-envio"></script>
+<script src="admin.js?v=20261104-barra-topo"></script>
 <script src="admin-carousel.js?v=20261028-banner-meio"></script>
 </body>
 </html>

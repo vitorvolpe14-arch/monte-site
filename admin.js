@@ -5,7 +5,7 @@ let products=[],orders=[],editingProduct=null,productImageDraft=[],productImageF
 
 let analyticsData=null;
 let coupons=[],couponsLoaded=false;
-let promotions=[],promotionsLoaded=false;
+let promotions=[],promotionsLoaded=false,storeBenefitsData=null;
 async function loadAnalytics(){try{$("analyticsError").textContent="";analyticsData=await api("/api/admin/analytics?days="+Number($("analyticsDays").value||30));renderAnalytics()}catch(e){$("analyticsError").textContent=e.message}}
 function renderAnalytics(){
  const d=analyticsData.summary||{}, k=[["Visitantes únicos",fmtInt(d.visitors)],["Visualizações",fmtInt(d.pageViews)],["Pedidos pagos",fmtInt(d.paidOrders)],["Faturamento bruto",money(d.grossRevenue)],["Ticket médio",money(d.ticketAverage)],["Conversão",pct(d.conversionRate)],["Carrinhos ativos",fmtInt(d.activeCarts)],["Valor em abandono",money(d.abandonedValue)]];
@@ -69,6 +69,9 @@ async function init(){
   const refreshCoupons=$("refreshCoupons"); if(refreshCoupons) refreshCoupons.onclick=loadCoupons;
   const promoForm=$("promoForm"); if(promoForm) promoForm.onsubmit=savePromotion;
   const benefitsForm=$("benefitsForm"); if(benefitsForm) benefitsForm.onsubmit=saveBenefits;
+  const topBarForm=$("topBarForm"); if(topBarForm) topBarForm.onsubmit=saveTopBar;
+  const topBarInput=$("topBarText"); if(topBarInput) topBarInput.oninput=updateTopBarPreview;
+  const clearTopBarButton=$("clearTopBarButton"); if(clearTopBarButton) clearTopBarButton.onclick=clearTopBar;
   const cancelPromoEdit=$("cancelPromoEdit"); if(cancelPromoEdit) cancelPromoEdit.onclick=resetPromotionForm;
   const refreshPromotions=$("refreshPromotions"); if(refreshPromotions) refreshPromotions.onclick=loadPromotions;
   try{const s=await api("/api/admin/session");await enterApp(s)}catch{showLogin()}
@@ -513,9 +516,17 @@ async function deleteCoupon(id){const c=coupons.find(x=>String(x.id)===String(id
 ===================================================== */
 const PROMO_CATEGORY_LABELS={cintos:"Cinto",acessorios:"Acessório",bolsas:"Bolsa"};
 function promotionState(p){const now=Date.now();if(!p.active)return["PAUSADA","expired"];if(new Date(p.starts_at).getTime()>now)return["AGENDADA","pending"];if(new Date(p.ends_at).getTime()<=now)return["ENCERRADA","expired"];return["NO AR","paid"]}
-async function loadPromotions(){try{$("promotionsError").textContent="";const d=await api("/api/admin/promotions");promotions=d.promotions||[];promotionsLoaded=true;renderBenefits(d.benefits);renderPromotions()}catch(e){$("promotionsError").textContent=e.message}}
+async function loadPromotions(){try{$("promotionsError").textContent="";const d=await api("/api/admin/promotions");promotions=d.promotions||[];promotionsLoaded=true;renderBenefits(d.benefits);renderTopBar(d.top_bar);renderPromotions()}catch(e){$("promotionsError").textContent=e.message}}
+// Barra do topo do site: o aviso escrito aqui ou, em branco, o automático (aviso da promoção
+// de presente no ar, ou o frete grátis e o Pix), como o site escolhe.
+const TOP_BAR_MAX=90;
+function renderTopBar(t){if(!t)return;$("topBarText").value=t.text||"";$("topBarMessage").textContent="";updateTopBarPreview()}
+function topBarAutomatic(){const now=Date.now();const p=promotions.filter(x=>x.active&&x.banner_text&&Date.parse(x.starts_at)<=now&&now<Date.parse(x.ends_at)).sort((a,b)=>Number(a.min_subtotal)-Number(b.min_subtotal))[0];if(p)return{text:p.banner_text,note:`Como aparece no site (automático: aviso da promoção “${p.name}”)`};const b=storeBenefitsData,parts=[];if(b?.free_shipping?.enabled)parts.push(`FRETE GRÁTIS EM FORTALEZA E REGIÃO A PARTIR DE ${money(b.free_shipping.min_subtotal).replace(",00","")}`);if(b?.pix_discount?.enabled)parts.push(`${String(Number(b.pix_discount.percent)).replace(".",",")}% OFF NO PIX`);return{text:parts.join(" · "),note:parts.length?"Como aparece no site (automático: frete grátis e Pix)":"Como aparece no site (automático: barra vazia)"}}
+function updateTopBarPreview(){const input=$("topBarText");if(!input)return;const typed=input.value.replace(/\s+/g," ").trim();const auto=typed?null:topBarAutomatic();$("topBarPreview").textContent=typed||auto.text;$("topBarPreviewNote").textContent=typed?"Como aparece no site":auto.note;$("topBarCount").textContent=`${input.value.length}/${TOP_BAR_MAX}`}
+async function saveTopBar(e){e?.preventDefault();const button=$("saveTopBarButton");button.disabled=true;$("clearTopBarButton").disabled=true;$("topBarMessage").textContent="";try{const d=await api("/api/admin/top-bar",{method:"PUT",body:JSON.stringify({text:$("topBarText").value.trim()})});renderTopBar(d.top_bar);$("topBarMessage").textContent=d.top_bar?.text?"Salvo. O site atualiza em até 1 minuto.":"Salvo: a barra voltou ao automático. O site atualiza em até 1 minuto."}catch(err){$("topBarMessage").textContent=err.message}finally{button.disabled=false;$("clearTopBarButton").disabled=false}}
+function clearTopBar(){$("topBarText").value="";updateTopBarPreview();saveTopBar()}
 // Frete grátis e desconto do Pix: valem o tempo todo, até desligar.
-function renderBenefits(b){if(!b)return;$("benefitShippingOn").checked=!!b.free_shipping?.enabled;$("benefitShippingMin").value=Number(b.free_shipping?.min_subtotal||0);$("benefitPixOn").checked=!!b.pix_discount?.enabled;$("benefitPixPercent").value=Number(b.pix_discount?.percent||0);$("benefitsMessage").textContent=""}
+function renderBenefits(b){if(!b)return;storeBenefitsData=b;updateTopBarPreview();$("benefitShippingOn").checked=!!b.free_shipping?.enabled;$("benefitShippingMin").value=Number(b.free_shipping?.min_subtotal||0);$("benefitPixOn").checked=!!b.pix_discount?.enabled;$("benefitPixPercent").value=Number(b.pix_discount?.percent||0);$("benefitsMessage").textContent=""}
 async function saveBenefits(e){e.preventDefault();const button=$("saveBenefitsButton");button.disabled=true;$("benefitsMessage").textContent="";try{const d=await api("/api/admin/store-benefits",{method:"PUT",body:JSON.stringify({free_shipping:{enabled:$("benefitShippingOn").checked,min_subtotal:Number(String($("benefitShippingMin").value).replace(",","."))},pix_discount:{enabled:$("benefitPixOn").checked,percent:Number(String($("benefitPixPercent").value).replace(",","."))}})});renderBenefits(d.benefits);$("benefitsMessage").textContent="Salvo. O site atualiza em até 1 minuto."}catch(err){$("benefitsMessage").textContent=err.message}finally{button.disabled=false}}
 function renderPromotions(){
   const box=$("promotionsList");if(!box)return;
