@@ -2648,3 +2648,37 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
   .variant-row .v-sku{grid-column:1/-1;grid-row:2}
   .variant-row-head span:nth-child(2){display:none}
 }
+
+/* Valor líquido do site na InfinitePay (Visão geral) */
+.dash-net{margin:0 0 16px}
+.net-flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;margin-top:14px;background:var(--ad-line);border:1px solid var(--ad-line);border-radius:var(--ad-radius-sm);overflow:hidden}
+.net-step{display:flex;flex-direction:column;gap:4px;min-width:0;padding:16px 18px;background:var(--ad-card)}
+.net-step span{font-size:13px;font-weight:500;color:var(--ad-ink-2)}
+.net-step strong{margin:2px 0;font:600 24px/1.15 var(--ad-sans);letter-spacing:-.02em;color:var(--ad-ink);white-space:nowrap}
+.net-step small{font-size:12px;line-height:1.4;color:var(--ad-muted)}
+.net-step.is-net{background:var(--ad-soft)}
+.net-step.is-net strong{color:var(--ad-wine)}
+.net-table td{vertical-align:top}
+.net-sub{display:block;margin-top:2px;font-size:11px;color:var(--ad-muted)}
+.dash-net-notes{display:grid;gap:8px;margin-top:12px}
+.dash-net-notes .field-help{margin:0}
+.dash-net-notes .help-more{margin:0}
+@media (max-width:1000px){.net-flow{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:420px){.net-step{padding:14px}.net-step strong{font-size:20px}}
+/* No celular cada venda vira um cartão: à esquerda data, pedido, forma e valores; à direita o líquido. */
+@media (max-width:640px){
+  .net-table thead{display:none}
+  .net-table,.net-table tbody{display:block;width:100%;min-width:0}
+  .net-table tr{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;row-gap:3px;padding:12px 0;border-bottom:1px solid var(--ad-line)}
+  .net-table td{display:block;padding:0;border:0;white-space:normal;font-size:12.5px}
+  .net-table td:empty{display:none}
+  .net-table td[data-label]::before{content:attr(data-label) ": ";color:var(--ad-muted)}
+  .net-table td:nth-child(1){grid-column:1;font-size:11.5px;color:var(--ad-muted)}
+  .net-table td:nth-child(2),.net-table td:nth-child(3),.net-table td:nth-child(4),.net-table td:nth-child(5){grid-column:1}
+  .net-table td:nth-child(6){grid-column:2;grid-row:3/span 3;text-align:right}
+  .net-table td:nth-child(7){grid-column:2;grid-row:1/span 2;align-self:start;text-align:right;font-size:15px}
+  .net-table .net-sub{display:inline;margin:0 0 0 4px}
+  .net-table td:nth-child(6) .net-sub{display:block;margin:2px 0 0}
+  .net-table .dc-total{border-bottom:0}
+  .net-table .dc-total td{border-top:0;font-weight:600}
+}
