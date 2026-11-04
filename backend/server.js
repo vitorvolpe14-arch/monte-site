@@ -7,6 +7,7 @@ const cors = require("cors");
 const { pixLinkDiscountPercent, isExpectedPixAmount, paidPriceKey } = require("./pix-discount.js");
 const { PROMOTION_GIFTS_CEILING, promotionGiftCount } = require("./gift-promotion.js");
 const { OLIST_SALE_SITUATIONS, olistSaleSummary, olistSaleDetail } = require("./olist-sales.js");
+const { infinitePayNet, currentInfinitePayFees } = require("./infinitepay-fees.js");
 
 // Este servidor roda no Render (Node) e no Cloudflare Workers (nodejs_compat).
 // No Workers não há arquivos do projeto no disco nem timers fora de uma requisição:
@@ -3998,11 +3999,12 @@ async function syncOlistSales({ calls = 18, due = false } = {}) {
     budget.use();
     const state = await readOlistSalesState();
     const now = Date.now();
-    const backlog = state.cursor != null || state.pending_details > 0 || !state.full_at;
+    // Depois de um erro (ex.: a Olist pediu para esperar), a próxima execução tenta de novo.
+    const backlog = state.cursor != null || state.pending_details > 0 || !state.full_at || !!state.last_error;
     if (due && !backlog && now - (Date.parse(state.last_run_at || "") || 0) < OLIST_SALES_RUN_EVERY_MS) return { skipped: "rest", calls: usedCalls(), state };
     if (now < (Number(state.wait_until) || 0)) return { skipped: "wait", calls: usedCalls(), state };
 
-    const next = { ...state, last_run_at: new Date().toISOString(), last_error: null };
+    const next = { ...state, last_run_at: new Date().toISOString(), last_error: null, rate_limited: false };
     const listed = [], details = [];
     budget.use(); // gravação do estado no fim
     try {
@@ -4044,12 +4046,15 @@ async function syncOlistSales({ calls = 18, due = false } = {}) {
                 { method: "GET" }
             );
             const ids = (Array.isArray(missing) ? missing : []).map(r => r.id);
+            // A Olist pediu para esperar (429): os detalhes já lidos são gravados mesmo assim.
+            let stopped = null;
             for (const id of ids) {
                 if (!budget.has(2)) break;
                 budget.use();
                 try {
                     details.push({ ...olistSaleDetail({ ...(await olistRequest("/pedidos/" + encodeURIComponent(id))), id }), detail_at: new Date().toISOString() });
                 } catch (error) {
+                    if (error?.status === 429) { stopped = error; break; }
                     if (error?.status !== 404 && error?.status !== 400) throw error;
                     // Pedido que não existe mais: fica sem itens, para não tentar de novo a cada execução.
                     details.push({ id: Number(id), itens: [], pagamento: null, detail_at: new Date().toISOString() });
@@ -4057,13 +4062,18 @@ async function syncOlistSales({ calls = 18, due = false } = {}) {
             }
             if (details.length) { budget.use(); await upsertOlistSales(details); }
             next.pending_details = Math.max(0, ids.length - details.length);
+            if (stopped) throw stopped;
         }
     } catch (error) {
         if (error?.budget) {
             // Cota da execução acabou: o resto fica para a próxima.
         } else {
             next.last_error = safeString(error?.message).slice(0, 300) || "Erro ao ler a Olist.";
-            if (error?.status === 429) next.wait_until = Date.now() + OLIST_RATE_LIMIT_DELAY_MS;
+            if (error?.status === 429) {
+                next.wait_until = Date.now() + OLIST_RATE_LIMIT_DELAY_MS;
+                next.rate_limited = true;
+                next.last_error = "A Olist pediu uma pausa nas consultas.";
+            }
             if (/OLIST_AUTH/.test(next.last_error)) next.last_error = "A Olist pediu para reconectar. Use RECONECTAR OLIST em Estoque.";
             console.error("Vendas Olist:", next.last_error);
         }
@@ -4078,6 +4088,7 @@ function olistSalesStatusPayload(state) {
         full_at: state.full_at ? new Date(Number(state.full_at)).toISOString() : null,
         reading: state.cursor != null || !state.full_at,
         pending_details: Number(state.pending_details) || 0,
+        rate_limited: !!state.rate_limited,
         total_olist: Number.isFinite(Number(state.total_olist)) ? Number(state.total_olist) : null,
         last_error: state.last_error || null
     };
@@ -4104,6 +4115,9 @@ app.post("/api/admin/olist/sales/sync", requireAdmin, async (req, res) => {
         if (result.skipped === "disabled") return res.status(409).json({ success: false, message: "A integração com a Olist está desligada neste servidor." });
         if (result.skipped === "wait") return res.json({ success: true, done: false, wait: Math.ceil(((Number(result.state.wait_until) || Date.now()) - Date.now()) / 1000), status: olistSalesStatusPayload(result.state) });
         if (result.skipped) return res.status(503).json({ success: false, message: "Não foi possível ler a Olist agora. Tente de novo em instantes." });
+        // A Olist pediu para esperar no meio do lote: o painel espera e continua.
+        const waitMs = (Number(result.state.wait_until) || 0) - Date.now();
+        if (result.state.last_error && waitMs > 0) return res.json({ success: true, done: false, wait: Math.ceil(waitMs / 1000), details: result.details, status: olistSalesStatusPayload(result.state) });
         if (result.state.last_error) return res.status(502).json({ success: false, message: result.state.last_error, status: olistSalesStatusPayload(result.state) });
         return res.json({ success: true, done: result.done, listed: result.listed, details: result.details, status: olistSalesStatusPayload(result.state) });
     } catch (error) {
@@ -4205,7 +4219,7 @@ app.put("/api/admin/products/:id/variants",requireAdmin,async(req,res)=>{
         return res.status(500).json({success:false,message:"Não foi possível atualizar as variações."});
     }
 });
-app.get("/api/admin/orders",requireAdmin,async(req,res)=>{try{const d=await supabaseRequest("orders?select=*,order_items(*),payments(*)&order=created_at.desc");return res.json({success:true,orders:d||[]})}catch(e){console.error("Admin orders GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar os pedidos."})}});
+app.get("/api/admin/orders",requireAdmin,async(req,res)=>{try{const d=await supabaseRequest("orders?select=*,order_items(*),payments(*)&order=created_at.desc");return res.json({success:true,orders:(Array.isArray(d)?d:[]).map(o=>({...o,infinitepay:infinitePayNet(o)})),infinitepay_fees:currentInfinitePayFees()})}catch(e){console.error("Admin orders GET:",e);return res.status(500).json({success:false,message:"Não foi possível carregar os pedidos."})}});
 
 
 
