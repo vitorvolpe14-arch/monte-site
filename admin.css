@@ -2315,7 +2315,7 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
 .delta-value{font-weight:600;white-space:nowrap}
 .delta-value.up{color:var(--ad-up)}
 .delta-value.down{color:var(--ad-down)}
-.delta-value.flat,.delta-label{color:var(--ad-muted)}
+.delta-value.flat,.delta-value.neutral,.delta-label{color:var(--ad-muted)}
 /* O valor também: verde se subiu, vermelho se caiu e preto se ficou igual ao mesmo período do mês anterior. */
 .kpi-value.up{color:var(--ad-up)}
 .kpi-value.down{color:var(--ad-down)}
@@ -2660,11 +2660,16 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
 .dash-net{margin:0 0 16px}
 .net-flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;margin-top:14px;background:var(--ad-line);border:1px solid var(--ad-line);border-radius:var(--ad-radius-sm);overflow:hidden}
 .net-step{display:flex;flex-direction:column;gap:4px;min-width:0;padding:16px 18px;background:var(--ad-card)}
-.net-step span{font-size:13px;font-weight:500;color:var(--ad-ink-2)}
+.net-step-label{font-size:13px;font-weight:500;color:var(--ad-ink-2)}
 .net-step strong{margin:2px 0;font:600 24px/1.15 var(--ad-sans);letter-spacing:-.02em;color:var(--ad-ink);white-space:nowrap}
 .net-step small{font-size:12px;line-height:1.4;color:var(--ad-muted)}
 .net-step.is-net{background:var(--ad-soft)}
 .net-step.is-net strong{color:var(--ad-wine)}
+/* Verde se subiu, vermelho se caiu e preto se ficou igual ao mesmo período do mês anterior. */
+.net-step strong.up{color:var(--ad-up)}
+.net-step strong.down{color:var(--ad-down)}
+.net-step strong.flat{color:var(--ad-ink)}
+.net-step .delta{font-size:12px}
 .net-table td{vertical-align:top}
 .net-sub{display:block;margin-top:2px;font-size:11px;color:var(--ad-muted)}
 .dash-net-notes{display:grid;gap:8px;margin-top:12px}
