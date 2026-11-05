@@ -775,13 +775,15 @@ function periodNet(start,end){
 function sumTotal(list){return list.reduce((n,s)=>n+Number(s.total||0),0)}
 function soldPieces(list){return list.reduce((n,s)=>n+s.items.reduce((m,i)=>m+i.qty,0),0)}
 // Variação em relação ao mesmo período do mês anterior: seta + número + com o quê comparou (a cor nunca vai sozinha).
-// neutral: só a seta e o número, sem verde nem vermelho (taxas e juros: subir não é bom nem ruim).
-function deltaHtml(cur,prev,label,{neutral=false,empty="sem vendas"}={}){
+// A cor: classe "up" é verde e "down" é vermelho. neutral: sem verde nem vermelho (juros).
+// inverse: menor é melhor (taxas): caiu fica verde e subiu fica vermelho; a seta continua mostrando se subiu ou caiu.
+function trendTone(dir,{neutral=false,inverse=false}={}){return dir==="flat"?"flat":neutral?"neutral":inverse?(dir==="up"?"down":"up"):dir}
+function deltaHtml(cur,prev,label,{neutral=false,inverse=false,empty="sem vendas"}={}){
   if(!prev&&!cur)return `<span class="delta-label">${esc(label)}: ${esc(empty)}</span>`;
-  if(!prev)return `<span class="delta-value ${neutral?"neutral":"up"}">▲ novo</span> <span class="delta-label">${esc(label)}: ${esc(empty)}</span>`;
+  if(!prev)return `<span class="delta-value ${trendTone("up",{neutral,inverse})}">▲ novo</span> <span class="delta-label">${esc(label)}: ${esc(empty)}</span>`;
   const dir=window.DashCompare.trend(cur,prev),abs=Math.abs((cur-prev)/prev*100);
   const text=dir==="flat"?"= igual":(dir==="up"?"▲ ":"▼ ")+(abs>=999?"999+":abs<0.1?"menos de 0,1":abs.toLocaleString("pt-BR",{maximumFractionDigits:abs<10?1:0}))+"%";
-  return `<span class="delta-value ${neutral&&dir!=="flat"?"neutral":dir}">${text}</span> <span class="delta-label">${esc(label)}</span>`;
+  return `<span class="delta-value ${trendTone(dir,{neutral,inverse})}">${text}</span> <span class="delta-label">${esc(label)}</span>`;
 }
 // O número em verde quando subiu, em vermelho quando caiu e na cor normal quando ficou igual.
 function setTrend(el,cur,prev){if(!el)return;const dir=window.DashCompare.trend(cur,prev);["up","down","flat"].forEach(c=>el.classList.toggle(c,c===dir))}
@@ -1002,10 +1004,11 @@ function netTotals(range){
     charged:(sum(txs,t=>t.valor)+sum(calc,s=>s.pay.paid))/100,fee:(sum(txs,t=>t.taxa)+sum(calc,s=>s.pay.fee))/100,net:(sum(txs,t=>t.liquido)+sum(calc,s=>s.pay.net))/100};
 }
 // Um número do quadro do líquido com a comparação com o mesmo período do mês anterior:
-// verde quando subiu, vermelho quando caiu, preto quando igual. Taxas e juros ficam neutros.
-function netStep(r,label,value,sub,cur,prev,{neutral=false,empty="sem vendas",cls=""}={}){
-  const dir=neutral?"":window.DashCompare.trend(cur,prev);
-  return `<div class="net-step${cls}"><span class="net-step-label">${esc(label)}</span><strong${dir?` class="${dir}"`:""}>${esc(value)}</strong><span class="delta">${deltaHtml(cur,prev,r.compare,{neutral,empty})}</span><small>${esc(sub)}</small></div>`;
+// verde quando subiu, vermelho quando caiu, preto quando igual. Taxas ao contrário (inverse):
+// verde quando caíram, vermelho quando subiram. Juros ficam neutros.
+function netStep(r,label,value,sub,cur,prev,{neutral=false,inverse=false,empty="sem vendas",cls=""}={}){
+  const tone=neutral?"":trendTone(window.DashCompare.trend(cur,prev),{inverse});
+  return `<div class="net-step${cls}"><span class="net-step-label">${esc(label)}</span><strong${tone?` class="${tone}"`:""}>${esc(value)}</strong><span class="delta">${deltaHtml(cur,prev,r.compare,{neutral,inverse,empty})}</span><small>${esc(sub)}</small></div>`;
 }
 // Valor líquido de cada venda no período, calculado pelas taxas: site (exato, pelas taxas do
 // link de pagamento) e loja (estimado), conforme "Vendas de". Vale quando o período não tem
@@ -1024,7 +1027,7 @@ function renderDashboardNetCalc(r){
   setHTML($("dashNet"),
     netStep(r,dashSource==="site"?"Vendido no site":dashSource==="olist"?"Vendido na loja":"Vendido",money(sale),rows.length?`${fmtInt(rows.length)} ${plural(rows.length,"venda","vendas")} · valor dos pedidos`:"nenhuma venda no período",sale,P.sale)+
     netStep(r,"+ Juros pagos pelas clientes",money(interest),withInterest?`${fmtInt(withInterest)} ${plural(withInterest,"venda parcelada","vendas parceladas")} com juros no site`:"nenhuma venda com juros",interest,P.interest,{neutral:true,empty:"sem juros"})+
-    netStep(r,"− Taxas da InfinitePay",(estFee?"≈ ":"")+money(fee),paid?`${pct(fee/paid*100)} do valor pago${estFee?` · ${money(estFee)} estimados na loja`:""}${pix?` · ${fmtInt(pix)} no Pix, sem taxa`:""}`:"—",fee,P.fee,{neutral:true,empty:"sem taxas"})+
+    netStep(r,"− Taxas da InfinitePay",(estFee?"≈ ":"")+money(fee),paid?`${pct(fee/paid*100)} do valor pago${estFee?` · ${money(estFee)} estimados na loja`:""}${pix?` · ${fmtInt(pix)} no Pix, sem taxa`:""}`:"—",fee,P.fee,{inverse:true,empty:"sem taxas"})+
     netStep(r,"= Líquido na InfinitePay",(estFee?"≈ ":"")+money(net),sale?`${pct(net/sale*100)} do vendido · o que entra na conta`:"o que entra na conta",net,P.net,{cls:" is-net"}));
   const cell=s=>{const n=s.pay,approx=n.estimated&&n.fee?"≈ ":"";
     const when=s.source==="site"?date(s.order.paid_at||s.order.created_at):new Date(s.time).toLocaleDateString("pt-BR");
@@ -1124,7 +1127,7 @@ function renderDashboardNetReport(r){
   setHTML($("dashNet"),
     netStep(r,src==="site"?"Vendido no site":src==="olist"?"Vendido na loja":"Vendido",money(sold),rows.length?`${fmtInt(rows.length)} ${plural(rows.length,"venda registrada","vendas registradas")}${src==="site"?"":src==="olist"?" na Olist":" (site e Olist)"}`:"nenhuma venda registrada",sold,P.sold)+
     netStep(r,"Cobrado na InfinitePay",money(charged),`${fmtInt(txs.length)} ${plural(txs.length,"cobrança aprovada","cobranças aprovadas")} no relatório${calc.length?` + ${fmtInt(calc.length)} ${plural(calc.length,"venda","vendas")} depois dele`:""}`,charged,P.charged)+
-    netStep(r,"− Taxas da InfinitePay",approx+money(fee),charged?`${pct(fee/charged*100)} do cobrado${estFee?` · ${money(estFee)} estimados`:""}`:"—",fee,P.fee,{neutral:true,empty:"sem taxas"})+
+    netStep(r,"− Taxas da InfinitePay",approx+money(fee),charged?`${pct(fee/charged*100)} do cobrado${estFee?` · ${money(estFee)} estimados`:""}`:"—",fee,P.fee,{inverse:true,empty:"sem taxas"})+
     netStep(r,"= Líquido na InfinitePay",approx+money(net),"o que entra na conta",net,P.net,{cls:" is-net"}));
   const txRow=t=>{
     const m=M.byTx.get(t);let ref,venda="—";
