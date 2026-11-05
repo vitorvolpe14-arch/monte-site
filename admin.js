@@ -822,7 +822,9 @@ function renderDashboardHero(sales){
   const total=sumTotal(cur);
   $("statRevenue").textContent=money(total);
   setHTML($("heroDelta"), deltaHtml(total,sumTotal(prev),`vs ${day===1?"1º":"1º a "+Math.min(day,prevDays)} de ${prevMonth}`));
-  if($("heroNet")){const n=periodNet(start,now.getTime());$("heroNet").textContent=cur.length||n.txs.length?`Líquido na InfinitePay: ${(n.approx?"≈ ":"")+money(n.net)}`:""}
+  // O líquido conta as mesmas vendas do faturamento: as da Olist só têm o dia (ficam ao meio-dia),
+  // então a venda de hoje lançada na Olist entra mesmo antes do meio-dia.
+  if($("heroNet")){const n=periodNet(start,new Date(now.getFullYear(),now.getMonth(),day+1).getTime()-1);$("heroNet").textContent=cur.length||n.txs.length?`Líquido na InfinitePay: ${(n.approx?"≈ ":"")+money(n.net)}`:""}
   $("statRevenueHint").textContent=cur.length?`${cur.length} ${plural(cur.length,"venda","vendas")} · ticket médio ${money(total/cur.length)}`:"Nenhuma venda este mês ainda";
 }
 // Datas no formato dos campos (AAAA-MM-DD), no fuso do navegador.
