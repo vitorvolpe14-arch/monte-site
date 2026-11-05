@@ -7,6 +7,7 @@ const cors = require("cors");
 const { pixLinkDiscountPercent, isExpectedPixAmount, paidPriceKey } = require("./pix-discount.js");
 const { PROMOTION_GIFTS_CEILING, promotionGiftCount } = require("./gift-promotion.js");
 const { OLIST_SALE_SITUATIONS, olistSaleSummary, olistSaleDetail } = require("./olist-sales.js");
+const { olistWaitingSales } = require("./olist-stock-waiting.js");
 const { infinitePayNet, currentInfinitePayFees, olistStoreNet, cardBillingByMonth, currentMachineFees } = require("./infinitepay-fees.js");
 const { sanitizeReportRow, reportRowKey, reportUntil, sanitizeSummary, mergeCoverage, reportTotals } = require("./infinitepay-report-import.js");
 
@@ -3251,8 +3252,10 @@ app.post("/api/admin/olist/sku-sync", requireAdmin, async (req, res) => {
    site igual a ela.
    - Estoque de cada cor = disponível na Olist, menos as vendas do site
      que a Olist ainda não registrou (pedidos pagos nos últimos dias que
-     ainda não foram enviados e não aparecem como reservados lá). Sobe e
-     desce, para ficar igual à Olist sem vender o que já foi vendido.
+     ainda não foram enviados, não aparecem como reservados lá e cuja
+     baixa ainda não apareceu no disponível da Olist; ver
+     olist-stock-waiting.js). Sobe e desce, para ficar igual à Olist sem
+     vender o que já foi vendido.
    - Preço e preço promocional (promoção na Olist vira SALE no site; a
      SALE feita à mão no painel continua até a Olist ter promoção).
    - Cores: o nome da cor segue a Olist e cores novas da Olist (com
@@ -3683,7 +3686,7 @@ async function syncProductWithOlist(product, ctx) {
                     state.links[created.id] = { item: Number(variation.id), parent: id };
                     const target = stock.available;
                     const change = await setSiteStock(created, target, "Cor nova da Olist: " + stock.available + " disponível", budget);
-                    snap(created, { st: "igual", olist: stock.available, res: stock.reserved, pend: 0, target, site: change ? change.to : 0 });
+                    snap(created, { st: "igual", olist: stock.available, res: stock.reserved, sold: 0, pend: 0, target, site: change ? change.to : 0 });
                     ctx.changes.push({ ...label(created), what: "nova_cor", from: "", to: color + " · " + target + " em estoque" });
                     publicCache.delete("catalog");
                 }
@@ -3704,7 +3707,9 @@ async function syncProductWithOlist(product, ctx) {
             snap(variant, { st: "erro", site: Number(variant.stock || 0) });
             continue;
         }
-        const waiting = Math.max(0, (ctx.pending.get(String(variant.id)) || 0) - stock.reserved);
+        // Vendas do site que a Olist ainda não baixou: as que ela já baixou não são descontadas de novo.
+        const sold = ctx.pending.get(String(variant.id)) || 0;
+        const waiting = olistWaitingSales({ sold, available: stock.available, reserved: stock.reserved, prev: state.snapshot.variants[variant.id] });
         const target = Math.max(0, stock.available - waiting);
         const change = await setSiteStock(
             variant,
@@ -3716,7 +3721,7 @@ async function syncProductWithOlist(product, ctx) {
             ctx.changes.push({ ...label(variant), what: "estoque", from: change.from, to: change.to });
             publicCache.delete("catalog");
         }
-        snap(variant, { st: "igual", olist: stock.available, res: stock.reserved, pend: waiting, target, site: change ? change.to : Number(variant.stock || 0) });
+        snap(variant, { st: "igual", olist: stock.available, res: stock.reserved, sold, pend: waiting, target, site: change ? change.to : Number(variant.stock || 0) });
     }
 }
 
