@@ -2267,11 +2267,11 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
 .welcome-revenue strong{font:600 clamp(40px,4.4vw,58px)/1 var(--ad-sans);letter-spacing:-.03em;color:var(--ad-light)}
 .welcome-revenue small{font-size:12.5px;color:rgba(255,255,255,.6)}
 .welcome .delta{justify-content:flex-end;font-size:13px}
-.welcome .delta-value.up{color:#86d9a6}
-.welcome .delta-value.down{color:#f87171}
+.welcome .delta-value.up{color:#2ee86f}
+.welcome .delta-value.down{color:#ff4d4d}
 .welcome .delta-value.flat,.welcome .delta-label{color:rgba(255,255,255,.62)}
-.welcome-revenue strong.up{color:#86d9a6}
-.welcome-revenue strong.down{color:#f87171}
+.welcome-revenue strong.up{color:#2ee86f}
+.welcome-revenue strong.down{color:#ff4d4d}
 
 /* Precisa da sua atenção: só aparece com alguma pendência. */
 .todo-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin:0 0 8px}
