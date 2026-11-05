@@ -81,7 +81,7 @@ async function init(){
 function showLogin(){$("loginView").classList.remove("hidden");$("appView").classList.add("hidden");$("loginEmail").focus()}
 async function login(e){e.preventDefault();$("loginError").textContent="";try{await enterApp(await api("/api/admin/login",{method:"POST",body:JSON.stringify({email:$("loginEmail").value.trim(),password:$("loginPassword").value})}))}catch(e){$("loginError").textContent=e.message}}
 async function logout(){try{await api("/api/admin/logout",{method:"POST"})}catch{}products=[];orders=[];showLogin();$("loginPassword").value=""}
-async function enterApp(s){$("loginView").classList.add("hidden");$("appView").classList.remove("hidden");$("adminEmail").textContent=s.email||"Administrador";if(typeof window.ensureCarouselSharePreview==="function")window.ensureCarouselSharePreview();loadOlistSales();loadInfinitePayReport();try{await Promise.all([loadProducts(),loadOrders(),loadStockMovements()]);renderDashboard()}catch(e){console.error("Falha ao carregar dados do painel:",e);$("loginError").textContent="Login realizado, mas houve um erro ao carregar os dados. Atualize a página e tente novamente.";renderDashboard()}}
+async function enterApp(s){$("loginView").classList.add("hidden");$("appView").classList.remove("hidden");$("adminEmail").textContent=s.email||"Administrador";if(typeof window.ensureCarouselSharePreview==="function")window.ensureCarouselSharePreview();loadOlistSales().then(()=>{if(olistSalesEnabled)syncOlistSalesNow()});loadInfinitePayReport();try{await Promise.all([loadProducts(),loadOrders(),loadStockMovements()]);renderDashboard()}catch(e){console.error("Falha ao carregar dados do painel:",e);$("loginError").textContent="Login realizado, mas houve um erro ao carregar os dados. Atualize a página e tente novamente.";renderDashboard()}}
 function showSection(s){document.querySelectorAll(".section").forEach(x=>x.classList.add("hidden"));$(s+"Section").classList.remove("hidden");document.querySelectorAll(".nav-button").forEach(b=>{const on=b.dataset.section===s;b.classList.toggle("active",on);if(on&&window.matchMedia&&window.matchMedia("(max-width:800px)").matches)b.scrollIntoView({block:"nearest",inline:"center"})});window.scrollTo(0,0);$("pageTitle").textContent={dashboard:"Visão geral",products:"Produtos",carousel:"Banners",orders:"Pedidos",coupons:"Cupons",promotions:"Promoções",stock:"Estoque",analytics:"Analytics & Financeiro"}[s];if(s==="analytics")loadAnalytics();if(s==="products")renderProducts();if(s==="carousel"&&typeof window.loadCarousel==="function")window.loadCarousel();if(s==="orders")renderOrders();if(s==="coupons")loadCoupons();if(s==="promotions")loadPromotions();if(s==="stock"){renderStock();loadStockSyncStatus()}}
 async function loadProducts(){const d=await api("/api/admin/products");products=d.products||[];renderProducts();renderStock();renderDashboard();renderPhotoOptimizerInfo()}
 async function loadStockMovements(){try{const d=await api("/api/admin/stock/movements");renderStockMovements(d.movements||[])}catch(e){setHTML($("stockMovements"), '<p>'+esc(e.message)+'</p>')}}
@@ -940,6 +940,8 @@ function hideChartTip(box){box._active=null;const tip=box.querySelector(".dc-tip
   ["dashFrom","dashTo"].forEach(id=>{const el=$(id);if(el)el.addEventListener("change",pickDates)});
   document.querySelectorAll(".dash-src").forEach(b=>b.addEventListener("click",()=>{dashSource=DASH_SOURCES[b.dataset.source]?b.dataset.source:"all";try{localStorage.setItem("monteDashSource",dashSource)}catch{}renderDashboard()}));
   const sync=$("olistSalesSync");if(sync)sync.onclick=syncOlistSalesNow;
+  // De volta ao painel (ex.: depois de lançar a venda na Olist): lê a Olist de novo.
+  document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&olistSalesEnabled&&!$("appView").classList.contains("hidden")&&Date.now()-olistSalesReadAt>2*60*1000)syncOlistSalesNow()});
 })();
 async function loadOlistSales(){
   try{const d=await api("/api/admin/olist/sales");olistSales=Array.isArray(d.sales)?d.sales:[];if(Array.isArray(d.sale_situations)&&d.sale_situations.length)olistSaleSituations=d.sale_situations;olistSalesStatus=d.status||null;olistSalesEnabled=d.enabled!==false;machineFees=d.machine_fees||null;olistSalesError=""}
@@ -947,12 +949,15 @@ async function loadOlistSales(){
   olistSalesLoaded=true;renderDashboard();
 }
 // Lê a Olist agora: o servidor lê um lote por chamada; o painel chama até terminar.
+// A primeira chamada relê a lista de pedidos na hora (fresh), para a venda lançada há pouco aparecer.
+let olistSalesReadAt=0;
 async function syncOlistSalesNow(){
   const button=$("olistSalesSync"),box=$("olistSalesStatus");if(!button||button.disabled)return;
+  olistSalesReadAt=Date.now();
   button.disabled=true;button.textContent="LENDO A OLIST...";
   try{
     for(let step=0;step<40;step++){
-      const d=await api("/api/admin/olist/sales/sync",{method:"POST",body:"{}"});
+      const d=await api("/api/admin/olist/sales/sync",{method:"POST",body:JSON.stringify(step===0?{fresh:true}:{})});
       if(d.status)olistSalesStatus=d.status;
       if(d.done)break;
       if(box)box.textContent=d.wait?`A Olist pediu para esperar um pouco. Continuando em ${d.wait} s…`:`Importando as vendas da Olist… ${step+1}º lote lido.`;

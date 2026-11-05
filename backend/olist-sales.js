@@ -88,4 +88,14 @@ function olistSaleDetail(detail) {
     return { id: Number(detail.id), itens, pagamento: meio.slice(0, 60) || null, pagamento_info: pagamentoInfo };
 }
 
-module.exports = { OLIST_SALE_SITUATIONS, olistSaleDate, olistMoney, olistSaleSummary, olistSaleDetail };
+// A lista de pedidos da Olist (a primeira página) é relida no máximo a cada 4 minutos: a leitura
+// automática roda de 5 em 5 minutos e pega a venda lançada na Olist nesse tempo. fresh = o botão
+// ATUALIZAR DA OLIST (ou o painel ao abrir), que relê na hora; full = leitura completa em andamento.
+const OLIST_SALES_LIST_EVERY_MS = 4 * 60 * 1000;
+
+function olistSalesListNow({ listedAt = null, now = Date.now(), fresh = false, full = false } = {}) {
+    if (full || fresh) return true;
+    return now - (Date.parse(listedAt || "") || 0) >= OLIST_SALES_LIST_EVERY_MS;
+}
+
+module.exports = { OLIST_SALE_SITUATIONS, OLIST_SALES_LIST_EVERY_MS, olistSaleDate, olistMoney, olistSaleSummary, olistSaleDetail, olistSalesListNow };
