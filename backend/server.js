@@ -6,7 +6,7 @@ const path = require("path");
 const cors = require("cors");
 const { pixLinkDiscountPercent, isExpectedPixAmount, paidPriceKey } = require("./pix-discount.js");
 const { PROMOTION_GIFTS_CEILING, promotionGiftCount } = require("./gift-promotion.js");
-const { OLIST_SALE_SITUATIONS, olistSaleSummary, olistSaleDetail } = require("./olist-sales.js");
+const { OLIST_SALE_SITUATIONS, olistSaleSummary, olistSaleDetail, olistSalesListNow } = require("./olist-sales.js");
 const { olistWaitingSales } = require("./olist-stock-waiting.js");
 const { infinitePayNet, currentInfinitePayFees, olistStoreNet, cardBillingByMonth, currentMachineFees } = require("./infinitepay-fees.js");
 const { sanitizeReportRow, reportRowKey, reportUntil, sanitizeSummary, mergeCoverage, reportTotals } = require("./infinitepay-report-import.js");
@@ -3969,12 +3969,16 @@ app.put("/api/admin/olist/sync-settings", requireAdmin, async (req, res) => {
    Depois, os itens e o pagamento de cada venda de fora do site (um pedido por
    chamada). Os pedidos que o próprio site criou na Olist (MONTE-... ou o id guardado
    no pedido) ficam com from_site e não contam como "fora do site".
+   Roda sozinha de 5 em 5 minutos; o botão ATUALIZAR DA OLIST (e o painel ao abrir)
+   relê a lista na hora, para a venda lançada há pouco na Olist aparecer.
    Cada execução respeita a cota de chamadas (Cloudflare: 50 por execução).
 ===================================================== */
 const OLIST_SALES_STATE_KEY = "olist_sales_sync";
 const OLIST_SALES_PAGE = 100;
 const OLIST_SALES_FULL_EVERY_MS = 24 * 60 * 60 * 1000;
-const OLIST_SALES_RUN_EVERY_MS = 14 * 60 * 1000;
+// A execução automática vem a cada 5 minutos (cron no minuto 4, 9, 14...); o intervalo
+// mínimo fica um pouco abaixo disso para nenhuma ser pulada.
+const OLIST_SALES_RUN_EVERY_MS = 4 * 60 * 1000;
 // Resumo e detalhe de cada pedido: backend/olist-sales.js.
 async function readOlistSalesState() {
     const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + OLIST_SALES_STATE_KEY + "&select=value&limit=1", { method: "GET" });
@@ -3997,7 +4001,8 @@ async function upsertOlistSales(rows) {
 }
 
 // Uma execução da importação. "due" = só roda se já passou o intervalo ou se ainda há o que ler.
-async function syncOlistSales({ calls = 18, due = false } = {}) {
+// "fresh" = relê a lista de pedidos da Olist agora, mesmo que tenha sido lida há pouco.
+async function syncOlistSales({ calls = 18, due = false, fresh = false } = {}) {
     if (!OLIST_SYNC_ENABLED) return { skipped: "disabled", calls: 0 };
     const budget = createCallBudget(calls);
     const usedCalls = () => calls - budget.left;
@@ -4022,9 +4027,9 @@ async function syncOlistSales({ calls = 18, due = false } = {}) {
         // 1) Lista: a leitura completa do dia (continua do cursor) ou só a primeira página.
         let offset = state.cursor != null ? Number(state.cursor) || 0 : 0;
         const full = state.cursor != null || !state.full_at || now - Number(state.full_at) > OLIST_SALES_FULL_EVERY_MS;
-        // Sem leitura completa pendente, a primeira página é relida no máximo a cada 10 minutos
-        // (enquanto faltam detalhes, a cota vai para eles).
-        const listNow = full || now - (Date.parse(state.listed_at || "") || 0) >= 10 * 60 * 1000;
+        // Sem leitura completa pendente, a primeira página é relida no máximo a cada 4 minutos
+        // (enquanto faltam detalhes, a cota vai para eles), ou na hora com "fresh".
+        const listNow = olistSalesListNow({ listedAt: state.listed_at, now, fresh, full });
         if (listNow) next.listed_at = new Date().toISOString();
         let pages = 0;
         while (listNow && budget.has(4) && pages < (full ? 4 : 1)) {
@@ -4228,7 +4233,7 @@ app.post("/api/admin/infinitepay/report", requireAdmin, async (req, res) => {
 // O painel chama em sequência até done (cada chamada lê um lote).
 app.post("/api/admin/olist/sales/sync", requireAdmin, async (req, res) => {
     try {
-        const result = await syncOlistSales({ calls: WORKER_CALL_LIMIT - 6 });
+        const result = await syncOlistSales({ calls: WORKER_CALL_LIMIT - 6, fresh: req.body?.fresh === true });
         if (result.skipped === "disabled") return res.status(409).json({ success: false, message: "A integração com a Olist está desligada neste servidor." });
         if (result.skipped === "wait") return res.json({ success: true, done: false, wait: Math.ceil(((Number(result.state.wait_until) || Date.now()) - Date.now()) / 1000), status: olistSalesStatusPayload(result.state) });
         if (result.skipped) return res.status(503).json({ success: false, message: "Não foi possível ler a Olist agora. Tente de novo em instantes." });

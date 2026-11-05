@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { OLIST_SALE_SITUATIONS, olistSaleDate, olistMoney, olistSaleSummary, olistSaleDetail } = require("../backend/olist-sales.js");
+const { OLIST_SALE_SITUATIONS, OLIST_SALES_LIST_EVERY_MS, olistSaleDate, olistMoney, olistSaleSummary, olistSaleDetail, olistSalesListNow } = require("../backend/olist-sales.js");
 
 test("data do pedido em vários formatos", () => {
     assert.equal(olistSaleDate("2026-10-08"), "2026-10-08");
@@ -93,4 +93,18 @@ test("itens e pagamento do detalhe", () => {
 test("situações que contam como venda", () => {
     assert.deepEqual(OLIST_SALE_SITUATIONS, [1, 3, 4, 5, 6, 7]);
     [0, 2, 8, 9, 10].forEach(s => assert.ok(!OLIST_SALE_SITUATIONS.includes(s)));
+});
+
+test("quando reler a lista de pedidos da Olist", () => {
+    const now = Date.parse("2026-11-05T13:51:00Z");
+    const ago = ms => new Date(now - ms).toISOString();
+    // Leitura automática: a cada execução de 5 em 5 minutos, nunca mais de uma vez no intervalo.
+    assert.ok(OLIST_SALES_LIST_EVERY_MS <= 5 * 60 * 1000);
+    assert.equal(olistSalesListNow({ listedAt: ago(5 * 60 * 1000), now }), true);
+    assert.equal(olistSalesListNow({ listedAt: ago(60 * 1000), now }), false);
+    assert.equal(olistSalesListNow({ listedAt: null, now }), true);
+    // Botão ATUALIZAR DA OLIST (e o painel ao abrir): relê na hora, mesmo lida há pouco.
+    assert.equal(olistSalesListNow({ listedAt: ago(60 * 1000), now, fresh: true }), true);
+    // Leitura completa em andamento: sempre lê.
+    assert.equal(olistSalesListNow({ listedAt: ago(1000), now, full: true }), true);
 });
