@@ -775,12 +775,13 @@ function periodNet(start,end){
 function sumTotal(list){return list.reduce((n,s)=>n+Number(s.total||0),0)}
 function soldPieces(list){return list.reduce((n,s)=>n+s.items.reduce((m,i)=>m+i.qty,0),0)}
 // Variação em relação ao mesmo período do mês anterior: seta + número + com o quê comparou (a cor nunca vai sozinha).
-function deltaHtml(cur,prev,label){
-  if(!prev&&!cur)return `<span class="delta-label">${esc(label)}: sem vendas</span>`;
-  if(!prev)return `<span class="delta-value up">▲ novo</span> <span class="delta-label">${esc(label)}: sem vendas</span>`;
+// neutral: só a seta e o número, sem verde nem vermelho (taxas e juros: subir não é bom nem ruim).
+function deltaHtml(cur,prev,label,{neutral=false,empty="sem vendas"}={}){
+  if(!prev&&!cur)return `<span class="delta-label">${esc(label)}: ${esc(empty)}</span>`;
+  if(!prev)return `<span class="delta-value ${neutral?"neutral":"up"}">▲ novo</span> <span class="delta-label">${esc(label)}: ${esc(empty)}</span>`;
   const dir=window.DashCompare.trend(cur,prev),abs=Math.abs((cur-prev)/prev*100);
   const text=dir==="flat"?"= igual":(dir==="up"?"▲ ":"▼ ")+(abs>=999?"999+":abs<0.1?"menos de 0,1":abs.toLocaleString("pt-BR",{maximumFractionDigits:abs<10?1:0}))+"%";
-  return `<span class="delta-value ${dir}">${text}</span> <span class="delta-label">${esc(label)}</span>`;
+  return `<span class="delta-value ${neutral&&dir!=="flat"?"neutral":dir}">${text}</span> <span class="delta-label">${esc(label)}</span>`;
 }
 // O número em verde quando subiu, em vermelho quando caiu e na cor normal quando ficou igual.
 function setTrend(el,cur,prev){if(!el)return;const dir=window.DashCompare.trend(cur,prev);["up","down","flat"].forEach(c=>el.classList.toggle(c,c===dir))}
@@ -844,7 +845,7 @@ function dashRange(){
   const days=Math.round((to-from)/DAY_MS)+1;
   const p=window.DashCompare.previousMonthRange(from,to,now);
   const end=new Date(to.getFullYear(),to.getMonth(),to.getDate()+1).getTime()-1;
-  return{start:from.getTime(),end,prevStart:p.start,prevEnd:p.end,days,from:ymd(from),to:ymd(to),max:ymd(today),
+  return{start:from.getTime(),end,prevStart:p.start,prevEnd:p.end,prev:{start:p.start,end:p.end-1},days,from:ymd(from),to:ymd(to),max:ymd(today),
     label:days===1?"em "+brDate(from):`de ${brDate(from)} a ${brDate(to)}`,compare:p.from.getTime()===p.to.getTime()?"vs "+brShort(p.from):`vs ${brShort(p.from)} a ${brShort(p.to)}`};
 }
 function renderDashboardPeriod(sales){
@@ -990,25 +991,41 @@ function sumPay(rows,key){return Math.round(rows.reduce((n,s)=>n+Math.round(Numb
 function orderCodeLabel(o){return o.order_code?"MONTÊ-"+o.order_code:(o.order_nsu||"—")}
 function lowerFirst(t){t=String(t||"");return t.charAt(0).toLowerCase()+t.slice(1)}
 function monthLabel(ym){const [y,m]=String(ym).split("-").map(Number);return y&&m?new Date(y,m-1,1).toLocaleDateString("pt-BR",{month:"short",year:"numeric"}).replace(". de "," ").replace(" de "," "):ym}
+// Totais do quadro do líquido num período (start e end inclusos): nos dias que o relatório da
+// InfinitePay cobre, os valores dele; no resto, o calculado pelas taxas. Serve para o período
+// escolhido e para o mesmo período do mês anterior, com as mesmas contas.
+function netTotals(range){
+  const inRange=t=>t>=range.start&&t<=range.end,cents=v=>Math.round(Number(v||0)*100),sum=(list,f)=>list.reduce((n,x)=>n+cents(f(x)),0);
+  const rows=dashRows().filter(s=>inRange(s.time)),pay=rows.filter(s=>s.pay);
+  const txs=ipTxIn(range.start,range.end,dashSource),calc=pay.filter(s=>!ipCovered(s.time,s.source==="site"));
+  return{rows,pay,txs,calc,sold:sumTotal(rows),sale:sumPay(pay,"sale"),interest:sumPay(pay,"interest"),
+    charged:(sum(txs,t=>t.valor)+sum(calc,s=>s.pay.paid))/100,fee:(sum(txs,t=>t.taxa)+sum(calc,s=>s.pay.fee))/100,net:(sum(txs,t=>t.liquido)+sum(calc,s=>s.pay.net))/100};
+}
+// Um número do quadro do líquido com a comparação com o mesmo período do mês anterior:
+// verde quando subiu, vermelho quando caiu, preto quando igual. Taxas e juros ficam neutros.
+function netStep(r,label,value,sub,cur,prev,{neutral=false,empty="sem vendas",cls=""}={}){
+  const dir=neutral?"":window.DashCompare.trend(cur,prev);
+  return `<div class="net-step${cls}"><span class="net-step-label">${esc(label)}</span><strong${dir?` class="${dir}"`:""}>${esc(value)}</strong><span class="delta">${deltaHtml(cur,prev,r.compare,{neutral,empty})}</span><small>${esc(sub)}</small></div>`;
+}
 // Valor líquido de cada venda no período, calculado pelas taxas: site (exato, pelas taxas do
 // link de pagamento) e loja (estimado), conforme "Vendas de". Vale quando o período não tem
 // relatório da InfinitePay.
 function renderDashboardNetCalc(r){
   const inRange=t=>t>=r.start&&t<=r.end;
-  const rows=dashRows().filter(s=>s.pay&&inRange(s.time)).sort((a,b)=>b.time-a.time);
-  const sale=sumPay(rows,"sale"),paid=sumPay(rows,"paid"),interest=sumPay(rows,"interest"),fee=sumPay(rows,"fee"),net=sumPay(rows,"net");
+  const T=netTotals(r),P=netTotals(r.prev);
+  const rows=T.pay.slice().sort((a,b)=>b.time-a.time);
+  const sale=T.sale,paid=T.charged,interest=T.interest,fee=T.fee,net=T.net;
   const est=rows.filter(s=>s.pay.estimated),estFee=sumPay(est,"fee");
   const withInterest=rows.filter(s=>s.pay.interest>0).length,pix=rows.filter(s=>s.pay.method==="pix").length;
   const period=r.label;
   const who={site:"Vendas do site",olist:"Vendas da loja (Olist)",all:"Vendas do site e da loja"}[dashSource];
   $("dashNetTitle").textContent=dashSource==="site"?"Valor líquido do site na InfinitePay":dashSource==="olist"?"Valor líquido da loja na InfinitePay":"Valor líquido na InfinitePay";
   $("dashNetHint").textContent=`${who} ${period}, depois das taxas da InfinitePay, para conferir com o app dela.${dashSource!=="site"?" Na loja, o que a Olist não detalha (débito ou forma de pagamento não informada) fica estimado (≈).":""}`;
-  const step=(label,value,sub,cls="")=>`<div class="net-step${cls}"><span>${esc(label)}</span><strong>${esc(value)}</strong><small>${esc(sub)}</small></div>`;
   setHTML($("dashNet"),
-    step(dashSource==="site"?"Vendido no site":dashSource==="olist"?"Vendido na loja":"Vendido",money(sale),rows.length?`${fmtInt(rows.length)} ${plural(rows.length,"venda","vendas")} · valor dos pedidos`:"nenhuma venda no período")+
-    step("+ Juros pagos pelas clientes",money(interest),withInterest?`${fmtInt(withInterest)} ${plural(withInterest,"venda parcelada","vendas parceladas")} com juros no site`:"nenhuma venda com juros")+
-    step("− Taxas da InfinitePay",(estFee?"≈ ":"")+money(fee),paid?`${pct(fee/paid*100)} do valor pago${estFee?` · ${money(estFee)} estimados na loja`:""}${pix?` · ${fmtInt(pix)} no Pix, sem taxa`:""}`:"—")+
-    step("= Líquido na InfinitePay",(estFee?"≈ ":"")+money(net),sale?`${pct(net/sale*100)} do vendido · o que entra na conta`:"o que entra na conta"," is-net"));
+    netStep(r,dashSource==="site"?"Vendido no site":dashSource==="olist"?"Vendido na loja":"Vendido",money(sale),rows.length?`${fmtInt(rows.length)} ${plural(rows.length,"venda","vendas")} · valor dos pedidos`:"nenhuma venda no período",sale,P.sale)+
+    netStep(r,"+ Juros pagos pelas clientes",money(interest),withInterest?`${fmtInt(withInterest)} ${plural(withInterest,"venda parcelada","vendas parceladas")} com juros no site`:"nenhuma venda com juros",interest,P.interest,{neutral:true,empty:"sem juros"})+
+    netStep(r,"− Taxas da InfinitePay",(estFee?"≈ ":"")+money(fee),paid?`${pct(fee/paid*100)} do valor pago${estFee?` · ${money(estFee)} estimados na loja`:""}${pix?` · ${fmtInt(pix)} no Pix, sem taxa`:""}`:"—",fee,P.fee,{neutral:true,empty:"sem taxas"})+
+    netStep(r,"= Líquido na InfinitePay",(estFee?"≈ ":"")+money(net),sale?`${pct(net/sale*100)} do vendido · o que entra na conta`:"o que entra na conta",net,P.net,{cls:" is-net"}));
   const cell=s=>{const n=s.pay,approx=n.estimated&&n.fee?"≈ ":"";
     const when=s.source==="site"?date(s.order.paid_at||s.order.created_at):new Date(s.time).toLocaleDateString("pt-BR");
     const ref=s.source==="site"?`<button class="link-button" data-click="openOrder" data-args="${esc(JSON.stringify([s.order.id]))}">${esc(orderCodeLabel(s.order))}</button>`:`<span class="net-ref">Loja · nº ${esc(s.olist.numero||"—")}</span>`;
@@ -1090,25 +1107,25 @@ function renderDashboardNet(r){
 }
 // Período com relatório: os valores do relatório e, depois dele, o calculado.
 function renderDashboardNetReport(r){
-  const src=dashSource,inRange=t=>t>=r.start&&t<=r.end,M=ipMatches(),cov=ipLastCoverage(r);
-  const txs=ipTxIn(r.start,r.end,src).sort((a,b)=>b.time-a.time);
-  const rows=dashRows().filter(s=>inRange(s.time));
-  const calc=rows.filter(s=>s.pay&&!ipCovered(s.time,s.source==="site")).sort((a,b)=>b.time-a.time);
+  const src=dashSource,M=ipMatches(),cov=ipLastCoverage(r);
+  const T=netTotals(r),P=netTotals(r.prev);
+  const txs=T.txs.slice().sort((a,b)=>b.time-a.time);
+  const rows=T.rows;
+  const calc=T.calc.slice().sort((a,b)=>b.time-a.time);
   // Vendas registradas nos dias do relatório que não aparecem nele.
   const missing=rows.filter(s=>ipCovered(s.time,s.source==="site")&&!(s.source==="site"?M.orderIds.has(s.order.id):M.olistIds.has(s.olist.id))).sort((a,b)=>b.time-a.time);
   const cents=v=>Math.round(Number(v||0)*100),sum=(list,f)=>list.reduce((n,x)=>n+cents(f(x)),0)/100;
-  const charged=sum(txs,t=>t.valor)+sum(calc,s=>s.pay.paid),fee=sum(txs,t=>t.taxa)+sum(calc,s=>s.pay.fee),net=sum(txs,t=>t.liquido)+sum(calc,s=>s.pay.net);
+  const charged=T.charged,fee=T.fee,net=T.net;
   const estFee=sum(calc.filter(s=>s.pay.estimated),s=>s.pay.fee),approx=estFee?"≈ ":"";
-  const sold=sumTotal(rows),until=ipUntilText(cov);
+  const sold=T.sold,until=ipUntilText(cov);
   const who={site:"Vendas do site",olist:"Vendas da loja",all:"Vendas do site e da loja"}[src];
   $("dashNetTitle").textContent=src==="site"?"Valor líquido do site na InfinitePay":src==="olist"?"Valor líquido da loja na InfinitePay":"Valor líquido na InfinitePay";
   $("dashNetHint").textContent=`${who} ${r.label}, conferidas com o relatório da InfinitePay até ${until}: os valores são os do relatório, iguais aos da conta.${calc.length?" Depois disso, o líquido é calculado pelas taxas"+(src!=="site"?" (na loja, estimado ≈)":"")+" até você enviar um relatório novo.":""}`;
-  const step=(label,value,sub,cls="")=>`<div class="net-step${cls}"><span>${esc(label)}</span><strong>${esc(value)}</strong><small>${esc(sub)}</small></div>`;
   setHTML($("dashNet"),
-    step(src==="site"?"Vendido no site":src==="olist"?"Vendido na loja":"Vendido",money(sold),rows.length?`${fmtInt(rows.length)} ${plural(rows.length,"venda registrada","vendas registradas")}${src==="site"?"":src==="olist"?" na Olist":" (site e Olist)"}`:"nenhuma venda registrada")+
-    step("Cobrado na InfinitePay",money(charged),`${fmtInt(txs.length)} ${plural(txs.length,"cobrança aprovada","cobranças aprovadas")} no relatório${calc.length?` + ${fmtInt(calc.length)} ${plural(calc.length,"venda","vendas")} depois dele`:""}`)+
-    step("− Taxas da InfinitePay",approx+money(fee),charged?`${pct(fee/charged*100)} do cobrado${estFee?` · ${money(estFee)} estimados`:""}`:"—")+
-    step("= Líquido na InfinitePay",approx+money(net),"o que entra na conta"," is-net"));
+    netStep(r,src==="site"?"Vendido no site":src==="olist"?"Vendido na loja":"Vendido",money(sold),rows.length?`${fmtInt(rows.length)} ${plural(rows.length,"venda registrada","vendas registradas")}${src==="site"?"":src==="olist"?" na Olist":" (site e Olist)"}`:"nenhuma venda registrada",sold,P.sold)+
+    netStep(r,"Cobrado na InfinitePay",money(charged),`${fmtInt(txs.length)} ${plural(txs.length,"cobrança aprovada","cobranças aprovadas")} no relatório${calc.length?` + ${fmtInt(calc.length)} ${plural(calc.length,"venda","vendas")} depois dele`:""}`,charged,P.charged)+
+    netStep(r,"− Taxas da InfinitePay",approx+money(fee),charged?`${pct(fee/charged*100)} do cobrado${estFee?` · ${money(estFee)} estimados`:""}`:"—",fee,P.fee,{neutral:true,empty:"sem taxas"})+
+    netStep(r,"= Líquido na InfinitePay",approx+money(net),"o que entra na conta",net,P.net,{cls:" is-net"}));
   const txRow=t=>{
     const m=M.byTx.get(t);let ref,venda="—";
     if(m&&m.sale.order){const o=m.sale.order;ref=`<button class="link-button" data-click="openOrder" data-args="${esc(JSON.stringify([o.id]))}">${esc(orderCodeLabel(o))}</button>${isTestOrder(o)?'<small class="net-sub">pedido de teste</small>':""}`;venda=money(o.total)}
