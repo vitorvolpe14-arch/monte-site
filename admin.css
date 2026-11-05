@@ -2085,6 +2085,8 @@ button.secondary:hover,
   --ad-light:#ffffff;
   --ad-wine:#571b29;
   --ad-danger:#8a1f2c;
+  --ad-up:#2f7d4f;
+  --ad-down:#b3261e;
   --ad-radius:14px;
   --ad-radius-sm:10px;
   --ad-shadow-sm:0 1px 2px rgba(0,0,0,.04);
@@ -2266,8 +2268,10 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
 .welcome-revenue small{font-size:12.5px;color:rgba(255,255,255,.6)}
 .welcome .delta{justify-content:flex-end;font-size:13px}
 .welcome .delta-value.up{color:#86d9a6}
-.welcome .delta-value.down{color:#f2a7b2}
+.welcome .delta-value.down{color:#f87171}
 .welcome .delta-value.flat,.welcome .delta-label{color:rgba(255,255,255,.62)}
+.welcome-revenue strong.up{color:#86d9a6}
+.welcome-revenue strong.down{color:#f87171}
 
 /* Precisa da sua atenção: só aparece com alguma pendência. */
 .todo-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin:0 0 8px}
@@ -2309,9 +2313,12 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
 .kpi-sub{font-size:12px;line-height:1.4;color:var(--ad-muted)}
 .delta{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 6px;font-size:12.5px}
 .delta-value{font-weight:600;white-space:nowrap}
-.delta-value.up{color:#2f7d4f}
-.delta-value.down{color:var(--ad-danger)}
+.delta-value.up{color:var(--ad-up)}
+.delta-value.down{color:var(--ad-down)}
 .delta-value.flat,.delta-label{color:var(--ad-muted)}
+/* O valor também: verde se subiu, vermelho se caiu e preto se ficou igual ao mesmo período do mês anterior. */
+.kpi-value.up{color:var(--ad-up)}
+.kpi-value.down{color:var(--ad-down)}
 
 .dash-grid{display:grid;gap:16px;margin:0 0 16px}
 .dash-grid>.panel{min-width:0;margin:0}

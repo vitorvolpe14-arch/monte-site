@@ -774,14 +774,16 @@ function periodNet(start,end){
 }
 function sumTotal(list){return list.reduce((n,s)=>n+Number(s.total||0),0)}
 function soldPieces(list){return list.reduce((n,s)=>n+s.items.reduce((m,i)=>m+i.qty,0),0)}
-// Variação em relação ao período anterior: seta + número + com o quê comparou (a cor nunca vai sozinha).
+// Variação em relação ao mesmo período do mês anterior: seta + número + com o quê comparou (a cor nunca vai sozinha).
 function deltaHtml(cur,prev,label){
   if(!prev&&!cur)return `<span class="delta-label">${esc(label)}: sem vendas</span>`;
   if(!prev)return `<span class="delta-value up">▲ novo</span> <span class="delta-label">${esc(label)}: sem vendas</span>`;
-  const pct=(cur-prev)/prev*100,abs=Math.abs(pct),dir=abs<0.5?"flat":pct>0?"up":"down";
-  const text=dir==="flat"?"= igual":(dir==="up"?"▲ ":"▼ ")+(abs>=999?"999+":abs.toLocaleString("pt-BR",{maximumFractionDigits:abs<10?1:0}))+"%";
+  const dir=window.DashCompare.trend(cur,prev),abs=Math.abs((cur-prev)/prev*100);
+  const text=dir==="flat"?"= igual":(dir==="up"?"▲ ":"▼ ")+(abs>=999?"999+":abs<0.1?"menos de 0,1":abs.toLocaleString("pt-BR",{maximumFractionDigits:abs<10?1:0}))+"%";
   return `<span class="delta-value ${dir}">${text}</span> <span class="delta-label">${esc(label)}</span>`;
 }
+// O número em verde quando subiu, em vermelho quando caiu e na cor normal quando ficou igual.
+function setTrend(el,cur,prev){if(!el)return;const dir=window.DashCompare.trend(cur,prev);["up","down","flat"].forEach(c=>el.classList.toggle(c,c===dir))}
 function renderDashboard(){
   const sales=dashSales();
   renderDashboardSource();
@@ -811,17 +813,16 @@ function renderDashboardSource(){
 }
 function renderDashboardHero(sales){
   const now=new Date(),day=now.getDate();
-  const start=new Date(now.getFullYear(),now.getMonth(),1).getTime();
-  const prevStart=new Date(now.getFullYear(),now.getMonth()-1,1);
-  const prevDays=new Date(now.getFullYear(),now.getMonth(),0).getDate();
-  const prevEnd=new Date(prevStart.getFullYear(),prevStart.getMonth(),Math.min(day,prevDays),now.getHours(),now.getMinutes(),now.getSeconds()).getTime();
-  const cur=sales.filter(s=>s.time>=start),prev=sales.filter(s=>s.time>=prevStart.getTime()&&s.time<prevEnd);
-  const month=now.toLocaleDateString("pt-BR",{month:"long"}),prevMonth=prevStart.toLocaleDateString("pt-BR",{month:"long"});
+  const first=new Date(now.getFullYear(),now.getMonth(),1),start=first.getTime();
+  const p=window.DashCompare.previousMonthRange(first,new Date(now.getFullYear(),now.getMonth(),day),now);
+  const cur=sales.filter(s=>s.time>=start),prev=sales.filter(s=>s.time>=p.start&&s.time<p.end);
+  const month=now.toLocaleDateString("pt-BR",{month:"long"}),prevMonth=p.from.toLocaleDateString("pt-BR",{month:"long"}),prevDay=p.to.getDate();
   if($("heroLabel"))$("heroLabel").textContent="FATURAMENTO DE "+month.toUpperCase()+" · "+DASH_SOURCES[dashSource].toUpperCase();
   if(!$("statRevenue"))return;
-  const total=sumTotal(cur);
+  const total=sumTotal(cur),prevTotal=sumTotal(prev);
   $("statRevenue").textContent=money(total);
-  setHTML($("heroDelta"), deltaHtml(total,sumTotal(prev),`vs ${day===1?"1º":"1º a "+Math.min(day,prevDays)} de ${prevMonth}`));
+  setTrend($("statRevenue"),total,prevTotal);
+  setHTML($("heroDelta"), deltaHtml(total,prevTotal,`vs ${prevDay===1?"1º":"1º a "+prevDay} de ${prevMonth}`));
   // O líquido conta as mesmas vendas do faturamento: as da Olist só têm o dia (ficam ao meio-dia),
   // então a venda de hoje lançada na Olist entra mesmo antes do meio-dia.
   if($("heroNet")){const n=periodNet(start,new Date(now.getFullYear(),now.getMonth(),day+1).getTime()-1);$("heroNet").textContent=cur.length||n.txs.length?`Líquido na InfinitePay: ${(n.approx?"≈ ":"")+money(n.net)}`:""}
@@ -834,33 +835,33 @@ function brDate(t){return new Date(t).toLocaleDateString("pt-BR")}
 // Na comparação, sem o ano quando é o ano atual (cabe numa linha no celular).
 function brShort(t){const d=new Date(t);return d.getFullYear()===new Date().getFullYear()?d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"}):brDate(t)}
 // Período escolhido: de uma data a outra (as duas inclusas; padrão: dia 1º do mês até hoje).
-// A comparação é com o período anterior do mesmo tamanho, logo antes dele.
+// A comparação é com o mesmo período do mês anterior (dash-compare.js).
 function dashRange(){
-  const today=new Date();today.setHours(0,0,0,0);
+  const now=new Date(),today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
   let from=fromYmd(dashFrom)||new Date(today.getFullYear(),today.getMonth(),1),to=fromYmd(dashTo)||today;
   if(to>today)to=today;
   if(from>to)[from,to]=[to,from];
   const days=Math.round((to-from)/DAY_MS)+1;
-  const prevFrom=new Date(from.getFullYear(),from.getMonth(),from.getDate()-days),prevTo=new Date(from.getFullYear(),from.getMonth(),from.getDate()-1);
+  const p=window.DashCompare.previousMonthRange(from,to,now);
   const end=new Date(to.getFullYear(),to.getMonth(),to.getDate()+1).getTime()-1;
-  return{start:from.getTime(),end,prevStart:prevFrom.getTime(),prevEnd:from.getTime(),days,from:ymd(from),to:ymd(to),max:ymd(today),
-    label:days===1?"em "+brDate(from):`de ${brDate(from)} a ${brDate(to)}`,compare:days===1?"vs "+brShort(prevFrom):`vs ${brShort(prevFrom)} a ${brShort(prevTo)}`};
+  return{start:from.getTime(),end,prevStart:p.start,prevEnd:p.end,days,from:ymd(from),to:ymd(to),max:ymd(today),
+    label:days===1?"em "+brDate(from):`de ${brDate(from)} a ${brDate(to)}`,compare:p.from.getTime()===p.to.getTime()?"vs "+brShort(p.from):`vs ${brShort(p.from)} a ${brShort(p.to)}`};
 }
 function renderDashboardPeriod(sales){
   const r=dashRange(),inRange=(s,a,b)=>s.time>=a&&s.time<=b;
   const fromInput=$("dashFrom"),toInput=$("dashTo");
   if(fromInput){fromInput.value=r.from;fromInput.max=r.max}
   if(toInput){toInput.value=r.to;toInput.max=r.max}
-  const cur=sales.filter(s=>inRange(s,r.start,r.end)),prev=r.prevStart===null?null:sales.filter(s=>inRange(s,r.prevStart,r.prevEnd-1));
+  const cur=sales.filter(s=>inRange(s,r.start,r.end)),prev=sales.filter(s=>s.time>=r.prevStart&&s.time<r.prevEnd);
   const revenue=sumTotal(cur),pieces=soldPieces(cur),noItems=cur.filter(s=>!s.hasItems).length;
-  const kpi=(label,value,cmp,sub,extra="")=>`<div class="kpi"><span class="kpi-label">${esc(label)}</span><strong class="kpi-value">${esc(value)}</strong>${extra}<span class="delta">${cmp}</span><small class="kpi-sub">${esc(sub)}</small></div>`;
-  const cmp=(c,p)=>deltaHtml(c,p,r.compare);
-  const prevRevenue=prev?sumTotal(prev):0,prevTicket=prev&&prev.length?prevRevenue/prev.length:0;
+  // Valor em verde quando subiu em relação ao mesmo período do mês anterior, em vermelho quando caiu, preto quando igual.
+  const kpi=(label,value,c,p,sub,extra="")=>`<div class="kpi"><span class="kpi-label">${esc(label)}</span><strong class="kpi-value ${window.DashCompare.trend(c,p)}">${esc(value)}</strong>${extra}<span class="delta">${deltaHtml(c,p,r.compare)}</span><small class="kpi-sub">${esc(sub)}</small></div>`;
+  const prevRevenue=sumTotal(prev),prevTicket=prev.length?prevRevenue/prev.length:0;
   setHTML($("dashKpis"),
-    kpi("Faturamento",money(revenue),cmp(revenue,prevRevenue),dashSource==="olist"?"valor dos pedidos na Olist":"total pago pelas clientes, com frete",(()=>{const n=periodNet(r.start,r.end);return cur.length||n.txs.length?`<span class="kpi-net">líquido ${esc((n.approx?"≈ ":"")+money(n.net))}</span>`:""})())+
-    kpi("Vendas",fmtInt(cur.length),cmp(cur.length,prev?prev.length:0),dashSource==="site"?"pedidos pagos":"pedidos pagos no site e vendas na Olist")+
-    kpi("Ticket médio",money(cur.length?revenue/cur.length:0),cmp(cur.length?revenue/cur.length:0,prevTicket),"valor médio por venda")+
-    kpi("Peças vendidas",fmtInt(pieces),cmp(pieces,prev?soldPieces(prev):0),noItems?`${noItems} ${plural(noItems,"venda da Olist ainda sem itens","vendas da Olist ainda sem itens")}`:"sem contar os presentes"));
+    kpi("Faturamento",money(revenue),revenue,prevRevenue,dashSource==="olist"?"valor dos pedidos na Olist":"total pago pelas clientes, com frete",(()=>{const n=periodNet(r.start,r.end);return cur.length||n.txs.length?`<span class="kpi-net">líquido ${esc((n.approx?"≈ ":"")+money(n.net))}</span>`:""})())+
+    kpi("Vendas",fmtInt(cur.length),cur.length,prev.length,dashSource==="site"?"pedidos pagos":"pedidos pagos no site e vendas na Olist")+
+    kpi("Ticket médio",money(cur.length?revenue/cur.length:0),cur.length?revenue/cur.length:0,prevTicket,"valor médio por venda")+
+    kpi("Peças vendidas",fmtInt(pieces),pieces,soldPieces(prev),noItems?`${noItems} ${plural(noItems,"venda da Olist ainda sem itens","vendas da Olist ainda sem itens")}`:"sem contar os presentes"));
   renderRevenueChart(revenueBins(cur,r));
   renderTopProducts(cur);
   renderRankList($("dashPayments"),groupSales(cur,s=>s.payment),"revenue");
