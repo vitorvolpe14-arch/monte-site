@@ -3363,6 +3363,17 @@ function startStoreAnalytics() {
     if (document.readyState === "complete") track("page_view");
     else window.addEventListener("load", () => track("page_view"), { once: true });
     setInterval(saveCart, 30000);
+    // Só o intervalo não basta: no iPhone (e no navegador do Instagram) a cliente sai do app, os
+    // timers congelam e o que ela digitou depois do último salvamento se perdia. Sem o WhatsApp a
+    // loja não recebe o aviso da sacola abandonada. Salva também quando ela termina de digitar o
+    // contato e quando a página sai da tela.
+    const CONTACT_FIELDS = ["customerName", "customerEmail", "customerPhone"];
+    document.addEventListener("change", e => { if (CONTACT_FIELDS.includes(e.target?.id)) saveCart(); });
+    document.addEventListener("input", e => {
+        if (e.target?.id === "customerPhone" && phoneDigits(e.target.value).length === 11) saveCart();
+    });
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveCart(); });
+    window.addEventListener("pagehide", saveCart);
     document.addEventListener("click", e => {
         const el = e.target.closest?.("[data-product-id]");
         if (el) track("view_product", { product_id: el.dataset.productId, product_name: el.dataset.productName || null });
