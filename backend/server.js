@@ -4,7 +4,7 @@ const express = require("express");
 const crypto = require("crypto");
 const path = require("path");
 const cors = require("cors");
-const { pixLinkDiscountPercent, isExpectedPixAmount, paidPriceKey } = require("./pix-discount.js");
+const { pixLinkDiscountPercent, infinitePayPixQuote, isExpectedPixAmount, paidPriceKey } = require("./pix-discount.js");
 const { PROMOTION_GIFTS_CEILING, promotionGiftCount } = require("./gift-promotion.js");
 const { OLIST_SALE_SITUATIONS, olistSaleSummary, olistSaleDetail, olistSalesListNow } = require("./olist-sales.js");
 const { olistWaitingSales } = require("./olist-stock-waiting.js");
@@ -6422,24 +6422,35 @@ app.post(
             // desconto do Pix), dividido entre as linhas em centavos inteiros.
             // Cada item guarda o que foi cobrado (charged_units, já com Pix e cupom) para a
             // InfinitePay e a Olist: o percentual do Pix pode mudar no painel depois.
-            const priceFor = method => {
+            // pixExtraCents: centavos a mais de desconto no Pix para o total ficar igual ao que a
+            // InfinitePay cobra (abaixo); entram nas peças como o cupom, sem mudar o cupom.
+            const priceFor = (method, pixExtraCents = 0) => {
                 const lines = productItems.map(item => ({
                     quantity: Number(item.quantity),
                     unitCents: method === "pix"
                         ? pixDiscountedUnitCents(item.price, pixPercent)
                         : Math.round(Number(item.price) * 100)
                 }));
-                const productCents = lines.reduce((sum, line) => sum + line.unitCents * line.quantity, 0);
-                const couponCents = coupon ? couponDiscountCents(coupon, productCents, units) : 0;
+                const couponCents = coupon ? couponDiscountCents(coupon, lines.reduce((sum, line) => sum + line.unitCents * line.quantity, 0), units) : 0;
+                const split = coupon || pixExtraCents > 0
+                    ? splitCouponDiscount(lines, couponCents + pixExtraCents)
+                    : lines.map(line => [{ quantity: line.quantity, unit_cents: line.unitCents }]);
                 return {
                     couponCents,
-                    totalCents: productCents - couponCents + shippingCents,
-                    split: coupon
-                        ? splitCouponDiscount(lines, couponCents)
-                        : lines.map(line => [{ quantity: line.quantity, unit_cents: line.unitCents }])
+                    // O total é a soma do que vai em cada peça: é o que a InfinitePay cobra.
+                    totalCents: split.flat().reduce((sum, part) => sum + part.quantity * part.unit_cents, 0) + shippingCents,
+                    split
                 };
             };
             const prices = { pix: priceFor("pix"), credit_card: priceFor("credit_card") };
+            // O Pix do site é o que a InfinitePay consegue cobrar (backend/pix-discount.js): ela tira
+            // um percentual com duas casas do link inteiro, com os centavos do desconto cortados, e
+            // quase nunca chega exatamente nos 5% só nas peças. O site (script.js) mostra o mesmo valor.
+            const pixQuote = infinitePayPixQuote(prices.credit_card.totalCents, prices.pix.totalCents);
+            if (pixQuote.cents < prices.pix.totalCents) {
+                const adjusted = priceFor("pix", prices.pix.totalCents - pixQuote.cents);
+                if (adjusted.totalCents === pixQuote.cents) prices.pix = adjusted;
+            }
             const chosenPrice = prices[paymentMethod];
 
             // Desconto do Pix pela própria InfinitePay (backend/pix-discount.js): o link sai com
@@ -6861,6 +6872,9 @@ app.post(
                 const paidPrice = pixDiscountLink[priceKey];
                 if (resolvedPaymentMethod === "pix" && priceKey !== "pix") {
                     console.warn("⚠️ Pix sem o desconto da InfinitePay: o pedido fica com o preço cheio.", orderNsu, payment.amount, payment.paid_amount);
+                } else if (priceKey === "pix" && paidAmount > 0 && paidAmount !== Math.round(Number(paidPrice.total) * 100)) {
+                    // O site mostra o valor que a InfinitePay cobra; diferença aqui é conta dela que mudou.
+                    console.warn("⚠️ Pix com valor diferente do site (arredondamento da InfinitePay):", orderNsu, paidPrice.total, payment.paid_amount);
                 }
                 pricedFields = {
                     total: paidPrice.total,

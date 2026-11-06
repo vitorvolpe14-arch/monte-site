@@ -10,9 +10,13 @@
 //
 // A InfinitePay guarda o percentual com duas casas e corta os centavos do desconto. Pedido
 // MONTÊ-0076: o site mandou 4,854%, ela aplicou 4,85%, R$ 514,00 × 4,85% = R$ 24,929 → R$ 24,92
-// de desconto, e a cliente pagou R$ 489,08 no Pix em vez dos R$ 489,05 do site. Por isso o
-// percentual vai com duas casas: o menor que não deixa o Pix passar do valor do site (a cliente
-// paga o do site ou alguns centavos a menos, nunca a mais).
+// de desconto, e a cliente pagou R$ 489,08 no Pix em vez dos R$ 489,05 do site.
+//
+// Com um percentual só no link inteiro, quase nunca dá para chegar exatamente em "5% nas peças
+// com o frete integral". Por isso o site mostra o valor que a InfinitePay vai cobrar
+// (infinitePayPixQuote): o percentual vai com duas casas, o menor que não deixa o Pix passar dos
+// 5% nas peças, e os centavos que sobram entram no desconto do Pix (a cliente ganha alguns
+// centavos a mais, nunca a menos). script.js faz a mesma conta no navegador.
 
 // Valor do Pix pela conta da InfinitePay, em centavos: link − desconto com os centavos cortados.
 function infinitePayPixCents(linkCents, percent) {
@@ -31,6 +35,14 @@ function pixLinkDiscountPercent(linkCents, pixCents) {
     const basisPoints = Math.ceil((link - pix) * 10000 / link);
     if (basisPoints <= 0 || basisPoints >= 10000) return 0;
     return basisPoints / 100;
+}
+
+// Pix que a InfinitePay cobra para o Pix calculado pela loja: { percent, cents }. É o valor que
+// o site mostra e o pedido guarda. Sem desconto (Pix igual ao cartão), percent 0 e o próprio Pix.
+function infinitePayPixQuote(linkCents, pixCents) {
+    const percent = pixLinkDiscountPercent(linkCents, pixCents);
+    const pix = Math.round(Number(pixCents));
+    return { percent, cents: percent > 0 ? infinitePayPixCents(linkCents, percent) : (Number.isFinite(pix) ? pix : 0) };
 }
 
 // Diferença aceita, em centavos, entre o valor do Pix informado pela InfinitePay e o
@@ -56,4 +68,4 @@ function paidPriceKey(paymentOptions, payment) {
     return charged.some(value => isExpectedPixAmount(value, pixCents, linkCents)) ? "pix" : "credit_card";
 }
 
-module.exports = { pixLinkDiscountPercent, infinitePayPixCents, pixAmountTolerance, isExpectedPixAmount, paidPriceKey };
+module.exports = { pixLinkDiscountPercent, infinitePayPixCents, infinitePayPixQuote, pixAmountTolerance, isExpectedPixAmount, paidPriceKey };

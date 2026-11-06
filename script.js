@@ -1709,6 +1709,18 @@ function pixUnitDiscountCents(unitCents) {
     return PIX_DISCOUNT_PERCENT > 0 ? unitCents - Math.round(unitCents * (100 - PIX_DISCOUNT_PERCENT) / 100) : 0;
 }
 
+// Valor do Pix que a InfinitePay cobra, em centavos (mesma conta do servidor,
+// backend/pix-discount.js). O link sai com o preço do cartão (peças + frete) e ela tira um
+// percentual com duas casas do link inteiro, com os centavos do desconto cortados. O percentual
+// é o menor que não deixa o Pix passar do valor da loja (5% só nas peças): os centavos que sobram
+// entram no desconto do Pix, e o total do site fica igual ao da página da InfinitePay.
+function infinitePayPixTotalCents(linkCents, pixCents) {
+    if (!(linkCents > 0) || !(pixCents > 0) || pixCents >= linkCents) return pixCents;
+    const basisPoints = Math.ceil((linkCents - pixCents) * 10000 / linkCents);
+    if (basisPoints >= 10000) return pixCents;
+    return linkCents - Math.floor(linkCents * basisPoints / 10000);
+}
+
 // Cartão na InfinitePay: até 3x sem juros; de 4x a 10x a InfinitePay cobra juros da cliente.
 const INTEREST_FREE_INSTALLMENTS = 3;
 const MAX_INSTALLMENTS = 10;
@@ -1762,7 +1774,8 @@ function shippingPriceLabel(option) {
 const COUPON_MIN_UNIT_CENTS = 100;
 
 // Totais do checkout. Mesmo cálculo do servidor: desconto do Pix por unidade, arredondado em
-// centavos; o cupom vale nas peças (depois do Pix) e o frete fica integral.
+// centavos; o cupom vale nas peças (depois do Pix) e o frete fica integral. No Pix, o total é o
+// que a InfinitePay cobra (infinitePayPixTotalCents): os centavos de diferença entram no desconto.
 // Com "method", calcula como se a cliente tivesse escolhido essa forma de pagamento.
 function checkoutTotals(subtotal = getCartSubtotal(), method) {
     const shipping = getShippingValue();
@@ -1771,18 +1784,26 @@ function checkoutTotals(subtotal = getCartSubtotal(), method) {
         selectedPaymentMethod ||
         "pix";
     const unitCents = item => Math.round(Number(item.price || 0) * 100);
-    const pixDiscountCents = paymentMethod === "pix"
-        ? cart.reduce((sum, item) => sum + pixUnitDiscountCents(unitCents(item)) * Number(item.quantity || 0), 0)
-        : 0;
-    const productCents = cart.reduce((sum, item) => sum + unitCents(item) * Number(item.quantity || 0), 0) - pixDiscountCents;
+    const fullCents = cart.reduce((sum, item) => sum + unitCents(item) * Number(item.quantity || 0), 0);
     const units = cart.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-    let couponCents = 0;
-    if (appliedCoupon && productCents > 0) {
+    const couponFor = productCents => {
+        if (!appliedCoupon || productCents <= 0) return 0;
         const value = Number(appliedCoupon.discount_value) || 0;
         const raw = appliedCoupon.discount_type === "percent"
             ? Math.round(productCents * Math.min(value, 100) / 100)
             : Math.round(value * 100);
-        couponCents = Math.max(0, Math.min(raw, productCents - units * COUPON_MIN_UNIT_CENTS));
+        return Math.max(0, Math.min(raw, productCents - units * COUPON_MIN_UNIT_CENTS));
+    };
+    let pixDiscountCents = paymentMethod === "pix"
+        ? cart.reduce((sum, item) => sum + pixUnitDiscountCents(unitCents(item)) * Number(item.quantity || 0), 0)
+        : 0;
+    const productCents = fullCents - pixDiscountCents;
+    const couponCents = couponFor(productCents);
+    if (pixDiscountCents > 0) {
+        const shippingCents = Math.round(Number(shipping || 0) * 100);
+        const linkCents = fullCents - couponFor(fullCents) + shippingCents;
+        const pixCents = productCents - couponCents + shippingCents;
+        pixDiscountCents += pixCents - infinitePayPixTotalCents(linkCents, pixCents);
     }
     const pixDiscount = pixDiscountCents / 100;
     const couponDiscount = couponCents / 100;
@@ -4035,8 +4056,8 @@ function updateCheckoutProgress() {
 }
 
 function renderCheckoutExtras({ subtotal, shipping, pixDiscount, couponDiscount = 0, paymentMethod }) {
-    const potential = cart.reduce((sum, item) =>
-        sum + pixUnitDiscountCents(Math.round(Number(item.price || 0) * 100)) * Number(item.quantity || 0), 0) / 100;
+    // O mesmo desconto que aparece no total quando o Pix está escolhido.
+    const potential = checkoutTotals(subtotal, "pix").pixDiscount;
 
     const perk = document.getElementById("pixPerk");
     const perkText = document.getElementById("pixPerkText");
