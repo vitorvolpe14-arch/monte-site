@@ -78,13 +78,19 @@ function infinitePayNet(order) {
     const percent = method === "pix" ? table.pix : table.credit[installments - 1];
     const fee = feeCents(paid, percent);
     const net = paid - fee;
+    // Pix não tem parcelamento, juros nem taxa. A diferença entre o pago e o pedido no Pix é o
+    // arredondamento do desconto do Pix na InfinitePay (backend/pix-discount.js), para mais ou
+    // para menos.
+    const interest = method === "pix" ? 0 : Math.max(0, paid - sale);
+    const pixRounding = method === "pix" ? paid - sale : 0;
 
     return {
         method,
         installments,
         sale: sale / 100,                         // valor da venda (total do pedido)
         paid: paid / 100,                         // o que a cliente pagou (com os juros, se houver)
-        interest: Math.max(0, paid - sale) / 100, // juros do parcelamento pagos pela cliente
+        interest: interest / 100,                 // juros do parcelamento pagos pela cliente
+        pix_rounding: pixRounding / 100,          // arredondamento do desconto do Pix (+ ou −)
         fee_percent: percent,
         fee: fee / 100,                           // taxa da InfinitePay
         net: net / 100,                           // o que cai na conta
