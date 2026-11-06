@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { pixLinkDiscountPercent, infinitePayPixCents, pixAmountTolerance, isExpectedPixAmount, paidPriceKey } = require("../backend/pix-discount.js");
+const { pixLinkDiscountPercent, infinitePayPixCents, infinitePayPixQuote, pixAmountTolerance, isExpectedPixAmount, paidPriceKey } = require("../backend/pix-discount.js");
 
 const places = percent => (String(percent).split(".")[1] || "").length;
 
@@ -53,6 +53,44 @@ test("duas casas, nunca acima do Pix do site e dentro da margem do pagamento", (
             assert.ok(infinitePayPixCents(total, Math.round(percent * 100 - 1) / 100) > pixCents, `${label}: desconto maior que o preciso`);
             assert.ok(isExpectedPixAmount(charged, pixCents, total), `${label}: fora da margem`);
         }
+    }
+});
+
+// O site mostra o valor que a InfinitePay vai cobrar: o pedido guarda esse valor e o link sai
+// com um percentual que chega nele exatamente.
+test("pedido MONTÊ-0076: o site mostra o mesmo Pix da InfinitePay", () => {
+    assert.deepEqual(infinitePayPixQuote(51400, 48905), { percent: 4.86, cents: 48902 });
+});
+
+test("valor do Pix do site: igual ao da InfinitePay, nunca acima dos 5% nas peças", () => {
+    for (let productCents = 1000; productCents < 600000; productCents += 3917) {
+        for (const shippingCents of [0, 990, 1500, 2000, 3890]) {
+            const storePix = Math.round(productCents * 0.95) + shippingCents;
+            const link = productCents + shippingCents;
+            const quote = infinitePayPixQuote(link, storePix);
+            const label = `link ${link}, Pix da loja ${storePix} → ${quote.cents}`;
+            assert.ok(quote.cents <= storePix, `${label}: acima do Pix da loja`);
+            assert.equal(infinitePayPixCents(link, quote.percent), quote.cents, `${label}: a InfinitePay cobraria outro valor`);
+            // O percentual do link sai do valor do site já ajustado e chega nele.
+            assert.equal(infinitePayPixCents(link, pixLinkDiscountPercent(link, quote.cents)), quote.cents, `${label}: link`);
+        }
+    }
+});
+
+test("sem desconto o Pix fica como está", () => {
+    assert.deepEqual(infinitePayPixQuote(10000, 10000), { percent: 0, cents: 10000 });
+    assert.deepEqual(infinitePayPixQuote(0, 0), { percent: 0, cents: 0 });
+});
+
+// script.js faz a mesma conta no navegador para mostrar o total do checkout.
+test("site (script.js) e servidor fazem a mesma conta", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const source = await readFile(new URL("../script.js", import.meta.url), "utf8");
+    const match = source.match(/function infinitePayPixTotalCents\([^)]*\) \{[\s\S]*?\n\}\n/);
+    assert.ok(match, "infinitePayPixTotalCents no script.js");
+    const siteQuote = new Function(match[0] + "return infinitePayPixTotalCents;")();
+    for (const [link, pix] of [[51400, 48905], [102800, 97760], [29900, 28405], [101980, 96882], [10000, 10000], [5000, 4750], [1099, 1044]]) {
+        assert.equal(siteQuote(link, pix), infinitePayPixQuote(link, pix).cents, `link ${link}, Pix ${pix}`);
     }
 });
 
