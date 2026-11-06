@@ -32,6 +32,23 @@ test("Pix: sem taxa", () => {
     );
 });
 
+// Pedido MONTÊ-0076: link de R$ 514,00 com o desconto do Pix pela InfinitePay. O pedido ficou
+// com R$ 489,05 e a InfinitePay cobrou R$ 489,08 (arredondamento do desconto). Pix não tem
+// parcelamento, juros nem taxa: os R$ 0,03 são só o arredondamento.
+test("Pix: diferença do desconto da InfinitePay não é juros", () => {
+    const n = infinitePayNet(order(489.05, { capture_method: "pix", installments: 1, amount: 514, paid_amount: 489.08 }, { paid_at: "2026-11-06T02:50:43Z" }));
+    assert.deepEqual(
+        { method: n.method, installments: n.installments, paid: n.paid, interest: n.interest, fee: n.fee, net: n.net, pix_rounding: n.pix_rounding },
+        { method: "pix", installments: 1, paid: 489.08, interest: 0, fee: 0, net: 489.08, pix_rounding: 0.03 }
+    );
+    // Abaixo do valor do pedido, também é arredondamento (a cliente pagou menos).
+    const menos = infinitePayNet(order(977.6, { capture_method: "pix", installments: 1, amount: 1028, paid_amount: 977.53 }));
+    assert.deepEqual([menos.interest, menos.pix_rounding, menos.net], [0, -0.07, 977.53]);
+    // No cartão não há arredondamento do Pix.
+    const cartao = infinitePayNet(order(514, { capture_method: "credit_card", installments: 5, paid_amount: 524.09 }));
+    assert.deepEqual([cartao.interest, cartao.pix_rounding], [10.09, 0]);
+});
+
 test("crédito à vista e 3x sem juros: a taxa sai da loja", () => {
     const vista = infinitePayNet(order(569.5, { capture_method: "credit_card", installments: 1, paid_amount: 569.5 }));
     assert.equal(vista.fee_percent, 4.2);

@@ -5,18 +5,33 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { pixLinkDiscountPercent, pixAmountTolerance, isExpectedPixAmount, paidPriceKey } = require("../backend/pix-discount.js");
+const { pixLinkDiscountPercent, infinitePayPixCents, pixAmountTolerance, isExpectedPixAmount, paidPriceKey } = require("../backend/pix-discount.js");
 
-// Valor no Pix pela conta da InfinitePay: o percentual sobre o link inteiro, em centavos.
-const infinitePayPix = (linkCents, percent) => Math.round(linkCents * (100 - percent) / 100);
+const places = percent => (String(percent).split(".")[1] || "").length;
+
+// Pedido real: o site mandou 4,854% e a InfinitePay aplicou 4,85% (duas casas) e cortou os
+// centavos do desconto: R$ 514,00 × 4,85% = R$ 24,929 → R$ 24,92 → R$ 489,08 no Pix.
+test("pedido MONTÊ-0076: a conta da InfinitePay", () => {
+    assert.equal(infinitePayPixCents(51400, 4.85), 48908);
+    assert.equal(infinitePayPixCents(51400, 4.854), 48908);
+});
+
+test("pedido MONTÊ-0076: duas casas e nunca acima do Pix do site", () => {
+    // Bag de R$ 499,00 (R$ 474,05 no Pix) e frete de R$ 15,00.
+    const percent = pixLinkDiscountPercent(51400, 48905);
+    assert.equal(percent, 4.86);
+    assert.equal(infinitePayPixCents(51400, percent), 48902);
+    assert.ok(isExpectedPixAmount(48902, 48905, 51400));
+});
 
 test("pedido MONTÊ-0072: 5% só nas peças, frete integral", () => {
     // Peças de R$ 509,00 e R$ 499,00 e frete de R$ 20,00. No Pix: 483,55 + 474,05 + 20,00.
     const linkCents = 50900 + 49900 + 2000;
     const pixCents = 48355 + 47405 + 2000;
     const percent = pixLinkDiscountPercent(linkCents, pixCents);
-    assert.ok(percent > 4.9 && percent < 4.91, `percentual ${percent}`);
-    assert.equal(infinitePayPix(linkCents, percent), pixCents);
+    assert.equal(percent, 4.91);
+    const charged = infinitePayPixCents(linkCents, percent);
+    assert.ok(charged <= pixCents && isExpectedPixAmount(charged, pixCents, linkCents), `cobrado ${charged}`);
 });
 
 test("frete grátis: o percentual é o do painel", () => {
@@ -24,16 +39,19 @@ test("frete grátis: o percentual é o do painel", () => {
     assert.equal(pixLinkDiscountPercent(29900, 28405), 5);
 });
 
-test("usa poucas casas decimais e sempre fecha no centavo", () => {
-    for (let linkCents = 1000; linkCents < 600000; linkCents += 7919) {
+test("duas casas, nunca acima do Pix do site e dentro da margem do pagamento", () => {
+    for (let productCents = 1000; productCents < 600000; productCents += 7919) {
         for (const shippingCents of [0, 1500, 2000, 3890]) {
-            const productCents = linkCents;
             const pixCents = Math.round(productCents * 0.95) + shippingCents;
             const total = productCents + shippingCents;
             const percent = pixLinkDiscountPercent(total, pixCents);
-            assert.equal(infinitePayPix(total, percent), pixCents, `link ${total}, Pix ${pixCents}, ${percent}%`);
-            const places = (String(percent).split(".")[1] || "").length;
-            assert.ok(places <= 6, `${percent} tem casas demais`);
+            const charged = infinitePayPixCents(total, percent);
+            const label = `link ${total}, Pix ${pixCents}, ${percent}% → ${charged}`;
+            assert.ok(places(percent) <= 2, `${label}: casas demais`);
+            assert.ok(charged <= pixCents, `${label}: acima do Pix do site`);
+            // O menor percentual que não passa do Pix: com 0,01% a menos, passaria.
+            assert.ok(infinitePayPixCents(total, Math.round(percent * 100 - 1) / 100) > pixCents, `${label}: desconto maior que o preciso`);
+            assert.ok(isExpectedPixAmount(charged, pixCents, total), `${label}: fora da margem`);
         }
     }
 });

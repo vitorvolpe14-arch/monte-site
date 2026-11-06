@@ -6,24 +6,31 @@
 //
 // A InfinitePay desconta um percentual do link inteiro (peças + frete), mas a MONTÊ dá o
 // desconto só nas peças, com o frete integral. Por isso o percentual enviado é o que leva o
-// total do link exatamente ao valor do Pix calculado pela loja (o mesmo que o site mostra).
+// total do link ao valor do Pix calculado pela loja (o mesmo que o site mostra).
+//
+// A InfinitePay guarda o percentual com duas casas e corta os centavos do desconto. Pedido
+// MONTÊ-0076: o site mandou 4,854%, ela aplicou 4,85%, R$ 514,00 × 4,85% = R$ 24,929 → R$ 24,92
+// de desconto, e a cliente pagou R$ 489,08 no Pix em vez dos R$ 489,05 do site. Por isso o
+// percentual vai com duas casas: o menor que não deixa o Pix passar do valor do site (a cliente
+// paga o do site ou alguns centavos a menos, nunca a mais).
 
-const MAX_DECIMAL_PLACES = 6;
+// Valor do Pix pela conta da InfinitePay, em centavos: link − desconto com os centavos cortados.
+function infinitePayPixCents(linkCents, percent) {
+    const link = Math.round(Number(linkCents));
+    const basisPoints = Math.round(Number(percent) * 100); // 4,85% → 485
+    return link - Math.floor(link * basisPoints / 10000);
+}
 
-// Percentual para options.discounts.pix: o de menos casas decimais que, aplicado ao link
-// inteiro e arredondado em centavos, dá o valor do Pix. 0 quando não há desconto.
+// Percentual para options.discounts.pix, com duas casas. 0 quando não há desconto.
 function pixLinkDiscountPercent(linkCents, pixCents) {
-    const link = Number(linkCents);
-    const pix = Number(pixCents);
+    const link = Math.round(Number(linkCents));
+    const pix = Math.round(Number(pixCents));
     if (!Number.isFinite(link) || !Number.isFinite(pix) || link <= 0 || pix <= 0 || pix >= link) return 0;
-    const exact = (link - pix) / link * 100;
-    for (let places = 0; places <= MAX_DECIMAL_PLACES; places++) {
-        const percent = Number(exact.toFixed(places));
-        if (percent <= 0 || percent >= 100) continue;
-        // Folga de um quarto de centavo para o valor não ficar no limite do arredondamento.
-        if (Math.abs(link * (100 - percent) / 100 - pix) <= 0.25) return percent;
-    }
-    return Number(exact.toFixed(MAX_DECIMAL_PLACES));
+    // Menor percentual em centésimos (0,01% = 1) cujo desconto, com os centavos cortados, chega
+    // ao desconto da loja: link × p / 10000 ≥ link − pix.
+    const basisPoints = Math.ceil((link - pix) * 10000 / link);
+    if (basisPoints <= 0 || basisPoints >= 10000) return 0;
+    return basisPoints / 100;
 }
 
 // Diferença aceita, em centavos, entre o valor do Pix informado pela InfinitePay e o
@@ -49,4 +56,4 @@ function paidPriceKey(paymentOptions, payment) {
     return charged.some(value => isExpectedPixAmount(value, pixCents, linkCents)) ? "pix" : "credit_card";
 }
 
-module.exports = { pixLinkDiscountPercent, pixAmountTolerance, isExpectedPixAmount, paidPriceKey };
+module.exports = { pixLinkDiscountPercent, infinitePayPixCents, pixAmountTolerance, isExpectedPixAmount, paidPriceKey };
