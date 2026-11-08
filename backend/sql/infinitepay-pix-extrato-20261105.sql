@@ -2,10 +2,10 @@
 -- "Relatório de movimentações" (extrato) de 01 a 08/11/2026 que o dono da loja enviou.
 -- Não está no site nem na Olist, e o dono confirmou que é venda: entra no líquido do painel.
 --
--- A linha é a mesma que o "Relatório de Vendas" grava para um Pix na conta (Conta Inteligente,
--- sem código da transação, plano "Outro"), com a mesma chave. Quando um Relatório de Vendas
--- que cubra 05/11 for enviado no painel, ele atualiza esta linha (ou a troca pela dele), sem
--- contar duas vezes.
+-- A linha segue o formato que o "Relatório de Vendas" grava para um Pix na conta (Conta
+-- Inteligente, plano "Outro"), mas sem o código da transação, que o extrato não traz. Quando um
+-- Relatório de Vendas que cubra 05/11 for enviado no painel, a importação apaga as linhas do
+-- período gravadas por outra importação (esta inclusa) e grava a dele: o Pix não conta duas vezes.
 --
 -- A fatura do cartão de crédito (R$ 25,00) paga com o saldo no mesmo dia não é venda e fica
 -- fora do líquido.
