@@ -564,136 +564,6 @@
         });
     }
 
-    // ---------- Relatório de movimentações (extrato da conta) ----------
-    // O extrato mostra o que entrou e saiu do saldo: depósitos das vendas no cartão, Pix
-    // recebidos e enviados, fatura do cartão de crédito, boletos... Daí sai o que fica na conta
-    // depois dos pagamentos feitos com o saldo. A coluna "Nome" (quem pagou ou recebeu) não é
-    // lida: só data, hora, tipo, detalhe e valor.
-
-    const MONTH_DATE = /(\d{2}) (Jan|Fev|Mar|Abr|Mai|Jun|Jul|Ago|Set|Out|Nov|Dez),? (\d{4})/i;
-    const ymdOf = m => `${m[3]}-${String(MONTHS[m[2].toLowerCase()]).padStart(2, "0")}-${m[1]}`;
-    // "+528,01", "-8.512,52", "+ 4.099,03" e também "--R$ 25,00" (assim sai a fatura do cartão).
-    const STATEMENT_AMOUNT = /^([+-]{1,2}) ?(?:R\$ ?)?([\d.]+,\d{2})$/;
-    const statementAmount = s => {
-        const m = STATEMENT_AMOUNT.exec(String(s).trim());
-        return m ? (m[1].includes("-") ? -1 : 1) * money(m[2]) : null;
-    };
-
-    const isStatement = extracted => extracted.pages.some(runs => runs.some(r => clean(r.s) === "Relatório de movimentações"));
-
-    function parseStatement(extracted) {
-        const rows = [];
-        const summary = { from: null, to: null, created: pdfDate(extracted.created), opening: null, inflow: null, outflow: null, closing: null };
-        const unread = [];
-        let day = null;
-        extracted.pages.forEach((runs, pi) => {
-            const items = runs.map(r => ({ x: r.x, y: r.y, s: clean(r.s) })).filter(r => r.s);
-            for (const r of items) {
-                const m = /^(\d{2} \S+,? \d{4}) - (\d{2} \S+,? \d{4})$/.exec(r.s);
-                if (!summary.from && m && MONTH_DATE.test(m[1]) && MONTH_DATE.test(m[2])) {
-                    summary.from = ymdOf(MONTH_DATE.exec(m[1]));
-                    summary.to = ymdOf(MONTH_DATE.exec(m[2]));
-                }
-            }
-            // Os totais: o rótulo e, na mesma linha à direita, o valor com sinal, sem outro texto no
-            // meio ("Saldo final do período" também aparece à esquerda, na linha do "Saldo inicial").
-            const total = label => {
-                for (const l of items.filter(r => r.s === label)) {
-                    const row = items.filter(r => Math.abs(r.y - l.y) < 4 && r.x > l.x).sort((a, b) => a.x - b.x);
-                    if (row.length && statementAmount(row[0].s) !== null) return statementAmount(row[0].s);
-                }
-                return null;
-            };
-            if (summary.opening === null) summary.opening = total("Saldo inicial");
-            if (summary.inflow === null) summary.inflow = total("Total de entradas");
-            if (summary.outflow === null) { const v = total("Total de saídas"); summary.outflow = v === null ? null : Math.abs(v); }
-            if (summary.closing === null) summary.closing = total("Saldo final do período");
-
-            // Cada dia tem o seu cabeçalho (Data | Hora | Tipo de transação | Nome | Detalhe | Valor).
-            const heads = items.filter(r => r.s === "Data" && items.some(h => Math.abs(h.y - r.y) < 4 && h.s === "Tipo de transação"));
-            if (!heads.length) return;
-            const head = heads[0];
-            const col = name => {
-                const h = items.find(r => Math.abs(r.y - head.y) < 4 && r.s.startsWith(name));
-                return h ? h.x : null;
-            };
-            const cx = { hora: col("Hora"), tipo: col("Tipo de transação"), nome: col("Nome"), detalhe: col("Detalhe"), valor: col("Valor") };
-            if (Object.values(cx).some(v => v === null)) return;
-            const footer = items.find(r => /^A Central de Ajuda/.test(r.s));
-            const bottom = footer ? footer.y : Infinity;
-            const skipRows = items.filter(r => r.s === "Saldo do dia").concat(heads);
-            const body = items.filter(r => r.y > head.y + 2 && r.y < bottom - 2 && !skipRows.some(k => Math.abs(k.y - r.y) < 4));
-            // Uma movimentação por valor na coluna "Valor".
-            const anchors = body.filter(r => r.x >= cx.detalhe + 40 && statementAmount(r.s) !== null).sort((a, b) => a.y - b.y);
-            if (!anchors.length) return;
-            const gaps = anchors.slice(1).map((a, i) => a.y - anchors[i].y).sort((a, b) => a - b);
-            const reach = gaps.length ? gaps[Math.floor(gaps.length / 2)] * 0.75 : 18;
-            const groups = anchors.map(a => ({ anchor: a, parts: [] }));
-            for (const r of body) {
-                if (anchors.includes(r)) continue;
-                let best = null, bestD = Infinity;
-                for (const g of groups) {
-                    const d = Math.abs(r.y - g.anchor.y);
-                    if (d < bestD) { best = g; bestD = d; }
-                }
-                if (best && bestD <= reach) best.parts.push(r);
-            }
-            for (const g of groups) {
-                const parts = g.parts.slice().sort((a, b) => a.y - b.y || a.x - b.x);
-                const inCol = (from, to) => parts.filter(p => p.x >= from - 4 && p.x < to - 4).map(p => p.s);
-                // A data só vem na primeira movimentação do dia; as outras são do mesmo dia.
-                const d = MONTH_DATE.exec(inCol(-Infinity, cx.hora).join(" "));
-                if (d) day = ymdOf(d);
-                const t = /^(\d{2}):(\d{2})$/.exec(inCol(cx.hora, cx.tipo).find(s => /^\d{2}:\d{2}$/.test(s)) || "");
-                const tipo = inCol(cx.tipo, cx.nome).join(" ").slice(0, 60);
-                const detalhe = inCol(cx.detalhe, cx.valor - 30).join(" ").slice(0, 60);
-                if (!day) { unread.push({ page: pi + 1, error: "sem data", text: tipo }); continue; }
-                if (!tipo) { unread.push({ page: pi + 1, error: "sem tipo", text: g.anchor.s }); continue; }
-                rows.push({ data: day, hora: t ? `${t[1]}:${t[2]}` : null, tipo, detalhe: detalhe || null, valor: statementAmount(g.anchor.s) });
-            }
-        });
-        return { rows, summary, unread };
-    }
-
-    // Confere a leitura com os totais do extrato: entradas, saídas e saldo final.
-    function checkStatement(st) {
-        const c = v => Math.round(Number(v) * 100);
-        const inflow = st.rows.filter(r => r.valor > 0).reduce((a, r) => a + c(r.valor), 0) / 100;
-        const outflow = st.rows.filter(r => r.valor < 0).reduce((a, r) => a - c(r.valor), 0) / 100;
-        const s = st.summary;
-        const same = (a, b) => a !== null && Math.abs(a - b) < 0.005;
-        const balance = s.opening !== null && s.closing !== null && Math.abs(c(s.opening) + c(inflow) - c(outflow) - c(s.closing)) < 1;
-        return {
-            ok: st.rows.length > 0 && !st.unread.length && !!s.from && !!s.to && same(s.inflow, inflow) && same(s.outflow, outflow) && balance,
-            got: { inflow, outflow },
-            expected: { inflow: s.inflow, outflow: s.outflow, opening: s.opening, closing: s.closing }
-        };
-    }
-
-    // O que cada movimentação é para o painel:
-    //   sale: depósito das vendas no cartão ou Pix recebido (já estão no líquido das vendas);
-    //   payment: pago com o saldo (fatura do cartão, boleto, tarifa...): sai do que fica na conta;
-    //   withdrawal: Pix ou transferência enviada (retirada para outra conta): não entra na conta;
-    //   other: outra entrada (rendimento, estorno, TED recebida...): só aparece na lista.
-    function statementKind(move) {
-        const tipo = String(move.tipo || ""), detalhe = String(move.detalhe || ""), v = Number(move.valor);
-        if (v > 0) return /dep[oó]sito de vendas/i.test(tipo) || (/\bpix\b/i.test(tipo) && /receb/i.test(detalhe)) ? "sale" : "other";
-        return /\bpix\b|transfer|\bted\b|\bdoc\b|saque/i.test(tipo) ? "withdrawal" : "payment";
-    }
-
-    // Lê um PDF da InfinitePay: o Relatório de Vendas ou o Relatório de movimentações (extrato).
-    async function readInfinitePayPdf(bytes) {
-        const extracted = await extractText(bytes);
-        if (isStatement(extracted)) {
-            const st = parseStatement(extracted);
-            st.check = checkStatement(st);
-            return { kind: "statement", ...st };
-        }
-        const report = parseReport(extracted);
-        report.check = checkReport(report);
-        return { kind: "sales", ...report };
-    }
-
     // ---------- Cruzamento com as vendas registradas ----------
 
     const DAY = 24 * 60 * 60 * 1000;
@@ -770,8 +640,7 @@
         return { txSale, txKind, saleTx };
     }
 
-    const api = { extractText, parseReport, checkReport, readInfinitePayReport, numberRows, matchTransactions, isSiteTx, txTime, pdfDate, parseCMap,
-        parseStatement, checkStatement, statementKind, readInfinitePayPdf };
+    const api = { extractText, parseReport, checkReport, readInfinitePayReport, numberRows, matchTransactions, isSiteTx, txTime, pdfDate, parseCMap };
     if (typeof module === "object" && module.exports) module.exports = api;
     else root.InfinitePayReport = api;
 })(typeof self !== "undefined" ? self : this);
