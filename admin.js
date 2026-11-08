@@ -1136,11 +1136,13 @@ function renderDashboardNet(r){
   const panel=$("dashNetPanel");if(!panel)return;
   panel.hidden=false;
   renderIpImport();
-  if(ipReport.coverage.length&&ipCoversRange(r))renderDashboardNetReport(r);else renderDashboardNetCalc(r);
+  // Também com cobranças da InfinitePay gravadas fora do período do relatório (um Pix tirado
+  // do extrato): elas entram no líquido, então a lista mostra cada uma.
+  if(ipReport.coverage.length&&(ipCoversRange(r)||ipTxIn(r.start,r.end,dashSource).length))renderDashboardNetReport(r);else renderDashboardNetCalc(r);
 }
 // Período com relatório: os valores do relatório e, depois dele, o calculado.
 function renderDashboardNetReport(r){
-  const src=dashSource,M=ipMatches(),cov=ipLastCoverage(r);
+  const src=dashSource,M=ipMatches(),cov=ipLastCoverage(r)||ipLastCoverage(null);
   const T=netTotals(r),P=netTotals(r.prev);
   const txs=T.txs.slice().sort((a,b)=>b.time-a.time);
   const rows=T.rows;
