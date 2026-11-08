@@ -99,4 +99,63 @@ function reportTotals(rows) {
     return { approved: ok.length, total: sum("valor"), fees: sum("taxa"), net: sum("liquido") };
 }
 
-module.exports = { sanitizeReportRow, reportRowKey, reportUntil, sanitizeSummary, mergeCoverage, reportTotals, brDate };
+// ---------- Relatório de movimentações (extrato da conta) ----------
+// Guardado no kv_store_48db9b7e ("infinitepay_statement"): os períodos conferidos, o resumo do
+// último extrato e cada movimentação (data, hora, tipo, detalhe e valor, sem o nome de quem
+// pagou ou recebeu). O painel desconta do líquido o que foi pago com o saldo (fatura do cartão...).
+
+const MAX_STATEMENT_MOVES = 20000;
+// Texto livre do extrato ("Fatura de cartão de crédito", "Depósito InfinitePay"): fica só o
+// que é letra, número e pontuação simples.
+const freeText = v => {
+    if (v === null || v === undefined) return null;
+    const s = String(v).normalize("NFKC").replace(/[^\p{L}\p{N} .:/()+-]/gu, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+    return s || null;
+};
+
+function sanitizeStatementRow(row) {
+    if (!row || typeof row !== "object" || !validDate(row.data)) return null;
+    const hora = row.hora === null || row.hora === undefined ? null : String(row.hora);
+    if (hora !== null && !/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) return null;
+    const tipo = freeText(row.tipo), detalhe = freeText(row.detalhe), valor = amount(row.valor);
+    if (!tipo || valor === null || valor === 0) return null;
+    return { data: row.data, hora, tipo, detalhe, valor };
+}
+
+function sanitizeStatementSummary(s) {
+    if (!s || typeof s !== "object") return null;
+    if (!validDate(s.from) || !validDate(s.to) || s.from > s.to) return null;
+    const count = Number(s.count);
+    if (!Number.isInteger(count) || count < 1 || count > 5000) return null;
+    const created = s.created && Number.isFinite(Date.parse(s.created)) ? new Date(Date.parse(s.created)).toISOString() : null;
+    const opening = amount(s.opening), inflow = amount(s.inflow), outflow = amount(s.outflow), closing = amount(s.closing);
+    if ([opening, inflow, outflow, closing].some(v => v === null)) return null;
+    return { from: s.from, to: s.to, created, count, opening, inflow, outflow, closing };
+}
+
+// As movimentações batem com os totais do extrato? (entradas, saídas e saldo final)
+function statementMatches(summary, rows) {
+    const c = v => Math.round(Number(v) * 100);
+    const inflow = rows.filter(r => r.valor > 0).reduce((a, r) => a + c(r.valor), 0);
+    const outflow = rows.filter(r => r.valor < 0).reduce((a, r) => a - c(r.valor), 0);
+    return rows.length === summary.count && inflow === c(summary.inflow) && outflow === c(summary.outflow) &&
+        c(summary.opening) + inflow - outflow === c(summary.closing);
+}
+
+// Junta o extrato novo ao que já estava gravado: as movimentações do período dele trocam as antigas.
+function mergeStatement(state, summary, rows, now) {
+    const old = Array.isArray(state && state.moves) ? state.moves : [];
+    const moves = old.filter(m => m && (m.data < summary.from || m.data > summary.to)).concat(rows)
+        .sort((a, b) => a.data.localeCompare(b.data) || String(a.hora || "").localeCompare(String(b.hora || "")))
+        .slice(-MAX_STATEMENT_MOVES);
+    return {
+        ranges: mergeCoverage(state && state.ranges, { from: summary.from, to: summary.to, until: reportUntil(summary) }),
+        last: { ...summary, imported_at: now },
+        moves
+    };
+}
+
+module.exports = {
+    sanitizeReportRow, reportRowKey, reportUntil, sanitizeSummary, mergeCoverage, reportTotals, brDate,
+    sanitizeStatementRow, sanitizeStatementSummary, statementMatches, mergeStatement
+};

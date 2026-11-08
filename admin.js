@@ -770,13 +770,21 @@ function olistSaleRows(){
 }
 function dashRows(){return dashSource==="site"?siteSaleRows():dashSource==="olist"?olistSaleRows():siteSaleRows().concat(olistSaleRows())}
 function dashSales(){return dashRows()}
+// Pago com o saldo da InfinitePay no período (fatura do cartão, boleto, tarifa...), pelo extrato:
+// sai do líquido. Pix e transferências enviados são retiradas e não saem. Só com "Site + Olist",
+// porque a conta é uma só.
+function balancePayments(start,end){
+  const list=dashSource==="all"?ipReport.statement.moves.filter(m=>m.kind==="payment"&&m.time>=start&&m.time<=end):[];
+  return {list,paid:list.reduce((n,m)=>n-Math.round(m.valor*100),0)/100,label:list.length&&list.every(m=>/fatura/i.test(m.tipo))?"da fatura do cartão":"pagos com o saldo"};
+}
 // Líquido de um período: nos dias que o relatório da InfinitePay cobre, o do relatório (igual
-// ao da conta); no resto, o calculado pelas taxas (exato no site, estimado na loja).
+// ao da conta); no resto, o calculado pelas taxas (exato no site, estimado na loja). Menos o que
+// foi pago com o saldo (extrato).
 function periodNet(start,end){
   const txs=ipTxIn(start,end,dashSource);
   const calc=dashRows().filter(s=>s.time>=start&&s.time<=end&&!ipCovered(s.time,s.source==="site"));
   const cents=txs.reduce((n,t)=>n+Math.round(t.liquido*100),0)+calc.reduce((n,s)=>n+Math.round((s.pay?Number(s.pay.net):Number(s.total||0))*100),0);
-  return {net:cents/100,approx:calc.some(s=>s.pay&&s.pay.estimated&&s.pay.fee>0),txs,calc};
+  return {net:(cents-Math.round(balancePayments(start,end).paid*100))/100,approx:calc.some(s=>s.pay&&s.pay.estimated&&s.pay.fee>0),txs,calc};
 }
 function sumTotal(list){return list.reduce((n,s)=>n+Number(s.total||0),0)}
 function soldPieces(list){return list.reduce((n,s)=>n+s.items.reduce((m,i)=>m+i.qty,0),0)}
@@ -1015,10 +1023,13 @@ function monthLabel(ym){const [y,m]=String(ym).split("-").map(Number);return y&&
 function netTotals(range){
   const inRange=t=>t>=range.start&&t<=range.end,cents=v=>Math.round(Number(v||0)*100),sum=(list,f)=>list.reduce((n,x)=>n+cents(f(x)),0);
   const rows=dashRows().filter(s=>inRange(s.time)),pay=rows.filter(s=>s.pay);
-  const txs=ipTxIn(range.start,range.end,dashSource),calc=pay.filter(s=>!ipCovered(s.time,s.source==="site"));
-  return{rows,pay,txs,calc,sold:sumTotal(rows),sale:sumPay(pay,"sale"),interest:sumPay(pay,"interest"),
-    charged:(sum(txs,t=>t.valor)+sum(calc,s=>s.pay.paid))/100,fee:(sum(txs,t=>t.taxa)+sum(calc,s=>s.pay.fee))/100,net:(sum(txs,t=>t.liquido)+sum(calc,s=>s.pay.net))/100};
+  const txs=ipTxIn(range.start,range.end,dashSource),calc=pay.filter(s=>!ipCovered(s.time,s.source==="site")),bal=balancePayments(range.start,range.end);
+  return{rows,pay,txs,calc,bal,sold:sumTotal(rows),sale:sumPay(pay,"sale"),interest:sumPay(pay,"interest"),
+    charged:(sum(txs,t=>t.valor)+sum(calc,s=>s.pay.paid))/100,fee:(sum(txs,t=>t.taxa)+sum(calc,s=>s.pay.fee))/100,net:(sum(txs,t=>t.liquido)+sum(calc,s=>s.pay.net)-cents(bal.paid))/100};
 }
+// Legenda do líquido quando sai algo pago com o saldo, e a linha na lista "Conferir venda a venda".
+function balanceSub(T){return T.bal.paid?` · já sem ${money(T.bal.paid)} ${T.bal.label}`:""}
+function balanceRows(T){return T.bal.list.map(m=>`<tr><td>${esc(ymdBr(m.data))}${m.hora?" "+esc(m.hora):""}</td><td><span class="net-ref">Pago com o saldo</span></td><td>${esc(m.tipo)}</td><td data-label="Venda">—</td><td data-label="Pago pela cliente">—</td><td data-label="Taxa">—</td><td><strong>−${money(-m.valor)}</strong></td></tr>`).join("")}
 // Um número do quadro do líquido com a comparação com o mesmo período do mês anterior:
 // verde quando subiu, vermelho quando caiu, preto quando igual. Juros ficam neutros.
 function netStep(r,label,value,sub,cur,prev,{neutral=false,empty="sem vendas",cls=""}={}){
@@ -1058,14 +1069,14 @@ function renderDashboardNetCalc(r){
     netStep(r,dashSource==="site"?"Vendido no site":dashSource==="olist"?"Vendido na loja":"Vendido",money(sale),rows.length?`${fmtInt(rows.length)} ${plural(rows.length,"venda","vendas")} · valor dos pedidos`:"nenhuma venda no período",sale,P.sale)+
     netStep(r,"+ Juros pagos pelas clientes",money(interest),withInterest?`${fmtInt(withInterest)} ${plural(withInterest,"venda parcelada","vendas parceladas")} com juros no site`:"nenhuma venda com juros",interest,P.interest,{neutral:true,empty:"sem juros"})+
     feeStep(r,(estFee?"≈ ":"")+money(fee),T,P,{basis:"do valor pago",approx:estFee?"≈ ":"",extra:[estFee?`${money(estFee)} estimados na loja`:"",pix?`${fmtInt(pix)} no Pix, sem taxa`:""].filter(Boolean).join(" · ")})+
-    netStep(r,"= Líquido na InfinitePay",(estFee?"≈ ":"")+money(net),(sale?`${pct(net/sale*100)} do vendido · o que entra na conta`:"o que entra na conta")+(pixRounding?` · ${pixRoundingSigned(pixRounding)} do arredondamento do desconto do Pix`:""),net,P.net,{cls:" is-net"}));
+    netStep(r,"= Líquido na InfinitePay",(estFee?"≈ ":"")+money(net),(sale?`${pct(net/sale*100)} do vendido · o que entra na conta`:"o que entra na conta")+(pixRounding?` · ${pixRoundingSigned(pixRounding)} do arredondamento do desconto do Pix`:"")+balanceSub(T),net,P.net,{cls:" is-net"}));
   const cell=s=>{const n=s.pay,approx=n.estimated&&n.fee?"≈ ":"";
     const when=s.source==="site"?date(s.order.paid_at||s.order.created_at):new Date(s.time).toLocaleDateString("pt-BR");
     const ref=s.source==="site"?`<button class="link-button" data-click="openOrder" data-args="${esc(JSON.stringify([s.order.id]))}">${esc(orderCodeLabel(s.order))}</button>`:`<span class="net-ref">Loja · nº ${esc(s.olist.numero||"—")}</span>`;
     const form=s.source==="site"?netPayLabel(n):n.label;
     const feeSub=n.fee_percent?feePct(n.fee_percent)+(n.estimated?" · estimada":""):n.method==="pix"?"Pix":"sem taxa";
     return `<tr><td>${esc(when)}</td><td>${ref}</td><td>${esc(form)}</td><td data-label="Venda">${money(n.sale)}</td><td data-label="Pago pela cliente">${money(n.paid)}${paidSub(n)}</td><td data-label="Taxa">${n.fee?approx+"−"+money(n.fee):"grátis"}<small class="net-sub">${esc(feeSub)}</small></td><td><strong>${approx}${money(n.net)}</strong></td></tr>`};
-  setHTML($("dashNetTable"),rows.length?`<table class="table net-table"><thead><tr><th>PAGO EM</th><th>PEDIDO</th><th>FORMA</th><th>VENDA</th><th>PAGO PELA CLIENTE</th><th>TAXA</th><th>LÍQUIDO</th></tr></thead><tbody>${rows.map(cell).join("")}<tr class="dc-total"><td>Total</td><td>${fmtInt(rows.length)} ${plural(rows.length,"venda","vendas")}</td><td></td><td data-label="Venda">${money(sale)}</td><td data-label="Pago pela cliente">${money(paid)}</td><td data-label="Taxas">${fee?(estFee?"≈ ":"")+"−"+money(fee):"—"}</td><td>${(estFee?"≈ ":"")+money(net)}</td></tr></tbody></table>`:'<p class="field-help">Nenhuma venda no período.</p>');
+  setHTML($("dashNetTable"),rows.length?`<table class="table net-table"><thead><tr><th>PAGO EM</th><th>PEDIDO</th><th>FORMA</th><th>VENDA</th><th>PAGO PELA CLIENTE</th><th>TAXA</th><th>LÍQUIDO</th></tr></thead><tbody>${rows.map(cell).join("")}${balanceRows(T)}<tr class="dc-total"><td>Total</td><td>${fmtInt(rows.length)} ${plural(rows.length,"venda","vendas")}</td><td></td><td data-label="Venda">${money(sale)}</td><td data-label="Pago pela cliente">${money(paid)}</td><td data-label="Taxas">${fee?(estFee?"≈ ":"")+"−"+money(fee):"—"}</td><td>${(estFee?"≈ ":"")+money(net)}</td></tr></tbody></table>`:'<p class="field-help">Nenhuma venda no período.</p>');
   // Também passaram pela InfinitePay, mas não entram na conta acima.
   const inR=o=>inRange(saleTime(o));
   const notes=[];
@@ -1095,14 +1106,16 @@ function renderDashboardNetCalc(r){
    pagamento, Pix na conta, InfiniteTap). Cada cobrança é ligada à venda registrada (pedido
    do site ou venda da Olist) para mostrar o que não bate.
 ===================================================== */
-let ipReport={transactions:[],coverage:[],last:null,loaded:false,error:""},ipImportMessage="",ipMatchCache=null;
+let ipReport={transactions:[],coverage:[],last:null,statement:{ranges:[],last:null,moves:[]},loaded:false,error:""},ipImportMessage="",ipMatchCache=null;
 const IP_TYPES={"Link Integrado":"Site","Link de Pagamento":"Link de pagamento","Conta Inteligente":"Conta","InfiniteTap":"InfiniteTap","Cobrança":"Cobrança"};
 function ipPrep(t){const v={...t,valor:Number(t.valor||0),liquido:Number(t.liquido||0),taxa:Number(t.taxa||0),parcelas:Number(t.parcelas||1),taxa_percentual:t.taxa_percentual==null?null:Number(t.taxa_percentual)};v.time=window.InfinitePayReport.txTime(v);v.site=window.InfinitePayReport.isSiteTx(v);return v}
 async function loadInfinitePayReport(){
   try{
     if(!window.InfinitePayReport)throw new Error("Não foi possível abrir o leitor do relatório. Atualize a página.");
     const d=await api("/api/admin/infinitepay/report");
-    ipReport={transactions:(Array.isArray(d.transactions)?d.transactions:[]).map(ipPrep).sort((a,b)=>b.time-a.time),coverage:Array.isArray(d.coverage)?d.coverage:[],last:d.last||null,loaded:true,error:""};
+    const st=d.statement||{};
+    ipReport={transactions:(Array.isArray(d.transactions)?d.transactions:[]).map(ipPrep).sort((a,b)=>b.time-a.time),coverage:Array.isArray(d.coverage)?d.coverage:[],last:d.last||null,
+      statement:{ranges:Array.isArray(st.ranges)?st.ranges:[],last:st.last||null,moves:(Array.isArray(st.moves)?st.moves:[]).map(m=>({...m,valor:Number(m.valor||0),time:window.InfinitePayReport.txTime(m),kind:window.InfinitePayReport.statementKind(m)}))},loaded:true,error:""};
   }catch(e){ipReport={...ipReport,loaded:true,error:e.message}}
   ipMatchCache=null;renderDashboard();
 }
@@ -1160,7 +1173,7 @@ function renderDashboardNetReport(r){
     netStep(r,src==="site"?"Vendido no site":src==="olist"?"Vendido na loja":"Vendido",money(sold),rows.length?`${fmtInt(rows.length)} ${plural(rows.length,"venda registrada","vendas registradas")}${src==="site"?"":src==="olist"?" na Olist":" (site e Olist)"}`:"nenhuma venda registrada",sold,P.sold)+
     netStep(r,"Cobrado na InfinitePay",money(charged),`${fmtInt(txs.length)} ${plural(txs.length,"cobrança aprovada","cobranças aprovadas")} no relatório${calc.length?` + ${fmtInt(calc.length)} ${plural(calc.length,"venda","vendas")} depois dele`:""}`,charged,P.charged)+
     feeStep(r,approx+money(fee),T,P,{basis:"do cobrado",approx,extra:estFee?`${money(estFee)} estimados`:""})+
-    netStep(r,"= Líquido na InfinitePay",approx+money(net),"o que entra na conta",net,P.net,{cls:" is-net"}));
+    netStep(r,"= Líquido na InfinitePay",approx+money(net),"o que entra na conta"+balanceSub(T),net,P.net,{cls:" is-net"}));
   const txRow=t=>{
     const m=M.byTx.get(t);let ref,venda="—";
     if(m&&m.sale.order){const o=m.sale.order;ref=`<button class="link-button" data-click="openOrder" data-args="${esc(JSON.stringify([o.id]))}">${esc(orderCodeLabel(o))}</button>${isTestOrder(o)?'<small class="net-sub">pedido de teste</small>':""}`;venda=money(o.total)}
@@ -1177,7 +1190,7 @@ function renderDashboardNetReport(r){
   const missRow=s=>{const ref=s.source==="site"?`<button class="link-button" data-click="openOrder" data-args="${esc(JSON.stringify([s.order.id]))}">${esc(orderCodeLabel(s.order))}</button>`:`<span class="net-ref">Loja · nº ${esc(s.olist.numero||"—")}</span>`;
     return `<tr class="is-missing"><td>${esc(new Date(s.time).toLocaleDateString("pt-BR"))}</td><td>${ref}</td><td>${esc(s.payment)}</td><td data-label="Venda">${money(s.total)}</td><td data-label="Na InfinitePay">não aparece no relatório</td><td></td><td>—</td></tr>`};
   const all=txs.length+calc.length+missing.length;
-  setHTML($("dashNetTable"),all?`<table class="table net-table"><thead><tr><th>PAGO EM</th><th>VENDA REGISTRADA</th><th>FORMA</th><th>VALOR DA VENDA</th><th>PAGO PELA CLIENTE</th><th>TAXA</th><th>LÍQUIDO</th></tr></thead><tbody>${calc.map(calcRow).join("")}${txs.map(txRow).join("")}${missing.map(missRow).join("")}<tr class="dc-total"><td>Total</td><td>${fmtInt(txs.length+calc.length)} ${plural(txs.length+calc.length,"cobrança","cobranças")}</td><td></td><td data-label="Vendido">${money(sold)}</td><td data-label="Cobrado">${money(charged)}</td><td data-label="Taxas">${fee?approx+"−"+money(fee):"—"}</td><td>${approx+money(net)}</td></tr></tbody></table>`:'<p class="field-help">Nenhuma venda no período.</p>');
+  setHTML($("dashNetTable"),all?`<table class="table net-table"><thead><tr><th>PAGO EM</th><th>VENDA REGISTRADA</th><th>FORMA</th><th>VALOR DA VENDA</th><th>PAGO PELA CLIENTE</th><th>TAXA</th><th>LÍQUIDO</th></tr></thead><tbody>${calc.map(calcRow).join("")}${txs.map(txRow).join("")}${missing.map(missRow).join("")}${balanceRows(T)}<tr class="dc-total"><td>Total</td><td>${fmtInt(txs.length+calc.length)} ${plural(txs.length+calc.length,"cobrança","cobranças")}</td><td></td><td data-label="Vendido">${money(sold)}</td><td data-label="Cobrado">${money(charged)}</td><td data-label="Taxas">${fee?approx+"−"+money(fee):"—"}</td><td>${approx+money(net)}</td></tr></tbody></table>`:'<p class="field-help">Nenhuma venda no período.</p>');
   const notes=[];
   const noSale=txs.filter(t=>!M.byTx.get(t)),noSaleStore=noSale.filter(t=>!t.site),noSaleSite=noSale.filter(t=>t.site);
   if(noSaleStore.length)notes.push(`${fmtInt(noSaleStore.length)} ${plural(noSaleStore.length,"cobrança da loja na InfinitePay não tem","cobranças da loja na InfinitePay não têm")} venda igual na Olist (${money(sum(noSaleStore,t=>t.valor))}): venda não lançada na Olist, Pix recebido na conta ou valor diferente. Na lista ${plural(noSaleStore.length,"ela aparece","elas aparecem")} como "Sem venda na Olist".`);
@@ -1205,6 +1218,12 @@ function renderIpImport(){
     const first=ipReport.transactions.length?ipReport.transactions[ipReport.transactions.length-1].data:cov.from;
     text=`Conferido com o relatório da InfinitePay de ${ymdBr(first)} até ${ipUntilText(cov)}${last&&last.imported_at?` (enviado em ${new Date(last.imported_at).toLocaleDateString("pt-BR")})`:""}. Para atualizar, envie um relatório novo: pode ser só dos últimos dias.`;
   }
+  // Extrato (Relatório de movimentações): o mesmo botão aceita os dois PDFs.
+  if(ipReport.loaded&&!ipReport.error){
+    const sts=ipReport.statement.ranges,sc=sts.slice().sort((a,b)=>a.to<b.to?1:-1)[0];
+    text+=sc?` Extrato da conta conferido de ${ymdBr(sts.reduce((a,x)=>x.from<a?x.from:a,sc.from))} até ${ipUntilText(sc)}.`
+      :" Envie também o Relatório de movimentações (extrato): o líquido desconta a fatura do cartão e o que mais for pago com o saldo.";
+  }
   box.textContent=(ipImportMessage?ipImportMessage+" ":"")+text;
   box.classList.toggle("is-error",!!ipReport.error);
 }
@@ -1217,7 +1236,8 @@ async function importInfinitePayReport(file){
     if(!window.InfinitePayReport)throw new Error("Não foi possível abrir o leitor do relatório. Atualize a página.");
     if(file.size>20*1024*1024)throw new Error("O arquivo é grande demais para um relatório (máximo de 20 MB).");
     say("Lendo o relatório…");
-    const rep=await window.InfinitePayReport.readInfinitePayReport(new Uint8Array(await file.arrayBuffer()));
+    const rep=await window.InfinitePayReport.readInfinitePayPdf(new Uint8Array(await file.arrayBuffer()));
+    if(rep.kind==="statement"){await importInfinitePayStatement(rep,say);return}
     if(!rep.rows.length)throw new Error("Não encontrei vendas neste PDF. Confira se é o Relatório de Vendas da InfinitePay.");
     if(rep.unread.length)throw new Error(`Não consegui ler ${fmtInt(rep.unread.length)} ${plural(rep.unread.length,"linha","linhas")} do relatório. Nada foi gravado.`);
     if(!rep.summary.from||!rep.summary.to)throw new Error("Não encontrei o período do relatório. Nada foi gravado.");
@@ -1234,6 +1254,18 @@ async function importInfinitePayReport(file){
     await loadInfinitePayReport();
   }catch(e){ipImportMessage="";if(box){box.textContent=e.message;box.classList.add("is-error")}}
   finally{button.disabled=false;if(input)input.value=""}
+}
+// Relatório de movimentações (extrato): grava as movimentações, sem os nomes. O que foi pago
+// com o saldo (fatura do cartão, boleto...) sai do líquido.
+async function importInfinitePayStatement(rep,say){
+  if(!rep.rows.length)throw new Error("Não encontrei movimentações neste extrato.");
+  if(rep.unread.length)throw new Error(`Não consegui ler ${fmtInt(rep.unread.length)} ${plural(rep.unread.length,"movimentação","movimentações")} do extrato. Nada foi gravado.`);
+  if(!rep.check.ok)throw new Error(`As movimentações lidas (${money(rep.check.got.inflow)} de entradas e ${money(rep.check.got.outflow)} de saídas) não batem com os totais do extrato. Nada foi gravado.`);
+  const s=rep.summary;
+  say(`Gravando ${fmtInt(rep.rows.length)} ${plural(rep.rows.length,"movimentação","movimentações")} do extrato…`);
+  await api("/api/admin/infinitepay/statement",{method:"POST",body:JSON.stringify({summary:{from:s.from,to:s.to,created:s.created,count:rep.rows.length,opening:s.opening,inflow:s.inflow,outflow:s.outflow,closing:s.closing},rows:rep.rows})});
+  ipImportMessage=`Extrato gravado: ${fmtInt(rep.rows.length)} ${plural(rep.rows.length,"movimentação","movimentações")} de ${ymdBr(s.from)} a ${ymdBr(s.to)}.`;
+  await loadInfinitePayReport();
 }
 (function(){
   const button=$("ipReportButton"),input=$("ipReportFile");
