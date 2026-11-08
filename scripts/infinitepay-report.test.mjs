@@ -192,3 +192,92 @@ test("servidor: soma das aprovadas", () => {
     const rows = [{ status: "Aprovada", valor: "504.00", taxa: "35.33", liquido: "468.67" }, { status: "Negada", valor: 453.24, taxa: 0, liquido: 453.24 }, { status: "Aprovada", valor: 0.1, taxa: 0, liquido: 0.2 }];
     assert.deepEqual(I.reportTotals(rows), { approved: 2, total: 504.1, fees: 35.33, net: 468.87 });
 });
+
+// ---------- Relatório de movimentações (extrato da conta) ----------
+// Mesmo layout do extrato do app: um cabeçalho por dia, a data só na primeira movimentação do
+// dia, "Saldo do dia" no fim de cada dia, a fatura do cartão em duas linhas e com "--R$".
+const STATEMENT = [
+    at(16, 55, "Relatório de movimentações"), at(16, 78, "01 Nov, 2026 - 08 Nov, 2026"), at(760, 78, "Valor em R$"),
+    at(16, 96, "Saldo ﬁnal do período"), at(421, 97, "Saldo inicial"), at(778, 97, "+ 8.512,52"),
+    at(16, 114, "R$ 4.099,03"), at(421, 118, "Total de entradas"), at(779, 118, "+ 4.124,03"),
+    at(421, 139, "Total de saídas"), at(781, 139, "- 8.537,52"),
+    at(421, 160, "Saldo ﬁnal do período"), at(775, 160, "+ 4.099,03"),
+    at(13, 198, "Data"), at(97, 198, "Hora"), at(164, 198, "Tipo de transação"), at(299, 198, "Nome"), at(568, 198, "Detalhe"), at(788, 198, "Valor (R$)"),
+    at(13, 222, "02 Nov, 2026"), at(97, 222, "08:25"), at(164, 222, "Pix"), at(299, 222, "Pix FULANA DE TAL"), at(568, 222, "Enviado"), at(793, 222, "-8.512,52"),
+    at(97, 246, "12:31"), at(164, 246, "Pix"), at(299, 246, "Pix CICLANA"), at(568, 246, "Recebido"), at(798, 246, "+528,01"),
+    at(164, 270, "Saldo do dia"), at(795, 270, "+ 528,01"),
+    at(13, 303, "Data"), at(97, 303, "Hora"), at(164, 303, "Tipo de transação"), at(299, 303, "Nome"), at(568, 303, "Detalhe"), at(788, 303, "Valor (R$)"),
+    at(13, 327, "05 Nov, 2026"), at(97, 327, "00:45"), at(164, 327, "Depósito de vendas"), at(299, 327, "Vendas"), at(568, 327, "Depósito InﬁnitePay"), at(791, 327, "+2.069,76"),
+    at(164, 351, "Fatura de cartão de"), at(97, 357, "09:20"), at(299, 357, "Fatura • Nov 2026"), at(568, 357, "Pago"), at(787, 357, "--R$ 25,00"), at(164, 363, "crédito"),
+    at(97, 387, "10:00"), at(164, 387, "Pix"), at(299, 387, "Pix BELTRANA"), at(568, 387, "Recebido"), at(796, 387, "+508,05"),
+    at(97, 411, "13:13"), at(164, 411, "Pix"), at(299, 411, "Pix OUTRA PESSOA"), at(568, 411, "Recebido"), at(805, 411, "+27,91"),
+    at(97, 435, "23:50"), at(164, 435, "Pix"), at(299, 435, "Pix MAIS UMA"), at(568, 435, "Recebido"), at(797, 435, "+489,08"),
+    at(164, 459, "Saldo do dia"), at(789, 459, "+ 3.597,81"),
+    at(13, 492, "Data"), at(97, 492, "Hora"), at(164, 492, "Tipo de transação"), at(299, 492, "Nome"), at(568, 492, "Detalhe"), at(788, 492, "Valor (R$)"),
+    at(13, 516, "06 Nov, 2026"), at(97, 516, "00:54"), at(164, 516, "Depósito de vendas"), at(299, 516, "Vendas"), at(568, 516, "Depósito InﬁnitePay"), at(798, 516, "+501,22"),
+    at(164, 540, "Saldo do dia"), at(786, 540, "+ 4.099,03"),
+    at(8, 583, "A Central de Ajuda está disponível todos os dias pelo chat no app"), at(785, 583, "Página 1 de 1")
+];
+
+test("extrato: período, totais e cada movimentação, sem os nomes", async () => {
+    const st = await R.readInfinitePayPdf(makePdf(STATEMENT, "D:20261108223553+00'00'"));
+    assert.equal(st.kind, "statement");
+    assert.deepEqual(st.unread, []);
+    assert.deepEqual(st.summary, { from: "2026-11-01", to: "2026-11-08", created: "2026-11-08T22:35:53.000Z", opening: 8512.52, inflow: 4124.03, outflow: 8537.52, closing: 4099.03 });
+    assert.equal(st.check.ok, true);
+    assert.deepEqual(st.rows.map(r => [r.data, r.hora, r.tipo, r.detalhe, r.valor]), [
+        ["2026-11-02", "08:25", "Pix", "Enviado", -8512.52],
+        ["2026-11-02", "12:31", "Pix", "Recebido", 528.01],
+        ["2026-11-05", "00:45", "Depósito de vendas", "Depósito InfinitePay", 2069.76],
+        ["2026-11-05", "09:20", "Fatura de cartão de crédito", "Pago", -25],
+        ["2026-11-05", "10:00", "Pix", "Recebido", 508.05],
+        ["2026-11-05", "13:13", "Pix", "Recebido", 27.91],
+        ["2026-11-05", "23:50", "Pix", "Recebido", 489.08],
+        ["2026-11-06", "00:54", "Depósito de vendas", "Depósito InfinitePay", 501.22]
+    ]);
+    assert.ok(st.rows.every(r => !JSON.stringify(r).includes("FULANA") && !JSON.stringify(r).includes("Fatura •")));
+    // Só a fatura sai do que fica na conta; o Pix enviado é retirada; o resto já está nas vendas.
+    assert.deepEqual(st.rows.map(R.statementKind), ["withdrawal", "sale", "sale", "payment", "sale", "sale", "sale", "sale"]);
+});
+
+test("extrato com uma movimentação errada não confere", async () => {
+    const st = await R.readInfinitePayPdf(makePdf(STATEMENT.map(r => (r.s === "+27,91" ? { ...r, s: "+27,19" } : r))));
+    assert.equal(st.check.ok, false);
+});
+
+test("o mesmo leitor reconhece o Relatório de Vendas", async () => {
+    const rep = await R.readInfinitePayPdf(makePdf(HEADER.concat(ROWS)));
+    assert.equal(rep.kind, "sales");
+    assert.equal(rep.check.ok, true);
+});
+
+test("tipo de cada movimentação do extrato", () => {
+    const k = (tipo, detalhe, valor) => R.statementKind({ tipo, detalhe, valor });
+    assert.equal(k("Boleto", "Pago", -120), "payment");
+    assert.equal(k("Tarifa", "Cobrada", -2.5), "payment");
+    assert.equal(k("Transferência", "Enviada", -300), "withdrawal");
+    assert.equal(k("Rendimento", "Recebido", 1.2), "other");
+});
+
+test("servidor: extrato confere e troca as movimentações do mesmo período", () => {
+    const summary = I.sanitizeStatementSummary({ from: "2026-11-01", to: "2026-11-08", created: "2026-11-08T22:35:53.000Z", count: 3, opening: 100, inflow: 528.01, outflow: 125, closing: 503.01 });
+    assert.ok(summary);
+    const rows = [
+        { data: "2026-11-02", hora: "08:25", tipo: "Pix", detalhe: "Enviado", valor: -100 },
+        { data: "2026-11-02", hora: "12:31", tipo: "Pix", detalhe: "Recebido", valor: 528.01 },
+        { data: "2026-11-05", hora: "09:20", tipo: "Fatura de cartão de crédito", detalhe: "Pago • Nov", valor: -25 }
+    ].map(I.sanitizeStatementRow);
+    assert.equal(rows[2].detalhe, "Pago Nov");
+    assert.equal(I.statementMatches(summary, rows), true);
+    assert.equal(I.statementMatches(summary, rows.slice(1)), false);
+    assert.equal(I.sanitizeStatementRow({ data: "2026-11-02", hora: "25:00", tipo: "Pix", valor: 1 }), null);
+    assert.equal(I.sanitizeStatementRow({ data: "2026-11-02", tipo: "Pix", valor: 0 }), null);
+    const old = { ranges: [{ from: "2026-10-01", to: "2026-10-31", until: "2026-10-31T23:59:59.000Z" }], moves: [
+        { data: "2026-10-30", hora: "10:00", tipo: "Boleto", detalhe: "Pago", valor: -10 },
+        { data: "2026-11-03", hora: "10:00", tipo: "Boleto", detalhe: "Pago", valor: -99 }
+    ] };
+    const next = I.mergeStatement(old, summary, rows, "2026-11-08T23:00:00.000Z");
+    assert.deepEqual(next.ranges, [{ from: "2026-10-01", to: "2026-11-08", until: "2026-11-08T22:35:53.000Z" }]);
+    assert.deepEqual(next.moves.map(m => m.valor), [-10, -100, 528.01, -25]);
+    assert.equal(next.last.imported_at, "2026-11-08T23:00:00.000Z");
+});

@@ -9,7 +9,7 @@ const { PROMOTION_GIFTS_CEILING, promotionGiftCount } = require("./gift-promotio
 const { OLIST_SALE_SITUATIONS, olistSaleSummary, olistSaleDetail, olistSalesListNow } = require("./olist-sales.js");
 const { olistWaitingSales } = require("./olist-stock-waiting.js");
 const { infinitePayNet, currentInfinitePayFees, olistStoreNet, cardBillingByMonth, currentMachineFees } = require("./infinitepay-fees.js");
-const { sanitizeReportRow, reportRowKey, reportUntil, sanitizeSummary, mergeCoverage, reportTotals } = require("./infinitepay-report-import.js");
+const { sanitizeReportRow, reportRowKey, reportUntil, sanitizeSummary, mergeCoverage, reportTotals, sanitizeStatementRow, sanitizeStatementSummary, statementMatches, mergeStatement } = require("./infinitepay-report-import.js");
 
 // Este servidor roda no Render (Node) e no Cloudflare Workers (nodejs_compat).
 // No Workers não há arquivos do projeto no disco nem timers fora de uma requisição:
@@ -4137,11 +4137,13 @@ app.get("/api/admin/olist/sales", requireAdmin, async (req, res) => {
 const INFINITEPAY_REPORT_KEY = "infinitepay_report";
 const INFINITEPAY_TX_FIELDS = "data,hora,meio,tipo,identificador,parcelas,status,valor,liquido,taxa,taxa_percentual,plano";
 
-async function readInfinitePayReportState() {
-    const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + INFINITEPAY_REPORT_KEY + "&select=value&limit=1", { method: "GET" });
+async function readInfinitePayReportState(key = INFINITEPAY_REPORT_KEY) {
+    const rows = await supabaseRequest("kv_store_48db9b7e?key=eq." + key + "&select=value&limit=1", { method: "GET" });
     const value = Array.isArray(rows) && rows[0] ? rows[0].value : null;
     return value && typeof value === "object" ? value : {};
 }
+// Relatório de movimentações (extrato da conta): o que foi pago com o saldo (fatura do cartão...).
+const INFINITEPAY_STATEMENT_KEY = "infinitepay_statement";
 
 // O Supabase devolve no máximo 1000 linhas por consulta: lê em páginas.
 async function supabaseAll(path, pageSize = 1000, maxRows = 50000) {
@@ -4157,11 +4159,15 @@ async function supabaseAll(path, pageSize = 1000, maxRows = 50000) {
 
 app.get("/api/admin/infinitepay/report", requireAdmin, async (req, res) => {
     try {
-        const [transactions, state] = await Promise.all([
+        const [transactions, state, statement] = await Promise.all([
             supabaseAll(`infinitepay_transactions?select=${INFINITEPAY_TX_FIELDS}&status=eq.Aprovada&order=key.asc`),
-            readInfinitePayReportState()
+            readInfinitePayReportState(),
+            readInfinitePayReportState(INFINITEPAY_STATEMENT_KEY)
         ]);
-        return res.json({ success: true, transactions, coverage: Array.isArray(state.ranges) ? state.ranges : [], last: state.last || null });
+        return res.json({
+            success: true, transactions, coverage: Array.isArray(state.ranges) ? state.ranges : [], last: state.last || null,
+            statement: { ranges: Array.isArray(statement.ranges) ? statement.ranges : [], last: statement.last || null, moves: Array.isArray(statement.moves) ? statement.moves : [] }
+        });
     } catch (error) {
         console.error("Relatório InfinitePay — painel:", error);
         return res.status(500).json({ success: false, message: "Não foi possível carregar o relatório da InfinitePay." });
@@ -4227,6 +4233,38 @@ app.post("/api/admin/infinitepay/report", requireAdmin, async (req, res) => {
     } catch (error) {
         console.error("Relatório InfinitePay — importação:", error);
         return res.status(500).json({ success: false, message: "Não foi possível gravar o relatório agora. Tente de novo em instantes." });
+    }
+});
+
+// Relatório de movimentações (extrato): o painel lê o PDF e envia as movimentações, sem os nomes.
+app.post("/api/admin/infinitepay/statement", requireAdmin, async (req, res) => {
+    try {
+        const body = req.body || {};
+        const summary = sanitizeStatementSummary(body.summary);
+        if (!summary) return res.status(400).json({ success: false, message: "Não encontrei o período e os totais do extrato. Baixe de novo o Relatório de movimentações no app da InfinitePay." });
+        const raw = Array.isArray(body.rows) ? body.rows : null;
+        if (!raw || raw.length !== summary.count) return res.status(400).json({ success: false, message: "Envio do extrato incompleto. Tente de novo." });
+        const rows = [];
+        for (const item of raw) {
+            const row = sanitizeStatementRow(item);
+            if (!row || row.data < summary.from || row.data > summary.to) {
+                return res.status(400).json({ success: false, message: "Uma movimentação do extrato veio fora do formato esperado. Nada foi gravado." });
+            }
+            rows.push(row);
+        }
+        if (!statementMatches(summary, rows)) {
+            return res.status(409).json({ success: false, message: "As movimentações não batem com os totais do extrato. Nada foi gravado." });
+        }
+        const next = mergeStatement(await readInfinitePayReportState(INFINITEPAY_STATEMENT_KEY), summary, rows, new Date().toISOString());
+        await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
+            method: "POST",
+            headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+            body: JSON.stringify({ key: INFINITEPAY_STATEMENT_KEY, value: next })
+        });
+        return res.json({ success: true, statement: next });
+    } catch (error) {
+        console.error("Extrato InfinitePay — importação:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível gravar o extrato agora. Tente de novo em instantes." });
     }
 });
 
