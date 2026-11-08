@@ -2675,9 +2675,7 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
 .dash-net-notes{display:grid;gap:8px;margin-top:12px}
 .dash-net-notes .field-help{margin:0}
 .dash-net-notes .help-more{margin:0}
-.net-flow.has-account{grid-template-columns:repeat(5,minmax(0,1fr))}
-.net-step.is-account{background:var(--ad-soft)}
-@media (max-width:1000px){.net-flow,.net-flow.has-account{grid-template-columns:repeat(2,minmax(0,1fr))}.net-step.is-account{grid-column:1/-1}}
+@media (max-width:1000px){.net-flow{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:420px){.net-step{padding:14px}.net-step strong{font-size:20px}}
 /* No celular cada venda vira um cartão: à esquerda data, pedido, forma e valores; à direita o líquido. */
 @media (max-width:640px){
@@ -2699,8 +2697,6 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
 
 /* Os dois valores: o líquido embaixo do faturamento (topo, número do período e cada pedido) */
 .hero-net{display:block;margin:2px 0 6px;font-size:15px;font-weight:500;color:rgba(255,255,255,.82)}
-.hero-account{margin-top:-2px;font-size:14px;color:rgba(255,255,255,.7)}
-.hero-account:empty{display:none}
 .kpi-net{font-size:13px;font-weight:500;color:var(--ad-ink-2)}
 .order-net{display:block;margin-top:3px;font-size:11px;color:var(--ad-muted);white-space:nowrap}
 
