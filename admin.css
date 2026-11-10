@@ -2781,12 +2781,6 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
 .sms-counter-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 14px;margin:8px 0 4px}
 .sms-counter{font-size:12.5px;color:var(--ad-ink-2)}
 .sms-counter.is-over{color:var(--ad-danger);font-weight:600}
-.sms-checklist{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px}
-.sms-checklist li{position:relative;padding-left:24px;font-size:12.5px;line-height:1.5;color:var(--ad-ink-2)}
-.sms-checklist li::before{position:absolute;left:0;top:0;width:17px;height:17px;border-radius:50%;font-size:11px;line-height:17px;text-align:center;font-weight:700}
-.sms-checklist li.is-ok::before{content:"✓";background:#e7f2ea;color:var(--ad-up)}
-.sms-checklist li.is-warn::before{content:"!";background:#f6e9e3;color:var(--ad-wine)}
-.sms-checklist li.is-warn{color:var(--ad-wine)}
 .sms-test-row{display:flex;align-items:flex-end;flex-wrap:wrap;gap:10px 12px}
 .sms-test-row label{flex:0 1 260px}
 .sms-test-row input{width:100%}

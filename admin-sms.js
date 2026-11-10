@@ -134,26 +134,15 @@
   function renderCounter(){
     const text=$("smsText").value,info=T.smsSegments(text.trim());
     const counter=$("smsCounter");
-    const accents=T.nonGsmCharacters(text);
     let line=fmt(info.length)+" caracteres · ";
     line+=info.segments?(info.segments===1?"1 SMS por pessoa":info.segments+" SMS por pessoa (cobrados como "+info.segments+")"):"0 SMS";
     if(info.segments)line+=" · cabem mais "+fmt(info.remaining)+" nesta parte";
+    // Longa demais: o próprio contador avisa (em vermelho); o servidor também recusa.
+    if(info.segments>T.MAX_SEGMENTS)line+=" · longa demais: no máximo "+T.MAX_SEGMENTS+" SMS por pessoa";
     counter.textContent=line;
     counter.classList.toggle("is-over",info.segments>T.MAX_SEGMENTS);
-    $("smsStripAccents").hidden=!accents.length;
-    const links=textLinks(text);
-    $("smsTrackRow").hidden=!links.length;
-    const track=trackingOn();
-    const foreign=links.filter(u=>!/(^|\/\/|\.)oficialmontee\.com\.br/i.test(u));
-    const checks=[
-      [/^\s*MONT[EÊ]\b/i.test(text),"Começa com o nome da loja (MONTE)","Comece com MONTE: a cliente sabe na hora de quem é."],
-      [/\b(sair|parar de receber|n[aã]o receber|descadastr)/i.test(text),"Diz como parar de receber","Diga como parar de receber (por exemplo: Para nao receber mais, fale no WhatsApp)."],
-      [!accents.length,"Sem acento nem emoji: 160 caracteres por SMS","Com "+accents.map(c=>c==="\n"?"quebra de linha":c).slice(0,6).join(" ")+" cada SMS cabe só 70 caracteres. Use TIRAR ACENTOS."],
-      [!foreign.length,track?"Link do site da loja (vai encurtado pela Mobizon, um por pessoa)":"Links só do site da loja","Links de outros sites ou de encurtadores (bit.ly) costumam ser bloqueados pelas operadoras."]
-    ];
-    if(track)checks.push([links.every(u=>/^https?:\/\//i.test(u)),"O link começa com https:// (a Mobizon consegue contar os cliques)","Para contar os cliques, o link precisa começar com https:// (por exemplo https://oficialmontee.com.br)."]);
-    if(info.segments>T.MAX_SEGMENTS)checks.unshift([false,"","Mensagem longa demais: no máximo "+T.MAX_SEGMENTS+" SMS por pessoa."]);
-    setHTML($("smsChecklist"),checks.map(([ok,good,bad])=>'<li class="'+(ok?"is-ok":"is-warn")+'">'+esc(ok?good:bad)+'</li>').join(""));
+    $("smsStripAccents").hidden=!T.nonGsmCharacters(text).length;
+    $("smsTrackRow").hidden=!textLinks(text).length;
   }
 
   // Ao ligar "contar quem clicou", o link sem https:// ganha o https:// (a Mobizon só encurta links completos).

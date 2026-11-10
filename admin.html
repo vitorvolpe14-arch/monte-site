@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20261110-sms-salvar">
+<link rel="stylesheet" href="admin.css?v=20261110-sms-semlista">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -292,7 +292,6 @@
             <label class="full-width">Texto do SMS<textarea id="smsText" rows="4" maxlength="1000"></textarea></label>
             <div class="sms-counter-row"><span id="smsCounter" class="sms-counter"></span><span class="sms-counter-actions"><button type="button" id="smsStripAccents" class="secondary" hidden>TIRAR ACENTOS</button><button type="button" id="smsTemplateSave" class="secondary">SALVAR MENSAGEM</button></span></div>
             <span id="smsTemplateMessage" class="field-help"></span>
-            <ul id="smsChecklist" class="sms-checklist"></ul>
             <div id="smsTrackRow" class="sms-track" hidden><label><input type="checkbox" id="smsTrackLinks"> Contar quem clicou no link</label><span class="field-help">A Mobizon troca o link por um link curto dela, um por pessoa, e conta os cliques. O link precisa começar com https:// (o painel coloca sozinho).</span></div>
             <div class="sms-test-row"><label>Testar antes no seu celular (opcional)<input id="smsTestPhone" inputmode="tel" autocomplete="tel" placeholder="(85) 99123-4567"></label><button type="button" id="smsTestButton" class="secondary">MANDAR TESTE</button></div>
             <span id="smsTestMessage" class="field-help">Gasta um SMS do saldo. Confira se chegou e como ficou o texto antes de mandar para todas.</span>
@@ -428,6 +427,6 @@
 <script src="admin.js?v=20261110-sms"></script>
 <script src="admin-carousel.js?v=20261104-previa-link"></script>
 <script src="sms-text.js?v=20261110-sms-vcard"></script>
-<script src="admin-sms.js?v=20261110-sms-salvar"></script>
+<script src="admin-sms.js?v=20261110-sms-semlista"></script>
 </body>
 </html>
