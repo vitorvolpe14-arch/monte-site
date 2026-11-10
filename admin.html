@@ -279,7 +279,7 @@
               <span id="smsSavedLists" class="sms-saved-lists"></span>
             </div>
             <label class="full-width">Colar números (opcional)<textarea id="smsNumbers" rows="4" placeholder="Um por linha, por exemplo (85) 99123-4567, ou cole a planilha exportada do Google Contatos"></textarea></label>
-            <div class="sms-file-row"><label class="secondary-link sms-file">ABRIR ARQUIVO (CSV, VCARD OU TXT)<input id="smsFile" type="file" accept=".csv,.vcf,.txt,text/csv,text/vcard,text/x-vcard,text/plain" hidden></label><span id="smsNumbersInfo" class="field-help"></span></div>
+            <div class="sms-file-row"><label class="secondary-link sms-file">ABRIR ARQUIVO (VCF, CSV OU TXT)<input id="smsFile" type="file" hidden></label><span id="smsNumbersInfo" class="field-help"></span></div>
             <div id="smsSaveListRow" class="sms-save-list" hidden><label>Guardar estes números numa lista<select id="smsSaveListSelect"></select></label><button type="button" id="smsSaveListButton" class="secondary">GUARDAR NA LISTA</button><span class="field-help">A lista fica salva e aparece acima, para marcar nas próximas campanhas.</span></div>
             <span id="smsSaveListMessage" class="field-help"></span>
             <details id="smsListsManage" class="help-more" hidden><summary>Ver e editar as listas salvas</summary><div id="smsListsBox"></div><div id="smsListMembers"></div></details>
@@ -427,6 +427,6 @@
 <script src="admin.js?v=20261110-sms"></script>
 <script src="admin-carousel.js?v=20261104-previa-link"></script>
 <script src="sms-text.js?v=20261110-sms-motivo"></script>
-<script src="admin-sms.js?v=20261110-sms-motivo"></script>
+<script src="admin-sms.js?v=20261110-sms-arquivo"></script>
 </body>
 </html>
