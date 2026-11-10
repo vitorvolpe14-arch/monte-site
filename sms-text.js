@@ -92,7 +92,9 @@
             if (!phone) { invalid += 1; return; }
             if (!phones.includes(phone)) phones.push(phone);
         };
-        for (const chunk of String(text == null ? "" : text).split(/[\r\n,;:|\t\/]+/)) {
+        // vCard (iPhone): a foto vem em base64, na linha PHOTO e nas seguintes que começam com espaço.
+        const plain = String(text == null ? "" : text).replace(/^PHOTO[^\r\n]*(?:\r?\n[ \t][^\r\n]*)*/gim, "");
+        for (const chunk of plain.split(/[\r\n,;:|\t\/]+/)) {
             (chunk.match(/\+?\d[\d ().-]*\d/g) || []).forEach(check);
         }
         return { phones, invalid };

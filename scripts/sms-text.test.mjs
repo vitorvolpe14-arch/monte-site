@@ -88,3 +88,10 @@ test("vCard", () => {
 test("dois números separados só por espaço", () => {
     assert.deepEqual(S.extractPhones("85991234567 11987654321").phones, ["5585991234567", "5511987654321"]);
 });
+
+test("vCard do iPhone com foto: a foto (base64) não vira número", () => {
+    const photo = "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/" +
+        "\n 85991234567123456789aB3c4D5e6F7g8H9i0J\n 11987654321998877665544Zz";
+    const vcf = "BEGIN:VCARD\nVERSION:3.0\nFN:Ana\nitem1.TEL;type=CELL;type=VOICE;type=pref:+55 85 98111-0001\nPHOTO;ENCODING=b;TYPE=JPEG:" + photo + "\nEND:VCARD";
+    assert.deepEqual(S.extractPhones(vcf), { phones: ["5585981110001"], invalid: 0 });
+});
