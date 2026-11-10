@@ -513,12 +513,31 @@
     finally{button.disabled=false}
   }
 
+  // Texto do arquivo de contatos. Qualquer tipo de arquivo pode ser escolhido (no iPhone, o
+  // filtro por tipo deixava o .vcf apagado às vezes). UTF-16 (alguns apps salvam assim) é
+  // reconhecido pela marca no começo ou pelos zeros entre as letras; o resto é lido como UTF-8.
+  function decodeContacts(buffer){
+    const bytes=new Uint8Array(buffer);
+    let encoding="utf-8";
+    if(bytes[0]===0xFF&&bytes[1]===0xFE)encoding="utf-16le";
+    else if(bytes[0]===0xFE&&bytes[1]===0xFF)encoding="utf-16be";
+    else{
+      const sample=bytes.subarray(0,2000);let evenZeros=0,oddZeros=0;
+      for(let i=0;i<sample.length;i++)if(sample[i]===0)(i%2?oddZeros++:evenZeros++);
+      if(oddZeros>sample.length/5)encoding="utf-16le";else if(evenZeros>sample.length/5)encoding="utf-16be";
+    }
+    return new TextDecoder(encoding).decode(bytes);
+  }
+
   async function readFile(){
     const input=$("smsFile"),file=input.files&&input.files[0];if(!file)return;
     // O vCard do iPhone vem com as fotos dos contatos: 100 contatos passam fácil de 5 MB.
     if(file.size>30*1024*1024){msg("smsNumbersInfo","Arquivo grande demais (máximo 30 MB). Exporte só a lista dos clientes.",true);input.value="";return}
-    const text=await file.text();
+    let text;
+    try{text=decodeContacts(await file.arrayBuffer())}
+    catch{msg("smsNumbersInfo","Não consegui abrir "+file.name+". Se ele está no iCloud Drive, abra o app Arquivos, toque nele uma vez para baixar e tente de novo.",true);input.value="";return}
     const r=T.extractPhones(text);
+    if(!r.phones.length&&!r.invalid){msg("smsNumbersInfo","Nenhum telefone encontrado em "+file.name+". Exporte os contatos em vCard (.vcf) ou CSV e abra esse arquivo.",true);input.value="";return}
     const area=$("smsNumbers");
     // Na caixa entram só os celulares do arquivo, um por linha (o resto do CSV não interessa).
     const current=T.extractPhones(area.value).phones;
