@@ -93,5 +93,33 @@ test("vCard do iPhone com foto: a foto (base64) não vira número", () => {
     const photo = "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/" +
         "\n 85991234567123456789aB3c4D5e6F7g8H9i0J\n 11987654321998877665544Zz";
     const vcf = "BEGIN:VCARD\nVERSION:3.0\nFN:Ana\nitem1.TEL;type=CELL;type=VOICE;type=pref:+55 85 98111-0001\nPHOTO;ENCODING=b;TYPE=JPEG:" + photo + "\nEND:VCARD";
-    assert.deepEqual(S.extractPhones(vcf), { phones: ["5585981110001"], invalid: 0 });
+    assert.deepEqual(S.extractPhones(vcf), { phones: ["5585981110001"], invalid: 0, rejected: [], fixed: [] });
+});
+
+test("por que o número ficou de fora", () => {
+    const reason = v => S.classifyPhone(v).reason;
+    assert.equal(reason("(85) 3261-1234"), "telefone fixo, não recebe SMS");
+    assert.equal(reason("+55 85 3261-1234"), "telefone fixo, não recebe SMS");
+    assert.equal(reason("99123-4567"), "sem DDD");
+    assert.equal(reason("+1 415 555 0100"), "número de fora do Brasil");
+    assert.equal(reason("+351 912 345 678"), "número de fora do Brasil");
+    assert.equal(reason("(85) 88123-4567"), "não é celular");
+    assert.match(reason("085 8899-1234"), /formato antigo/);
+    assert.equal(S.classifyPhone("(85) 99123-4567").reason, undefined);
+});
+
+test("celular antigo sem o 9 ganha o 9 (fixo continua de fora)", () => {
+    assert.deepEqual(S.classifyPhone("(85) 8899-1234"), { phone: "5585988991234", fixed: true });
+    assert.deepEqual(S.classifyPhone("+55 85 7766-5544"), { phone: "5585977665544", fixed: true });
+    const r = S.extractPhones("(85) 8899-1234\n(85) 3261-1234\n(85) 98899-1234\n99123-4567");
+    assert.deepEqual(r.phones, ["5585988991234"]);
+    assert.deepEqual(r.fixed, [{ from: "(85) 8899-1234", to: "5585988991234" }]);
+    assert.deepEqual(r.rejected, [{ number: "(85) 3261-1234", reason: "telefone fixo, não recebe SMS" }, { number: "99123-4567", reason: "sem DDD" }]);
+    assert.equal(r.invalid, 2);
+});
+
+test("o mesmo número recusado conta uma vez", () => {
+    const r = S.extractPhones("(85) 3261-1234\n85 3261 1234");
+    assert.equal(r.invalid, 1);
+    assert.equal(r.rejected.length, 1);
 });
