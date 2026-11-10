@@ -373,7 +373,8 @@
 
   async function readFile(){
     const input=$("smsFile"),file=input.files&&input.files[0];if(!file)return;
-    if(file.size>5*1024*1024){msg("smsNumbersInfo","Arquivo grande demais (máximo 5 MB).",true);input.value="";return}
+    // O vCard do iPhone vem com as fotos dos contatos: 100 contatos passam fácil de 5 MB.
+    if(file.size>30*1024*1024){msg("smsNumbersInfo","Arquivo grande demais (máximo 30 MB). Exporte só a lista dos clientes.",true);input.value="";return}
     const text=await file.text();
     const r=T.extractPhones(text);
     const area=$("smsNumbers");
