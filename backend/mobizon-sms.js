@@ -1,9 +1,11 @@
-// SMS pela Mobizon (aba SMS do painel): saldo, envio e situação de entrega.
+// SMS pela Mobizon (aba SMS do painel): saldo, envio, situação de entrega, cliques e webhook.
 //
 // A API (https://api.mobizon.com.br/service/<módulo>/<método>) responde sempre
 // { code, data, message }; code 0 é sucesso. A chave vai no corpo (apiKey), nunca no
 // endereço, para não aparecer nos registros. As mensagens de erro da Mobizon vêm em russo:
 // o painel mostra a explicação em português pelo código.
+
+const crypto = require("crypto");
 
 const MOBIZON_API = "https://api.mobizon.com.br";
 
@@ -92,10 +94,25 @@ function createMobizonClient({ apiKey, fetchImpl = fetch, baseUrl = MOBIZON_API,
             const data = await call("user", "getownbalance");
             return { amount: Number(data?.balance) || 0, currency: String(data?.currency || "BRL") };
         },
-        // { providerId, providerStatus } do SMS aceito pela Mobizon.
-        async send({ recipient, text }) {
-            const data = await call("message", "sendsmsmessage", { recipient, text });
-            return { providerId: data?.messageId != null ? String(data.messageId) : null, providerStatus: data?.status != null ? String(data.status) : null };
+        // { providerId, providerStatus, providerCampaignId } do SMS aceito pela Mobizon.
+        // providerStatus "1": a Mobizon vai revisar o texto antes (moderação); "2": saiu direto.
+        // shortenLinks: a Mobizon troca os links do texto por links curtos dela, que contam os
+        // cliques. Cada SMS é uma campanha na Mobizon, então cada pessoa recebe o próprio link.
+        async send({ recipient, text, shortenLinks = false }) {
+            const params = { recipient, text };
+            if (shortenLinks) params.params = { shortenLinks: 1 };
+            const data = await call("message", "sendsmsmessage", params);
+            return {
+                providerId: data?.messageId != null ? String(data.messageId) : null,
+                providerStatus: data?.status != null ? String(data.status) : null,
+                providerCampaignId: data?.campaignId != null ? String(data.campaignId) : null
+            };
+        },
+        // Cliques nos links curtos de uma campanha da Mobizon (um SMS do painel = uma campanha).
+        async campaignClicks(campaignId) {
+            const data = await call("campaign", "getlinks", { campaignId });
+            const links = Array.isArray(data) ? data : [];
+            return links.reduce((sum, link) => sum + (Number(link?.clickCnt) || 0), 0);
         },
         // [{ providerId, providerStatus, status, error }] de até 100 SMS.
         async status(ids) {
@@ -114,4 +131,14 @@ function safeText(value) {
     return typeof value === "string" ? value.slice(0, 300) : "";
 }
 
-module.exports = { MOBIZON_API, MobizonError, createMobizonClient, messageStatus, failureLabel };
+// Assinatura do webhook da Mobizon: sha1("eventId|attempt|eventCreateTs|chave secreta"), em hexadecimal.
+function webhookSignature(event, secret) {
+    return crypto.createHash("sha1").update([event?.eventId, event?.attempt, event?.eventCreateTs, secret].map(v => String(v ?? "")).join("|")).digest("hex");
+}
+function validWebhookSignature(event, secret) {
+    if (!secret || typeof event?.sign !== "string" || !/^[0-9a-f]{40}$/i.test(event.sign)) return false;
+    const expected = Buffer.from(webhookSignature(event, secret), "hex");
+    return crypto.timingSafeEqual(expected, Buffer.from(event.sign.toLowerCase(), "hex"));
+}
+
+module.exports = { MOBIZON_API, MobizonError, createMobizonClient, messageStatus, failureLabel, webhookSignature, validWebhookSignature };
