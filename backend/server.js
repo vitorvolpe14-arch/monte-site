@@ -10,6 +10,9 @@ const { OLIST_SALE_SITUATIONS, olistSaleSummary, olistSaleDetail, olistSalesList
 const { olistWaitingSales } = require("./olist-stock-waiting.js");
 const { infinitePayNet, currentInfinitePayFees, olistStoreNet, cardBillingByMonth, currentMachineFees } = require("./infinitepay-fees.js");
 const { sanitizeReportRow, reportRowKey, reportUntil, sanitizeSummary, mergeCoverage, reportTotals, sanitizeStatementRow, sanitizeStatementSummary, statementMatches, mergeStatement } = require("./infinitepay-report-import.js");
+// Contagem de SMS e leitura de listas de celulares: o mesmo arquivo roda no painel (navegador).
+const SmsText = require("../sms-text.js");
+const { MobizonError, createMobizonClient } = require("./mobizon-sms.js");
 
 // Este servidor roda no Render (Node) e no Cloudflare Workers (nodejs_compat).
 // No Workers não há arquivos do projeto no disco nem timers fora de uma requisição:
@@ -5569,6 +5572,346 @@ app.post("/api/newsletter", newsletterRateLimit, async (req, res) => {
     } catch (error) {
         console.error("Newsletter:", error);
         return res.status(500).json({ success: false, message: "Não foi possível concluir o cadastro agora." });
+    }
+});
+
+/* =====================================================
+   SMS — campanhas pela Mobizon (aba SMS do painel)
+   Público: quem comprou no site, quem criou pedido e não pagou (pedidos de teste
+   ficam de fora) e números colados (agenda do celular, WhatsApp). Quem pediu para
+   sair (sms_optouts) nunca recebe. O painel cria a campanha e manda em lotes de 20:
+   o Worker faz no máximo 50 chamadas externas por requisição. Cada número fica
+   "sending" antes de ir para a Mobizon (sms_claim_batch), então nunca recebe duas
+   vezes. A chave fica no Cloudflare como Secret MOBIZON_API_KEY.
+===================================================== */
+const MOBIZON_API_KEY = safeString(process.env.MOBIZON_API_KEY);
+// Preço da Mobizon por SMS (parte de mensagem) para a estimativa no painel.
+const MOBIZON_PRICE_PER_SMS = Number(process.env.MOBIZON_PRICE_PER_SMS) > 0 ? Number(process.env.MOBIZON_PRICE_PER_SMS) : 0.1677;
+const SMS_BATCH_SIZE = 20;
+const SMS_MAX_RECIPIENTS = 2000;
+const SMS_UNPAID_AFTER_MS = 24 * 60 * 60 * 1000;
+const smsRateLimit = createRateLimiter({ windowMs: 60 * 1000, max: 60 });
+
+function smsClient() {
+    return createMobizonClient({ apiKey: MOBIZON_API_KEY });
+}
+
+function smsErrorMessage(error) {
+    return error instanceof MobizonError ? error.message : "Não foi possível falar com a Mobizon agora.";
+}
+
+function smsNotConfigured(res) {
+    return res.status(503).json({ success: false, message: "A Mobizon ainda não está ligada: falta a chave da API (MOBIZON_API_KEY) no Cloudflare." });
+}
+
+function smsText(value) {
+    const text = String(value ?? "").replace(/\r\n?/g, "\n").trim();
+    const info = SmsText.smsSegments(text);
+    if (!text) return { error: "Escreva a mensagem." };
+    if (info.segments > SmsText.MAX_SEGMENTS) {
+        return { error: "Mensagem longa demais: gasta " + info.segments + " SMS por pessoa. O limite é " + SmsText.MAX_SEGMENTS + "." };
+    }
+    return { text, info };
+}
+
+function smsCampaignId(req) {
+    const id = Number(req.params.id);
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+// Celulares de quem comprou e de quem criou pedido e não pagou (pedido expirado ou aguardando
+// há mais de um dia). Quem comprou depois, pelo e-mail ou pelo celular, conta só como compradora.
+async function smsAudiences() {
+    const rows = await supabaseRequest(
+        "orders?is_test=is.false&select=customer_name,customer_email,customer_phone,customer_whatsapp,status,created_at&order=created_at.desc&limit=5000",
+        { method: "GET" }
+    );
+    const list = Array.isArray(rows) ? rows : [];
+    const phoneOf = o => SmsText.brazilMobile(o.customer_whatsapp) || SmsText.brazilMobile(o.customer_phone);
+    const emailOf = o => safeString(o.customer_email).toLowerCase();
+    const nameOf = o => safeString(o.customer_name).split(/\s+/)[0].slice(0, 60) || null;
+    const buyers = new Map(), unpaid = new Map(), buyerEmails = new Set();
+    for (const o of list) {
+        if (!PAID_ORDER_STATUSES.includes(o.status)) continue;
+        if (emailOf(o)) buyerEmails.add(emailOf(o));
+        const phone = phoneOf(o);
+        if (phone && !buyers.has(phone)) buyers.set(phone, { phone, name: nameOf(o), source: "compradora" });
+    }
+    const before = Date.now() - SMS_UNPAID_AFTER_MS;
+    for (const o of list) {
+        const stale = o.status === "expired" || (o.status === "pending" && new Date(o.created_at).getTime() < before);
+        const phone = phoneOf(o);
+        if (!stale || !phone || buyers.has(phone) || unpaid.has(phone) || buyerEmails.has(emailOf(o))) continue;
+        unpaid.set(phone, { phone, name: nameOf(o), source: "nao_pagou" });
+    }
+    return { compradora: [...buyers.values()], nao_pagou: [...unpaid.values()] };
+}
+
+async function smsOptouts() {
+    const rows = await supabaseRequest("sms_optouts?select=phone,note,created_at&order=created_at.desc&limit=10000", { method: "GET" });
+    return Array.isArray(rows) ? rows : [];
+}
+
+// Quem recebe: os públicos escolhidos e os números colados, sem repetir e sem quem saiu da lista.
+async function smsRecipients(body) {
+    const chosen = ["compradora", "nao_pagou"].filter(name => Array.isArray(body?.audience) && body.audience.includes(name));
+    const pasted = SmsText.extractPhones(String(body?.numbers ?? "").slice(0, 200000));
+    const [audiences, optoutRows] = await Promise.all([
+        chosen.length ? smsAudiences() : { compradora: [], nao_pagou: [] },
+        smsOptouts()
+    ]);
+    const optouts = new Set(optoutRows.map(row => row.phone));
+    const recipients = new Map(), skipped = new Set();
+    const add = person => {
+        if (optouts.has(person.phone)) { skipped.add(person.phone); return; }
+        if (!recipients.has(person.phone)) recipients.set(person.phone, person);
+    };
+    chosen.forEach(name => audiences[name].forEach(add));
+    pasted.phones.forEach(phone => add({ phone, name: null, source: "lista" }));
+    const list = [...recipients.values()];
+    const bySource = { compradora: 0, nao_pagou: 0, lista: 0 };
+    list.forEach(person => { bySource[person.source] += 1; });
+    return {
+        recipients: list,
+        audience: chosen.concat(pasted.phones.length ? ["lista"] : []),
+        bySource,
+        invalid: pasted.invalid,
+        skippedOptout: skipped.size
+    };
+}
+
+function smsPreviewPayload(built, check) {
+    const total = built.recipients.length;
+    return {
+        recipients: total,
+        by_source: built.bySource,
+        invalid_numbers: built.invalid,
+        skipped_optout: built.skippedOptout,
+        encoding: check.info.encoding,
+        length: check.info.length,
+        segments: check.info.segments,
+        price_per_sms: MOBIZON_PRICE_PER_SMS,
+        estimated_cost: Math.round(total * check.info.segments * MOBIZON_PRICE_PER_SMS * 100) / 100,
+        people: built.recipients.slice(0, 1000).map(person => ({ phone: person.phone, name: person.name, source: person.source }))
+    };
+}
+
+app.get("/api/admin/sms", requireAdmin, async (req, res) => {
+    try {
+        const [balance, audiences, optouts, campaigns] = await Promise.allSettled([
+            MOBIZON_API_KEY ? smsClient().balance() : Promise.resolve(null),
+            smsAudiences(),
+            smsOptouts(),
+            supabaseRequest("rpc/sms_campaigns_summary", { method: "POST", body: JSON.stringify({ p_limit: 30 }) })
+        ]);
+        if (audiences.status === "rejected" || optouts.status === "rejected" || campaigns.status === "rejected") {
+            throw (audiences.reason || optouts.reason || campaigns.reason);
+        }
+        return res.json({
+            success: true,
+            configured: Boolean(MOBIZON_API_KEY),
+            balance: balance.status === "fulfilled" ? balance.value : null,
+            balance_error: balance.status === "rejected" ? smsErrorMessage(balance.reason) : null,
+            price_per_sms: MOBIZON_PRICE_PER_SMS,
+            batch_size: SMS_BATCH_SIZE,
+            audiences: { compradora: audiences.value.compradora.length, nao_pagou: audiences.value.nao_pagou.length },
+            optouts: optouts.value,
+            campaigns: Array.isArray(campaigns.value) ? campaigns.value : []
+        });
+    } catch (error) {
+        console.error("Admin SMS GET:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível carregar a aba de SMS." });
+    }
+});
+
+app.post("/api/admin/sms/preview", requireAdmin, smsRateLimit, async (req, res) => {
+    try {
+        const check = smsText(req.body?.text);
+        if (check.error) return res.status(400).json({ success: false, message: check.error });
+        const built = await smsRecipients(req.body);
+        return res.json({ success: true, ...smsPreviewPayload(built, check) });
+    } catch (error) {
+        console.error("Admin SMS prévia:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível montar a lista agora." });
+    }
+});
+
+// SMS de teste para um número (o seu): confere o texto e a entrega antes da campanha.
+app.post("/api/admin/sms/test", requireAdmin, smsRateLimit, async (req, res) => {
+    if (!MOBIZON_API_KEY) return smsNotConfigured(res);
+    const check = smsText(req.body?.text);
+    if (check.error) return res.status(400).json({ success: false, message: check.error });
+    const phone = SmsText.brazilMobile(req.body?.phone);
+    if (!phone) return res.status(400).json({ success: false, message: "Informe um celular com DDD, por exemplo (85) 99123-4567." });
+    try {
+        const sent = await smsClient().send({ recipient: phone, text: check.text });
+        return res.json({ success: true, phone, segments: check.info.segments, provider_id: sent.providerId });
+    } catch (error) {
+        console.error("Admin SMS teste:", error.code, error.detail || error.message);
+        return res.status(502).json({ success: false, message: smsErrorMessage(error) });
+    }
+});
+
+app.post("/api/admin/sms/campaigns", requireAdmin, smsRateLimit, async (req, res) => {
+    if (!MOBIZON_API_KEY) return smsNotConfigured(res);
+    try {
+        const check = smsText(req.body?.text);
+        if (check.error) return res.status(400).json({ success: false, message: check.error });
+        const built = await smsRecipients(req.body);
+        const total = built.recipients.length;
+        if (!total) return res.status(400).json({ success: false, message: "Nenhum número para receber. Escolha um público ou cole uma lista." });
+        if (total > SMS_MAX_RECIPIENTS) return res.status(400).json({ success: false, message: "No máximo " + SMS_MAX_RECIPIENTS + " números por campanha." });
+        if (Number(req.body?.expected_recipients) !== total) {
+            return res.status(409).json({ success: false, message: "A lista mudou desde a prévia (agora são " + total + " números). Confira e envie de novo.", ...smsPreviewPayload(built, check) });
+        }
+        const cost = Math.round(total * check.info.segments * MOBIZON_PRICE_PER_SMS * 100) / 100;
+        let balance;
+        try { balance = await smsClient().balance(); }
+        catch (error) { return res.status(502).json({ success: false, message: smsErrorMessage(error) }); }
+        if (balance.amount < cost) {
+            return res.status(400).json({ success: false, message: "Saldo insuficiente na Mobizon: há " + formatEmailMoney(balance.amount) + " e a campanha custa cerca de " + formatEmailMoney(cost) + ". Recarregue a conta e tente de novo." });
+        }
+        const created = await supabaseRequest("sms_campaigns", {
+            method: "POST",
+            body: JSON.stringify({ text: check.text, audience: built.audience, encoding: check.info.encoding, segments: check.info.segments, recipients: total })
+        });
+        const campaign = Array.isArray(created) ? created[0] : created;
+        try {
+            for (let i = 0; i < total; i += 500) {
+                await supabaseRequest("sms_messages", {
+                    method: "POST",
+                    headers: { "Prefer": "return=minimal" },
+                    body: JSON.stringify(built.recipients.slice(i, i + 500).map(person => ({ campaign_id: campaign.id, phone: person.phone, name: person.name, source: person.source })))
+                });
+            }
+        } catch (error) {
+            await supabaseRequest("sms_campaigns?id=eq." + campaign.id, { method: "DELETE" }).catch(() => {});
+            throw error;
+        }
+        return res.json({ success: true, campaign_id: campaign.id, recipients: total, segments: check.info.segments, estimated_cost: cost, batch_size: SMS_BATCH_SIZE });
+    } catch (error) {
+        console.error("Admin SMS campanha:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível criar a campanha agora." });
+    }
+});
+
+// Um lote da fila. O painel chama de novo enquanto "more" vier true.
+app.post("/api/admin/sms/campaigns/:id/send", requireAdmin, smsRateLimit, async (req, res) => {
+    if (!MOBIZON_API_KEY) return smsNotConfigured(res);
+    const id = smsCampaignId(req);
+    if (!id) return res.status(400).json({ success: false, message: "Campanha inválida." });
+    try {
+        const rows = await supabaseRequest("sms_campaigns?id=eq." + id + "&select=id,text", { method: "GET" });
+        const campaign = Array.isArray(rows) ? rows[0] : null;
+        if (!campaign) return res.status(404).json({ success: false, message: "Campanha não encontrada." });
+        const batch = await supabaseRequest("rpc/sms_claim_batch", { method: "POST", body: JSON.stringify({ p_campaign: id, p_limit: SMS_BATCH_SIZE }) });
+        const claimed = Array.isArray(batch) ? batch : [];
+        if (!claimed.length) {
+            await supabaseRequest("sms_campaigns?id=eq." + id + "&finished_at=is.null", { method: "PATCH", headers: { "Prefer": "return=minimal" }, body: JSON.stringify({ finished_at: new Date().toISOString() }) });
+            return res.json({ success: true, sent: 0, failed: 0, more: false });
+        }
+        const client = smsClient();
+        const results = [];
+        let stopError = null;
+        for (const message of claimed) {
+            if (stopError) {
+                // Ainda não foi para a Mobizon: volta para a fila.
+                results.push({ id: message.id, status: "queued" });
+                continue;
+            }
+            try {
+                const sent = await client.send({ recipient: message.phone, text: campaign.text });
+                results.push({ id: message.id, status: "sent", provider_id: sent.providerId, provider_status: sent.providerStatus, sent: true });
+            } catch (error) {
+                if (error instanceof MobizonError && error.recipientError) {
+                    results.push({ id: message.id, status: "failed", error: "Número recusado pela Mobizon" });
+                    continue;
+                }
+                stopError = error;
+                // Sem resposta (code 0): pode ter saído. Fica "sending" para não mandar duas vezes.
+                if (error instanceof MobizonError && error.code !== 0) results.push({ id: message.id, status: "queued" });
+                else results.push({ id: message.id, error: "Sem confirmação da Mobizon" });
+                console.error("Admin SMS lote:", error.code, error.detail || error.message);
+            }
+        }
+        await supabaseRequest("rpc/sms_save_results", { method: "POST", body: JSON.stringify({ p_results: results }) });
+        const sent = results.filter(r => r.status === "sent").length;
+        const failed = results.filter(r => r.status === "failed").length;
+        // Erro da conta (chave, bloqueio, saldo): o envio para, com a conta do que já saiu neste lote.
+        if (stopError) return res.json({ success: false, stopped: true, sent, failed, more: false, message: smsErrorMessage(stopError) });
+        return res.json({ success: true, sent, failed, more: claimed.length === SMS_BATCH_SIZE });
+    } catch (error) {
+        console.error("Admin SMS envio:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível continuar o envio agora." });
+    }
+});
+
+// Situação de entrega dos SMS que a Mobizon aceitou e ainda não confirmou.
+app.post("/api/admin/sms/campaigns/:id/refresh", requireAdmin, smsRateLimit, async (req, res) => {
+    if (!MOBIZON_API_KEY) return smsNotConfigured(res);
+    const id = smsCampaignId(req);
+    if (!id) return res.status(400).json({ success: false, message: "Campanha inválida." });
+    try {
+        const rows = await supabaseRequest("sms_messages?campaign_id=eq." + id + "&status=eq.sent&provider_id=not.is.null&select=id,provider_id,provider_status&order=id.asc&limit=300", { method: "GET" });
+        const pending = Array.isArray(rows) ? rows : [];
+        const byProvider = new Map(pending.map(row => [String(row.provider_id), row]));
+        const client = smsClient();
+        const results = [];
+        for (let i = 0; i < pending.length; i += 100) {
+            const statuses = await client.status(pending.slice(i, i + 100).map(row => row.provider_id));
+            for (const item of statuses) {
+                const row = byProvider.get(item.providerId);
+                if (!row || (item.status === "sent" && item.providerStatus === row.provider_status)) continue;
+                results.push({ id: row.id, status: item.status, provider_status: item.providerStatus, error: item.error });
+            }
+        }
+        if (results.length) await supabaseRequest("rpc/sms_save_results", { method: "POST", body: JSON.stringify({ p_results: results }) });
+        return res.json({ success: true, checked: pending.length, updated: results.length });
+    } catch (error) {
+        console.error("Admin SMS situação:", error.code || "", error.detail || error.message);
+        return res.status(502).json({ success: false, message: smsErrorMessage(error) });
+    }
+});
+
+app.get("/api/admin/sms/campaigns/:id/messages", requireAdmin, async (req, res) => {
+    const id = smsCampaignId(req);
+    if (!id) return res.status(400).json({ success: false, message: "Campanha inválida." });
+    try {
+        const rows = await supabaseRequest("sms_messages?campaign_id=eq." + id + "&select=id,phone,name,source,status,provider_status,error,sent_at&order=id.asc&limit=" + SMS_MAX_RECIPIENTS, { method: "GET" });
+        return res.json({ success: true, messages: Array.isArray(rows) ? rows : [] });
+    } catch (error) {
+        console.error("Admin SMS números:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível carregar os números." });
+    }
+});
+
+// Quem pediu para não receber mais SMS (pelo WhatsApp, por exemplo).
+app.post("/api/admin/sms/optouts", requireAdmin, smsRateLimit, async (req, res) => {
+    try {
+        const { phones } = SmsText.extractPhones(String(req.body?.numbers ?? "").slice(0, 20000));
+        if (!phones.length) return res.status(400).json({ success: false, message: "Informe pelo menos um celular com DDD." });
+        const note = safeString(req.body?.note).slice(0, 200) || null;
+        await supabaseRequest("sms_optouts?on_conflict=phone", {
+            method: "POST",
+            headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+            body: JSON.stringify(phones.slice(0, 500).map(phone => ({ phone, note })))
+        });
+        return res.json({ success: true, added: Math.min(phones.length, 500) });
+    } catch (error) {
+        console.error("Admin SMS saída da lista:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível salvar agora." });
+    }
+});
+
+app.delete("/api/admin/sms/optouts/:phone", requireAdmin, async (req, res) => {
+    const phone = SmsText.brazilMobile(req.params.phone);
+    if (!phone) return res.status(400).json({ success: false, message: "Celular inválido." });
+    try {
+        await supabaseRequest("sms_optouts?phone=eq." + phone, { method: "DELETE", headers: { "Prefer": "return=minimal" } });
+        return res.json({ success: true });
+    } catch (error) {
+        console.error("Admin SMS volta para a lista:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível salvar agora." });
     }
 });
 

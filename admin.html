@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20261108-liquido">
+<link rel="stylesheet" href="admin.css?v=20261110-sms">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -37,6 +37,8 @@
       <button class="nav-button" data-section="orders"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12v17l-3-1.8-3 1.8-3-1.8-3 1.8z"/><path d="M9 8.5h6M9 12h6M9 15.5h3.5"/></svg><span>Pedidos</span><b id="navOrdersBadge" class="nav-badge" title="Pedidos pagos para separar e enviar" hidden></b></button>
       <button class="nav-button" data-section="coupons"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8.5V6A1.5 1.5 0 0 1 5 4.5h14A1.5 1.5 0 0 1 20.5 6v2.5a3.5 3.5 0 0 0 0 7V18a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18v-2.5a3.5 3.5 0 0 0 0-7z"/><path d="M9.5 14.5l5-5M9.75 9.75h.01M14.25 14.25h.01"/></svg><span>Cupons</span></button>
       <button class="nav-button" data-section="promotions"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="9" width="17" height="11.5" rx="1.5"/><path d="M2.5 9h19v-3h-19zM12 6v14.5M12 6c-1.6-3.2-5.6-3.4-5.6-1 0 1.6 3.2 1 5.6 1zM12 6c1.6-3.2 5.6-3.4 5.6-1 0 1.6-3.2 1-5.6 1z"/></svg><span>Promoções</span></button>
+      <p class="sidebar-label">MARKETING</p>
+      <button class="nav-button" data-section="sms"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h14A1.5 1.5 0 0 1 20.5 6v9a1.5 1.5 0 0 1-1.5 1.5h-8.5l-4.5 3.5v-3.5H5A1.5 1.5 0 0 1 3.5 15V6A1.5 1.5 0 0 1 5 4.5z"/><path d="M8 9h8M8 12h5"/></svg><span>SMS</span></button>
       <p class="sidebar-label">CATÁLOGO</p>
       <button class="nav-button" data-section="products"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1.2 11.2a1.5 1.5 0 0 1-1.5 1.3H7.7a1.5 1.5 0 0 1-1.5-1.3z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg><span>Produtos</span></button>
       <button class="nav-button" data-section="stock"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5 12 12l8.5-4.5M12 12v9"/></svg><span>Estoque</span></button>
@@ -263,6 +265,57 @@
       </div>
     </section>
 
+    <section id="smsSection" class="section hidden">
+      <div class="section-head"><div class="section-head-text"><p class="eyebrow">MARKETING</p><h1>SMS</h1><p class="section-desc">Mensagens de texto para as clientes, enviadas pela Mobizon. Cada SMS é descontado do saldo da Mobizon.</p></div><div class="section-head-actions"><button id="refreshSms" class="secondary">ATUALIZAR</button></div></div>
+      <div id="smsStatus" class="panel sms-status"><p class="field-help">Carregando…</p></div>
+      <div class="panel sms-compose">
+        <div class="panel-head"><div><h2>Nova campanha</h2><p class="field-help">Escolha quem recebe, escreva a mensagem, mande um teste para você e confira a lista antes de enviar.</p></div></div>
+        <form id="smsForm" autocomplete="off">
+          <fieldset class="form-block">
+            <legend>1. Quem recebe</legend>
+            <div class="checks sms-audiences">
+              <label><input type="checkbox" id="smsAudienceBuyers" value="compradora"> Compraram no site <b id="smsCountBuyers" class="sms-count"></b></label>
+              <label><input type="checkbox" id="smsAudienceUnpaid" value="nao_pagou"> Criaram pedido e não pagaram <b id="smsCountUnpaid" class="sms-count"></b></label>
+            </div>
+            <label class="full-width">Colar números (opcional)<textarea id="smsNumbers" rows="4" placeholder="Um por linha, por exemplo (85) 99123-4567, ou cole a planilha exportada do Google Contatos"></textarea></label>
+            <div class="sms-file-row"><label class="secondary-link sms-file">ABRIR ARQUIVO (CSV, VCARD OU TXT)<input id="smsFile" type="file" accept=".csv,.vcf,.txt,text/csv,text/vcard,text/x-vcard,text/plain" hidden></label><span id="smsNumbersInfo" class="field-help"></span></div>
+            <details class="help-more"><summary>Como tirar os contatos do celular</summary><p>Salve na agenda do celular quem conversou com a loja pelo WhatsApp. No Android, abra contacts.google.com no computador, clique em <strong>Exportar</strong> e escolha <strong>CSV do Google</strong>. No iPhone, abra icloud.com/contacts, selecione os contatos e escolha <strong>Exportar vCard</strong>. Depois use ABRIR ARQUIVO: só os celulares entram na lista.</p></details>
+            <p class="field-help">Pedidos de teste não entram. Quem está em “Não querem receber”, no fim da página, fica de fora sozinho.</p>
+          </fieldset>
+          <fieldset class="form-block">
+            <legend>2. Mensagem</legend>
+            <label class="full-width">Texto do SMS<textarea id="smsText" rows="4" maxlength="1000"></textarea></label>
+            <div class="sms-counter-row"><span id="smsCounter" class="sms-counter"></span><button type="button" id="smsStripAccents" class="secondary" hidden>TIRAR ACENTOS</button></div>
+            <ul id="smsChecklist" class="sms-checklist"></ul>
+          </fieldset>
+          <fieldset class="form-block">
+            <legend>3. Teste</legend>
+            <div class="sms-test-row"><label>Seu celular<input id="smsTestPhone" inputmode="tel" autocomplete="tel" placeholder="(85) 99123-4567"></label><button type="button" id="smsTestButton" class="secondary">MANDAR TESTE</button></div>
+            <span id="smsTestMessage" class="field-help">Gasta um SMS do saldo. Confira se chegou e como ficou o texto antes de mandar para todas.</span>
+          </fieldset>
+          <div id="smsFormError" class="error"></div>
+          <div class="modal-actions"><button type="submit" id="smsPreviewButton">VER QUEM VAI RECEBER</button></div>
+        </form>
+        <div id="smsPreview" class="sms-preview" hidden></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><div><h2>Campanhas enviadas</h2><p class="field-help">A operadora confirma a entrega em alguns minutos. Use ATUALIZAR ENTREGA para ver quem recebeu.</p></div></div>
+        <span id="smsCampaignsInfo" class="field-help"></span>
+        <div id="smsCampaigns" class="table-wrap"></div>
+        <div id="smsMessages" class="sms-messages"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><div><h2>Não querem receber</h2><p class="field-help">Quem pediu para sair (pelo WhatsApp, por exemplo). Esses números nunca recebem SMS da loja, nem de uma campanha que já estava sendo enviada.</p></div></div>
+        <form id="smsOptoutForm" class="sms-optout-form" autocomplete="off">
+          <label>Celular<input id="smsOptoutNumbers" inputmode="tel" required placeholder="(85) 99123-4567"></label>
+          <label>Observação<input id="smsOptoutNote" maxlength="200" placeholder="Ex.: pediu pelo WhatsApp"></label>
+          <button type="submit" class="secondary">TIRAR DA LISTA</button>
+        </form>
+        <div id="smsOptoutError" class="field-help"></div>
+        <div id="smsOptouts" class="table-wrap"></div>
+      </div>
+    </section>
+
     <section id="analyticsSection" class="section hidden">
       <div class="section-head"><div class="section-head-text"><p class="eyebrow">PAINEL</p><h1>Analytics &amp; Financeiro</h1><p class="section-desc">Visitas, vendas e funil de compra no período escolhido.</p></div><div class="section-head-actions analytics-toolbar"><select id="analyticsDays" aria-label="Período"><option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option></select><button id="refreshAnalytics" class="secondary">ATUALIZAR</button></div></div>
       <div id="analyticsError" class="error"></div><div id="analyticsKpis" class="analytics-kpis"></div>
@@ -364,7 +417,9 @@
 <script src="safe-html.js?v=20261007-seguranca"></script>
 <script src="infinitepay-report.js?v=20261108-fatura"></script>
 <script src="dash-compare.js?v=20261105-evolucao"></script>
-<script src="admin.js?v=20261108-fatura"></script>
+<script src="admin.js?v=20261110-sms"></script>
 <script src="admin-carousel.js?v=20261104-previa-link"></script>
+<script src="sms-text.js?v=20261110-sms"></script>
+<script src="admin-sms.js?v=20261110-sms"></script>
 </body>
 </html>

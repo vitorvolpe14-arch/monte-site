@@ -2721,3 +2721,82 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
 .net-ref.is-missing{font-weight:600;color:var(--ad-wine)}
 .net-table tr.is-missing td{color:var(--ad-muted)}
 @media (max-width:640px){.ip-report{flex-direction:column;align-items:stretch}.ip-report button{width:100%}}
+
+/* SMS (aba Marketing → SMS): saldo, nova campanha, prévia com envio em lotes e histórico */
+.sms-status{margin-bottom:16px}
+.sms-status-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px 18px}
+.sms-status-row .field-help{margin:0;flex:1;min-width:220px}
+.sms-status-label{display:block;font-size:12px;color:var(--ad-muted)}
+.sms-balance{font:400 28px/1.15 var(--ad-serif);color:var(--ad-ink)}
+.sms-steps{margin:12px 0 8px;padding-left:20px;display:grid;gap:6px;font-size:13.5px;color:var(--ad-ink-2);line-height:1.55}
+.sms-steps code{padding:1px 6px;border-radius:6px;background:var(--ad-soft);border:1px solid var(--ad-line);font-size:12.5px}
+.sms-compose{margin-bottom:16px}
+.sms-compose textarea{width:100%;padding:12px 14px;line-height:1.5;resize:vertical}
+.sms-audiences{margin:0 0 16px}
+.sms-count{font-weight:400;color:var(--ad-muted)}
+.sms-file-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;margin:10px 0}
+.sms-file{cursor:pointer}
+.sms-file-row .field-help{margin:0}
+.sms-counter-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 14px;margin:8px 0 4px}
+.sms-counter{font-size:12.5px;color:var(--ad-ink-2)}
+.sms-counter.is-over{color:var(--ad-danger);font-weight:600}
+.sms-checklist{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px}
+.sms-checklist li{position:relative;padding-left:24px;font-size:12.5px;line-height:1.5;color:var(--ad-ink-2)}
+.sms-checklist li::before{position:absolute;left:0;top:0;width:17px;height:17px;border-radius:50%;font-size:11px;line-height:17px;text-align:center;font-weight:700}
+.sms-checklist li.is-ok::before{content:"✓";background:#e7f2ea;color:var(--ad-up)}
+.sms-checklist li.is-warn::before{content:"!";background:#f6e9e3;color:var(--ad-wine)}
+.sms-checklist li.is-warn{color:var(--ad-wine)}
+.sms-test-row{display:flex;align-items:flex-end;flex-wrap:wrap;gap:10px 12px}
+.sms-test-row label{flex:0 1 260px}
+.sms-test-row input{width:100%}
+#smsTestMessage{display:block;margin-top:8px}
+.sms-preview{margin-top:20px;padding:20px;border:1px solid var(--ad-line);border-radius:var(--ad-radius-sm);background:var(--ad-soft);display:grid;gap:12px}
+.sms-preview-head{display:grid;gap:4px}
+.sms-preview-total{font:400 22px/1.2 var(--ad-serif);color:var(--ad-ink)}
+.sms-preview .field-help,.sms-preview p{margin:0}
+.sms-preview-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.sms-preview-stats>div{padding:12px 14px;border:1px solid var(--ad-line);border-radius:10px;background:#fff}
+.sms-preview .modal-actions{margin:0}
+.sms-preview button:disabled{opacity:.5;cursor:not-allowed}
+.sms-progress{display:grid;gap:6px}
+.sms-progress-bar{height:8px;border-radius:999px;background:#e9e9e9;overflow:hidden}
+.sms-progress-bar span{display:block;height:100%;width:0;background:var(--ad-ink);border-radius:999px;transition:width .3s ease}
+.sms-progress .field-help.error{color:var(--ad-danger)}
+.sms-campaigns-table td{vertical-align:top}
+.app .sms-campaigns-table td:nth-child(1),.app .sms-campaigns-table td:nth-child(3){white-space:normal;min-width:110px}
+.app .sms-campaigns-table td.sms-campaign-text{min-width:220px;max-width:360px;white-space:normal;overflow-wrap:anywhere;line-height:1.5}
+@media (min-width:641px){.app .sms-messages .table td:last-child{white-space:normal;min-width:180px}}
+.app .link-button.sms-link{font-family:var(--ad-sans)!important;font-size:12.5px!important;color:var(--ad-ink-2)!important;text-decoration:underline!important;text-underline-offset:3px;white-space:nowrap}
+.sms-campaigns-table .field-help{display:block;margin-top:4px;font-size:11.5px}
+.sms-actions{white-space:nowrap}
+.sms-actions button{display:block;margin:0 0 6px auto;min-height:34px;padding:8px 12px;font-size:10px}
+.sms-actions .link-button{display:inline-block;min-height:0;padding:4px 0;margin:0}
+.sms-actions{text-align:right}
+#smsCampaignsInfo{display:block;margin:0 0 8px}
+#smsCampaignsInfo:empty{display:none}
+.sms-messages-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:22px 0 8px;padding-top:16px;border-top:1px solid var(--ad-line)}
+.sms-messages-head h3{margin:0;font:400 17px var(--ad-serif)}
+.sms-optout-form{display:grid;grid-template-columns:minmax(0,220px) minmax(0,1fr) auto;align-items:end;gap:10px 12px;margin-bottom:10px}
+.sms-optout-form input{width:100%}
+#smsOptoutError{margin:0 0 10px}
+#smsOptoutError:empty{display:none}
+@media (max-width:640px){
+  .sms-preview{padding:14px}
+  .sms-preview-stats{grid-template-columns:1fr}
+  .sms-optout-form{grid-template-columns:1fr}
+  .sms-test-row label{flex:1 1 100%}
+  .sms-test-row button,.sms-preview .modal-actions button{width:100%}
+  /* No celular, cada linha das tabelas vira um cartão com o nome do campo à esquerda. */
+  .app .table.sms-cards{min-width:0}
+  .app .sms-cards thead{display:none}
+  .app .sms-cards,.app .sms-cards tbody,.app .sms-cards tr,.app .sms-cards td{display:block;width:100%}
+  .app .sms-cards tr{padding:12px 0;border-bottom:1px solid var(--ad-line)}
+  .app .sms-cards td,.app .sms-campaigns-table td.sms-campaign-text,.app .sms-campaigns-table td:nth-child(1),.app .sms-campaigns-table td:nth-child(3){display:grid;grid-template-columns:92px minmax(0,1fr);gap:10px;min-width:0;max-width:none;padding:3px 0;border:0;white-space:normal;overflow-wrap:anywhere}
+  .app .sms-cards td::before{content:attr(data-label);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ad-muted);padding-top:2px}
+  .app .sms-cards td:empty{display:none}
+  .app .sms-cards td>*{justify-self:start;max-width:100%}
+  .app .sms-cards td .field-help{grid-column:2}
+  .app .sms-cards td.sms-actions,.app .sms-cards td:not([data-label]){display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding-top:8px;text-align:left}
+  .app .sms-cards td:not([data-label])::before{content:none}
+  .sms-actions button{margin:0}
+}
