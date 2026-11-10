@@ -2745,6 +2745,9 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
 .sms-copy code{padding:3px 8px;border-radius:6px;background:var(--ad-soft);border:1px solid var(--ad-line);font-size:12px;overflow-wrap:anywhere;word-break:break-all}
 .app .sms-copy button{min-height:30px;padding:6px 12px;font-size:10px}
 #smsCopyMessage:empty{display:none}
+.sms-num-out,.sms-num-fixed{display:block;margin-top:4px}
+.sms-num-out{color:var(--ad-wine)}
+.sms-num-fixed{color:var(--ad-ink-2)}
 .sms-saved-lists{display:contents}
 .sms-save-list{display:flex;align-items:flex-end;flex-wrap:wrap;gap:8px 12px;margin:4px 0 6px;padding:12px 14px;border:1px solid var(--ad-line);border-radius:10px;background:var(--ad-soft)}
 .sms-save-list[hidden]{display:none}

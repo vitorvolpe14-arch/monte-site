@@ -119,12 +119,32 @@
 
   function chosenAudience(){return [["smsAudienceBuyers","compradora"],["smsAudienceUnpaid","nao_pagou"]].filter(([id])=>$(id).checked).map(([,v])=>v)}
 
+  // Quais números ficaram de fora (e por quê) e quais celulares antigos ganharam o 9.
+  function numbersReport(r){
+    const out=[];
+    if(r.rejected&&r.rejected.length){
+      const shown=r.rejected.slice(0,8).map(x=>esc(x.number)+" ("+esc(x.reason)+")").join(", ");
+      out.push('<span class="sms-num-out">'+(r.invalid===1?"Ficou de fora: ":"Ficaram de fora: ")+shown+(r.invalid>8?" e mais "+fmt(r.invalid-8):"")+'.</span>');
+    }
+    if(r.fixed&&r.fixed.length){
+      const shown=r.fixed.slice(0,8).map(x=>esc(x.from)+" → "+esc(T.formatPhone(x.to))).join(", ");
+      out.push('<span class="sms-num-fixed">'+(r.fixed.length===1?"Ganhou o 9 (estava salvo no formato antigo): ":"Ganharam o 9 (estavam salvos no formato antigo): ")+shown+(r.fixed.length>8?" e mais "+fmt(r.fixed.length-8):"")+'.</span>');
+    }
+    return out.join("");
+  }
+
+  function showNumbersInfo(summary,r){
+    const box=$("smsNumbersInfo");if(!box)return;
+    box.classList.remove("error");
+    setHTML(box,esc(summary)+numbersReport(r));
+  }
+
   function renderNumbersInfo(){
     const r=T.extractPhones($("smsNumbers").value);
     const parts=[];
     if(r.phones.length)parts.push(plural(r.phones.length,"celular encontrado","celulares encontrados"));
-    if(r.invalid)parts.push(plural(r.invalid,"número não é celular válido e fica de fora","números não são celular válido e ficam de fora")+" (fixo ou sem DDD)");
-    msg("smsNumbersInfo",parts.join(" · "));
+    if(r.invalid)parts.push(plural(r.invalid,"número ficou de fora","números ficaram de fora"));
+    showNumbersInfo(parts.join(" · "),r);
     const row=$("smsSaveListRow");if(row)row.hidden=!r.phones.length;
   }
 
@@ -178,7 +198,7 @@
     const parts=[["compradora","comprou no site","compraram no site"],["nao_pagou","não pagou","não pagaram"],["salva","das listas salvas","das listas salvas"],["lista","dos números colados","dos números colados"]].filter(([k])=>by[k]).map(([k,one,many])=>plural(by[k],one,many));
     const extra=[];
     if(p.skipped_optout)extra.push(plural(p.skipped_optout,"pessoa ficou de fora porque pediu para não receber","pessoas ficaram de fora porque pediram para não receber"));
-    if(p.invalid_numbers)extra.push(plural(p.invalid_numbers,"número colado não é celular válido","números colados não são celular válido"));
+    if(p.invalid_numbers)extra.push(plural(p.invalid_numbers,"número colado ficou de fora","números colados ficaram de fora")+" (o motivo aparece em Quem recebe)");
     const balance=balanceAmount();
     const short=balance!==null&&balance<p.estimated_cost;
     const rows=(p.people||[]).map(x=>'<tr><td data-label="Nome">'+esc(x.name||"—")+'</td><td data-label="Celular">'+esc(T.formatPhone(x.phone))+'</td><td data-label="Origem">'+esc(SOURCE_LABELS[x.source]||x.source)+'</td></tr>').join("");
@@ -506,7 +526,7 @@
     area.value=all.map(T.formatPhone).join("\n");
     input.value="";
     renderNumbersInfo();clearPreview();
-    msg("smsNumbersInfo",plural(r.phones.length,"celular lido","celulares lidos")+" de "+file.name+(r.invalid?" · "+plural(r.invalid,"número não é celular válido","números não são celular válido"):"")+" · "+plural(all.length,"número na lista","números na lista"));
+    showNumbersInfo(plural(r.phones.length,"celular lido","celulares lidos")+" de "+file.name+(r.invalid?" · "+plural(r.invalid,"número ficou de fora","números ficaram de fora"):"")+" · "+plural(all.length,"número na lista","números na lista"),r);
   }
 
   function bind(){
