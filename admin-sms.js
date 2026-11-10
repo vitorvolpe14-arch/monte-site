@@ -91,7 +91,8 @@
     if(sending)return;
     msg("smsFormError","");
     const body=requestBody();
-    if(!body.audience.length&&!T.extractPhones(body.numbers).phones.length){msg("smsFormError","Escolha quem recebe: marque um público ou cole números.",true);return}
+    if(!body.audience.length&&!T.extractPhones(body.numbers).phones.length){msg("smsFormError","Escolha quem recebe (em 1. Quem recebe): marque um público ou cole os números.",true);return}
+    if(!body.text.trim()){msg("smsFormError","Escreva a mensagem.",true);return}
     const button=$("smsPreviewButton");button.disabled=true;
     try{preview=await api("/api/admin/sms/preview",{method:"POST",body:JSON.stringify(body)});preview.body=body;renderPreview()}
     catch(err){msg("smsFormError",err.message,true)}
@@ -118,8 +119,9 @@
       (!data?.configured?'<p class="error">Para enviar, ligue a Mobizon (passo a passo no topo da página).</p>':'')+
       (rows?'<details class="help-more"><summary>Ver a lista'+(p.recipients>(p.people||[]).length?' (primeiros '+fmt((p.people||[]).length)+')':'')+'</summary><div class="table-wrap"><table class="table sms-cards"><thead><tr><th>NOME</th><th>CELULAR</th><th>ORIGEM</th></tr></thead><tbody>'+rows+'</tbody></table></div></details>':'')+
       '<div id="smsSendProgress" class="sms-progress" hidden><div class="sms-progress-bar"><span id="smsSendBar"></span></div><span id="smsSendText" class="field-help"></span></div>'+
-      '<div class="modal-actions"><button type="button" id="smsSendButton" data-click="smsStartCampaign"'+(canSend?'':' disabled')+'>ENVIAR PARA '+esc(plural(p.recipients,"PESSOA","PESSOAS"))+'</button></div>');
+      '<div class="modal-actions"><button type="button" id="smsSendButton" class="sms-send-main" data-click="smsStartCampaign"'+(canSend?'':' disabled')+'>CONFIRMAR E ENVIAR PARA '+esc(plural(p.recipients,"PESSOA","PESSOAS"))+'</button></div>');
     box.hidden=false;
+    if(!note)box.scrollIntoView({behavior:"smooth",block:"nearest"});
   }
 
   async function startCampaign(){

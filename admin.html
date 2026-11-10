@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20261110-sms">
+<link rel="stylesheet" href="admin.css?v=20261110-sms-enviar">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -287,16 +287,13 @@
             <label class="full-width">Texto do SMS<textarea id="smsText" rows="4" maxlength="1000"></textarea></label>
             <div class="sms-counter-row"><span id="smsCounter" class="sms-counter"></span><button type="button" id="smsStripAccents" class="secondary" hidden>TIRAR ACENTOS</button></div>
             <ul id="smsChecklist" class="sms-checklist"></ul>
-          </fieldset>
-          <fieldset class="form-block">
-            <legend>3. Teste</legend>
-            <div class="sms-test-row"><label>Seu celular<input id="smsTestPhone" inputmode="tel" autocomplete="tel" placeholder="(85) 99123-4567"></label><button type="button" id="smsTestButton" class="secondary">MANDAR TESTE</button></div>
+            <div class="sms-test-row"><label>Testar antes no seu celular (opcional)<input id="smsTestPhone" inputmode="tel" autocomplete="tel" placeholder="(85) 99123-4567"></label><button type="button" id="smsTestButton" class="secondary">MANDAR TESTE</button></div>
             <span id="smsTestMessage" class="field-help">Gasta um SMS do saldo. Confira se chegou e como ficou o texto antes de mandar para todas.</span>
+            <div id="smsFormError" class="error"></div>
+            <div class="sms-send-row"><button type="submit" id="smsPreviewButton" class="sms-send-main">ENVIAR SMS</button><span class="field-help">Em seguida aparecem quem vai receber e o custo, para você confirmar.</span></div>
+            <div id="smsPreview" class="sms-preview" hidden></div>
           </fieldset>
-          <div id="smsFormError" class="error"></div>
-          <div class="modal-actions"><button type="submit" id="smsPreviewButton">VER QUEM VAI RECEBER</button></div>
         </form>
-        <div id="smsPreview" class="sms-preview" hidden></div>
       </div>
       <div class="panel">
         <div class="panel-head"><div><h2>Campanhas enviadas</h2><p class="field-help">A operadora confirma a entrega em alguns minutos. Use ATUALIZAR ENTREGA para ver quem recebeu.</p></div></div>
@@ -420,6 +417,6 @@
 <script src="admin.js?v=20261110-sms"></script>
 <script src="admin-carousel.js?v=20261104-previa-link"></script>
 <script src="sms-text.js?v=20261110-sms"></script>
-<script src="admin-sms.js?v=20261110-sms"></script>
+<script src="admin-sms.js?v=20261110-sms-enviar"></script>
 </body>
 </html>
