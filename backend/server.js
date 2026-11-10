@@ -5589,8 +5589,10 @@ app.post("/api/newsletter", newsletterRateLimit, async (req, res) => {
    A recarga do saldo só existe no site da Mobizon: a API não tem pagamento.
 ===================================================== */
 const MOBIZON_API_KEY = safeString(process.env.MOBIZON_API_KEY);
-// Preço da Mobizon por SMS (parte de mensagem) para a estimativa no painel.
-const MOBIZON_PRICE_PER_SMS = Number(process.env.MOBIZON_PRICE_PER_SMS) > 0 ? Number(process.env.MOBIZON_PRICE_PER_SMS) : 0.1677;
+// Preço da Mobizon por SMS (parte de mensagem) para a estimativa no painel: R$ 0,06, o que a
+// conta da loja pagou por SMS no histórico da Mobizon (10/11/2026). A tabela do site dela diz
+// R$ 0,1677. Se o preço mudar, a variável MOBIZON_PRICE_PER_SMS no Cloudflare passa na frente.
+const MOBIZON_PRICE_PER_SMS = Number(process.env.MOBIZON_PRICE_PER_SMS) > 0 ? Number(process.env.MOBIZON_PRICE_PER_SMS) : 0.06;
 const SMS_BATCH_SIZE = 20;
 const SMS_MAX_RECIPIENTS = 2000;
 const SMS_UNPAID_AFTER_MS = 24 * 60 * 60 * 1000;
