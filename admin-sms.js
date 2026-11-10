@@ -7,15 +7,18 @@
    O saldo fica no topo, com RECARREGAR (a recarga só existe no site da Mobizon)
    e o aviso por e-mail de saldo baixo. A entrega automática é o webhook da
    Mobizon; "contar quem clicou" faz a Mobizon encurtar o link de cada SMS.
+   Mensagens salvas (2. Mensagem) e listas de números salvas (1. Quem recebe):
+   cada lista vira uma opção marcável, ao lado de quem comprou e de quem não pagou.
    A conta de caracteres é a de sms-text.js, a mesma do servidor.
 ===================================================== */
 (function(){
   const T=window.SmsText;
   const DEFAULT_TEXT="MONTE: Oi! Chegaram pecas novas na loja. Confira: oficialmontee.com.br - Para nao receber mais, fale no WhatsApp (85) 99216-3305";
-  const SOURCE_LABELS={compradora:"Comprou no site",nao_pagou:"Não pagou",lista:"Lista colada"};
+  const SOURCE_LABELS={compradora:"Comprou no site",nao_pagou:"Não pagou",lista:"Lista",salva:"Lista salva"};
   const STATUS_LABELS={queued:["NA FILA","pending"],sending:["SEM CONFIRMAÇÃO","pending"],sent:["ENVIADO","processing"],delivered:["ENTREGUE","delivered"],failed:["FALHOU","cancelled"],skipped:["FORA (SAIU DA LISTA)","expired"]};
   const LINK_RE=/\b(?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s]*)?/gi;
-  let data=null,preview=null,sending=false,bound=false,openCampaign=null;
+  let data=null,preview=null,sending=false,bound=false,openCampaign=null,openList=null;
+  const selectedLists=new Set();
 
   function fmt(n){return new Intl.NumberFormat("pt-BR").format(Number(n||0))}
   function plural(n,one,many){return fmt(n)+" "+(Number(n)===1?one:many)}
@@ -29,7 +32,7 @@
     try{
       msg("smsFormError","");
       data=await api("/api/admin/sms");
-      renderStatus();renderCounts();renderCampaigns();renderWebhook();renderOptouts();
+      renderStatus();renderCounts();renderSavedLists();renderTemplates();renderCampaigns();renderWebhook();renderOptouts();
       if(preview&&!sending)renderPreview("",true);
     }catch(e){setHTML($("smsStatus"),'<p class="error">'+esc(e.message)+'</p>')}
   }
@@ -122,6 +125,7 @@
     if(r.phones.length)parts.push(plural(r.phones.length,"celular encontrado","celulares encontrados"));
     if(r.invalid)parts.push(plural(r.invalid,"número não é celular válido e fica de fora","números não são celular válido e ficam de fora")+" (fixo ou sem DDD)");
     msg("smsNumbersInfo",parts.join(" · "));
+    const row=$("smsSaveListRow");if(row)row.hidden=!r.phones.length;
   }
 
   function textLinks(text){return String(text||"").match(LINK_RE)||[]}
@@ -130,26 +134,15 @@
   function renderCounter(){
     const text=$("smsText").value,info=T.smsSegments(text.trim());
     const counter=$("smsCounter");
-    const accents=T.nonGsmCharacters(text);
     let line=fmt(info.length)+" caracteres · ";
     line+=info.segments?(info.segments===1?"1 SMS por pessoa":info.segments+" SMS por pessoa (cobrados como "+info.segments+")"):"0 SMS";
     if(info.segments)line+=" · cabem mais "+fmt(info.remaining)+" nesta parte";
+    // Longa demais: o próprio contador avisa (em vermelho); o servidor também recusa.
+    if(info.segments>T.MAX_SEGMENTS)line+=" · longa demais: no máximo "+T.MAX_SEGMENTS+" SMS por pessoa";
     counter.textContent=line;
     counter.classList.toggle("is-over",info.segments>T.MAX_SEGMENTS);
-    $("smsStripAccents").hidden=!accents.length;
-    const links=textLinks(text);
-    $("smsTrackRow").hidden=!links.length;
-    const track=trackingOn();
-    const foreign=links.filter(u=>!/(^|\/\/|\.)oficialmontee\.com\.br/i.test(u));
-    const checks=[
-      [/^\s*MONT[EÊ]\b/i.test(text),"Começa com o nome da loja (MONTE)","Comece com MONTE: a cliente sabe na hora de quem é."],
-      [/\b(sair|parar de receber|n[aã]o receber|descadastr)/i.test(text),"Diz como parar de receber","Diga como parar de receber (por exemplo: Para nao receber mais, fale no WhatsApp)."],
-      [!accents.length,"Sem acento nem emoji: 160 caracteres por SMS","Com "+accents.map(c=>c==="\n"?"quebra de linha":c).slice(0,6).join(" ")+" cada SMS cabe só 70 caracteres. Use TIRAR ACENTOS."],
-      [!foreign.length,track?"Link do site da loja (vai encurtado pela Mobizon, um por pessoa)":"Links só do site da loja","Links de outros sites ou de encurtadores (bit.ly) costumam ser bloqueados pelas operadoras."]
-    ];
-    if(track)checks.push([links.every(u=>/^https?:\/\//i.test(u)),"O link começa com https:// (a Mobizon consegue contar os cliques)","Para contar os cliques, o link precisa começar com https:// (por exemplo https://oficialmontee.com.br)."]);
-    if(info.segments>T.MAX_SEGMENTS)checks.unshift([false,"","Mensagem longa demais: no máximo "+T.MAX_SEGMENTS+" SMS por pessoa."]);
-    setHTML($("smsChecklist"),checks.map(([ok,good,bad])=>'<li class="'+(ok?"is-ok":"is-warn")+'">'+esc(ok?good:bad)+'</li>').join(""));
+    $("smsStripAccents").hidden=!T.nonGsmCharacters(text).length;
+    $("smsTrackRow").hidden=!textLinks(text).length;
   }
 
   // Ao ligar "contar quem clicou", o link sem https:// ganha o https:// (a Mobizon só encurta links completos).
@@ -163,14 +156,14 @@
 
   function clearPreview(){preview=null;const box=$("smsPreview");if(box&&!sending){box.hidden=true;setHTML(box,"")}}
 
-  function requestBody(){return {audience:chosenAudience(),numbers:$("smsNumbers").value,text:$("smsText").value,track_links:trackingOn()}}
+  function requestBody(){return {audience:chosenAudience(),lists:[...selectedLists],numbers:$("smsNumbers").value,text:$("smsText").value,track_links:trackingOn()}}
 
   async function showPreview(e){
     if(e)e.preventDefault();
     if(sending)return;
     msg("smsFormError","");
     const body=requestBody();
-    if(!body.audience.length&&!T.extractPhones(body.numbers).phones.length){msg("smsFormError","Escolha quem recebe (em 1. Quem recebe): marque um público ou cole os números.",true);return}
+    if(!body.audience.length&&!body.lists.length&&!T.extractPhones(body.numbers).phones.length){msg("smsFormError","Escolha quem recebe (em 1. Quem recebe): marque um público ou uma lista, ou cole os números.",true);return}
     if(!body.text.trim()){msg("smsFormError","Escreva a mensagem.",true);return}
     if(body.track_links&&!textLinks(body.text).every(u=>/^https?:\/\//i.test(u))){msg("smsFormError","Para contar os cliques, o link precisa começar com https://.",true);return}
     const button=$("smsPreviewButton");button.disabled=true;
@@ -182,7 +175,7 @@
   function renderPreview(note,quiet){
     const box=$("smsPreview");if(!box||!preview)return;
     const p=preview,by=p.by_source||{};
-    const parts=[["compradora","comprou no site","compraram no site"],["nao_pagou","não pagou","não pagaram"],["lista","da lista colada","da lista colada"]].filter(([k])=>by[k]).map(([k,one,many])=>plural(by[k],one,many));
+    const parts=[["compradora","comprou no site","compraram no site"],["nao_pagou","não pagou","não pagaram"],["salva","das listas salvas","das listas salvas"],["lista","dos números colados","dos números colados"]].filter(([k])=>by[k]).map(([k,one,many])=>plural(by[k],one,many));
     const extra=[];
     if(p.skipped_optout)extra.push(plural(p.skipped_optout,"pessoa ficou de fora porque pediu para não receber","pessoas ficaram de fora porque pediram para não receber"));
     if(p.invalid_numbers)extra.push(plural(p.invalid_numbers,"número colado não é celular válido","números colados não são celular válido"));
@@ -204,6 +197,135 @@
       '<div class="modal-actions"><button type="button" id="smsSendButton" class="sms-send-main" data-click="smsStartCampaign"'+(canSend?'':' disabled')+'>CONFIRMAR E ENVIAR PARA '+esc(plural(p.recipients,"PESSOA","PESSOAS"))+'</button></div>');
     box.hidden=false;
     if(!note&&!quiet)box.scrollIntoView({behavior:"smooth",block:"nearest"});
+  }
+
+  /* ---------- Listas de números salvas ---------- */
+  function savedLists(){return data?.lists||[]}
+
+  function renderSavedLists(){
+    const box=$("smsSavedLists");if(!box||!data)return;
+    const lists=savedLists();
+    // Lista apagada sai da seleção.
+    [...selectedLists].forEach(id=>{if(!lists.some(l=>l.id===id))selectedLists.delete(id)});
+    setHTML(box,lists.map(l=>'<label><input type="checkbox" data-list-id="'+esc(l.id)+'"'+(selectedLists.has(l.id)?' checked':'')+'> Lista: '+esc(l.name)+' <b class="sms-count">('+esc(plural(l.count,"número","números"))+')</b></label>').join(""));
+    const select=$("smsSaveListSelect");
+    if(select){
+      const keep=select.value;
+      setHTML(select,lists.map(l=>'<option value="'+esc(l.id)+'">'+esc(l.name)+' ('+esc(plural(l.count,"número","números"))+')</option>').join("")+'<option value="new">Nova lista…</option>');
+      select.value=lists.some(l=>String(l.id)===keep)?keep:(lists[0]?String(lists[0].id):"new");
+    }
+    const manage=$("smsListsManage");if(manage)manage.hidden=!lists.length;
+    const table=$("smsListsBox");
+    if(table)setHTML(table,lists.length?'<table class="table sms-cards"><thead><tr><th>LISTA</th><th>NÚMEROS</th><th>ATUALIZADA</th><th></th></tr></thead><tbody>'+lists.map(l=>'<tr><td data-label="Lista">'+esc(l.name)+'</td><td data-label="Números">'+fmt(l.count)+'</td><td data-label="Atualizada">'+esc(date(l.updated_at))+'</td><td class="sms-row-actions"><button type="button" class="link-button sms-link" data-click="smsShowListMembers" data-args="'+esc(JSON.stringify([l.id]))+'">Ver números</button><button type="button" class="link-button sms-link" data-click="smsDeleteList" data-args="'+esc(JSON.stringify([l.id]))+'">Apagar lista</button></td></tr>').join("")+'</tbody></table>':'');
+    if(openList&&!lists.some(l=>l.id===openList))hideListMembers();
+  }
+
+  function onSavedListChange(e){
+    const input=e.target;if(!input||!input.dataset||!input.dataset.listId)return;
+    const id=Number(input.dataset.listId);
+    if(input.checked)selectedLists.add(id);else selectedLists.delete(id);
+    clearPreview();
+  }
+
+  async function saveNumbersToList(){
+    msg("smsSaveListMessage","");
+    const numbers=$("smsNumbers").value;
+    if(!T.extractPhones(numbers).phones.length){msg("smsSaveListMessage","Cole os números ou abra um arquivo antes.",true);return}
+    const choice=$("smsSaveListSelect").value;
+    const body={numbers};
+    if(choice==="new"){
+      const name=window.prompt("Nome da nova lista (por exemplo Clientes WhatsApp):","");
+      if(name===null)return;
+      if(!name.trim()){msg("smsSaveListMessage","Dê um nome para a lista.",true);return}
+      body.name=name.trim();
+    }else body.list_id=Number(choice);
+    const button=$("smsSaveListButton");button.disabled=true;
+    try{
+      const r=await api("/api/admin/sms/lists",{method:"POST",body:JSON.stringify(body)});
+      selectedLists.add(r.list_id);
+      $("smsNumbers").value="";
+      await loadSms();
+      renderNumbersInfo();
+      const extra=[];
+      if(r.already)extra.push(plural(r.already,"já estava lá","já estavam lá"));
+      if(r.over_limit)extra.push(plural(r.over_limit,"ficou de fora (a lista chegou ao máximo)","ficaram de fora (a lista chegou ao máximo)"));
+      msg("smsSaveListMessage",plural(r.added,"número guardado","números guardados")+" em “"+r.name+"”"+(extra.length?" ("+extra.join(" · ")+")":"")+". A lista tem "+plural(r.total,"número","números")+" e já está marcada em Quem recebe.");
+    }catch(err){msg("smsSaveListMessage",err.message,true)}
+    finally{button.disabled=false}
+  }
+
+  async function showListMembers(id){
+    openList=id;
+    const box=$("smsListMembers");if(!box)return;
+    const list=savedLists().find(l=>l.id===id);
+    setHTML(box,'<p class="field-help">Carregando os números…</p>');
+    try{
+      const r=await api("/api/admin/sms/lists/"+encodeURIComponent(id)+"/members");
+      const rows=(r.members||[]).map(m=>'<tr><td data-label="Celular">'+esc(T.formatPhone(m.phone))+'</td><td data-label="Desde">'+esc(date(m.created_at))+'</td><td class="sms-row-actions"><button type="button" class="link-button sms-link" data-click="smsRemoveListMember" data-args="'+esc(JSON.stringify([id,m.phone]))+'">Tirar da lista</button></td></tr>').join("");
+      setHTML(box,'<div class="sms-messages-head"><h3>'+esc(list?list.name:"Lista")+'</h3><button type="button" class="link-button sms-link" data-click="smsHideListMembers">Fechar</button></div><div class="table-wrap"><table class="table sms-cards"><thead><tr><th>CELULAR</th><th>DESDE</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="3">A lista está vazia.</td></tr>')+'</tbody></table></div>');
+    }catch(err){setHTML(box,'<p class="error">'+esc(err.message)+'</p>')}
+  }
+  function hideListMembers(){openList=null;setHTML($("smsListMembers"),"")}
+
+  async function removeListMember(id,phone){
+    if(!window.confirm("Tirar "+T.formatPhone(phone)+" desta lista?"))return;
+    try{await api("/api/admin/sms/lists/"+encodeURIComponent(id)+"/members/"+encodeURIComponent(phone),{method:"DELETE"});clearPreview();await loadSms();await showListMembers(id)}
+    catch(err){msg("smsSaveListMessage",err.message,true)}
+  }
+
+  async function deleteList(id){
+    const list=savedLists().find(l=>l.id===id);
+    if(!window.confirm("Apagar a lista “"+(list?list.name:"")+"”"+(list?" com "+plural(list.count,"número","números"):"")+"?\n\nAs campanhas que já saíram continuam no histórico."))return;
+    try{await api("/api/admin/sms/lists/"+encodeURIComponent(id),{method:"DELETE"});selectedLists.delete(id);if(openList===id)hideListMembers();clearPreview();await loadSms();msg("smsSaveListMessage","Lista apagada.")}
+    catch(err){msg("smsSaveListMessage",err.message,true)}
+  }
+
+  /* ---------- Mensagens salvas ---------- */
+  function renderTemplates(){
+    const select=$("smsTemplateSelect");if(!select||!data)return;
+    const list=data.templates||[];
+    const keep=select.value;
+    setHTML(select,'<option value="">'+(list.length?'Escolha uma mensagem salva…':'Nenhuma mensagem salva ainda')+'</option>'+list.map(t=>'<option value="'+esc(t.id)+'">'+esc(t.name)+'</option>').join(""));
+    select.disabled=!list.length;
+    select.value=list.some(t=>String(t.id)===keep)?keep:"";
+    $("smsTemplateDelete").hidden=!select.value;
+  }
+
+  function onTemplateChange(){
+    const select=$("smsTemplateSelect"),area=$("smsText");
+    const t=(data?.templates||[]).find(x=>String(x.id)===select.value);
+    $("smsTemplateDelete").hidden=!t;
+    if(!t)return;
+    const current=area.value.trim();
+    if(current&&current!==t.text&&current!==DEFAULT_TEXT&&!window.confirm("Trocar o texto que está escrito pela mensagem “"+t.name+"”?")){select.value="";$("smsTemplateDelete").hidden=true;return}
+    area.value=t.text;
+    renderCounter();clearPreview();
+    msg("smsTemplateMessage","Mensagem “"+t.name+"” carregada. Você pode mudar o texto antes de enviar.");
+  }
+
+  async function saveTemplate(){
+    msg("smsTemplateMessage","");
+    const text=$("smsText").value;
+    if(!text.trim()){msg("smsTemplateMessage","Escreva a mensagem antes de salvar.",true);return}
+    const current=(data?.templates||[]).find(x=>String(x.id)===$("smsTemplateSelect").value);
+    const name=window.prompt("Nome desta mensagem (por exemplo Novidades de novembro). Com um nome que já existe, o texto dela é atualizado:",current?current.name:"");
+    if(name===null)return;
+    if(!name.trim()){msg("smsTemplateMessage","Dê um nome para a mensagem.",true);return}
+    const button=$("smsTemplateSave");button.disabled=true;
+    try{
+      const r=await api("/api/admin/sms/templates",{method:"POST",body:JSON.stringify({name:name.trim(),text})});
+      await loadSms();
+      if(r.template){$("smsTemplateSelect").value=String(r.template.id);$("smsTemplateDelete").hidden=false}
+      msg("smsTemplateMessage","Mensagem salva como “"+(r.template?.name||name.trim())+"”.");
+    }catch(err){msg("smsTemplateMessage",err.message,true)}
+    finally{button.disabled=false}
+  }
+
+  async function deleteTemplate(){
+    const t=(data?.templates||[]).find(x=>String(x.id)===$("smsTemplateSelect").value);if(!t)return;
+    if(!window.confirm("Apagar a mensagem salva “"+t.name+"”? O texto que está na caixa continua lá."))return;
+    try{await api("/api/admin/sms/templates/"+encodeURIComponent(t.id),{method:"DELETE"});$("smsTemplateSelect").value="";await loadSms();msg("smsTemplateMessage","Mensagem salva apagada.")}
+    catch(err){msg("smsTemplateMessage",err.message,true)}
   }
 
   /* ---------- Envio ---------- */
@@ -396,6 +518,11 @@
     text.addEventListener("input",()=>{renderCounter();clearPreview()});
     $("smsNumbers").addEventListener("input",()=>{renderNumbersInfo();clearPreview()});
     ["smsAudienceBuyers","smsAudienceUnpaid"].forEach(id=>$(id).addEventListener("change",clearPreview));
+    $("smsSavedLists").addEventListener("change",onSavedListChange);
+    $("smsSaveListButton").addEventListener("click",saveNumbersToList);
+    $("smsTemplateSelect").addEventListener("change",onTemplateChange);
+    $("smsTemplateSave").addEventListener("click",saveTemplate);
+    $("smsTemplateDelete").addEventListener("click",deleteTemplate);
     $("smsTrackLinks").addEventListener("change",onTrackChange);
     $("smsStripAccents").addEventListener("click",()=>{text.value=T.toGsmText(text.value);renderCounter();clearPreview();text.focus()});
     $("smsTestButton").addEventListener("click",sendTest);
@@ -417,6 +544,10 @@
     smsCopy:copyText,
     smsShowMessages:showMessages,
     smsHideMessages:hideMessages,
-    smsRemoveOptout:removeOptout
+    smsRemoveOptout:removeOptout,
+    smsShowListMembers:showListMembers,
+    smsHideListMembers:hideListMembers,
+    smsRemoveListMember:removeListMember,
+    smsDeleteList:deleteList
   });
 })();
