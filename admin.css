@@ -2723,6 +2723,28 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
 @media (max-width:640px){.ip-report{flex-direction:column;align-items:stretch}.ip-report button{width:100%}}
 
 /* SMS (aba Marketing → SMS): saldo, nova campanha, prévia com envio em lotes e histórico */
+.sms-status-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px}
+.app a.sms-recharge{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:10px 20px;border-radius:999px;background:var(--ad-ink);color:#fff;text-decoration:none;font-size:11px;font-weight:600;letter-spacing:1.4px}
+.app a.sms-recharge:hover{background:#2d2d2d}
+.sms-balance.is-low{color:var(--ad-wine)}
+.sms-recharge-help{margin-top:12px}
+.sms-alert-row{display:flex;align-items:flex-end;flex-wrap:wrap;gap:10px 12px;margin-top:14px;padding-top:14px;border-top:1px solid var(--ad-line)}
+.sms-alert-row label{flex:0 1 330px}
+.sms-alert-row input{width:100%}
+.sms-alert-row .field-help{flex:1 1 100%;margin:0}
+.sms-short{display:grid;gap:10px;padding:12px 14px;border:1px solid #ecd3d6;border-radius:10px;background:#fbf3f4}
+.sms-short p{margin:0}
+.sms-track{display:grid;gap:4px;margin-top:14px}
+.sms-track label{display:flex;align-items:center;gap:9px;font-weight:500;cursor:pointer}
+.sms-track[hidden]{display:none}
+.sms-webhook-state{display:grid;gap:4px;margin-bottom:10px;padding:12px 14px;border:1px solid var(--ad-line);border-radius:10px;background:var(--ad-soft)}
+.sms-webhook-state strong{color:var(--ad-wine)}
+.sms-webhook-state.is-on strong{color:var(--ad-up)}
+.sms-webhook-state .field-help{margin:0}
+.sms-copy{display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px 8px;max-width:100%;vertical-align:middle}
+.sms-copy code{padding:3px 8px;border-radius:6px;background:var(--ad-soft);border:1px solid var(--ad-line);font-size:12px;overflow-wrap:anywhere;word-break:break-all}
+.app .sms-copy button{min-height:30px;padding:6px 12px;font-size:10px}
+#smsCopyMessage:empty{display:none}
 .sms-status{margin-bottom:16px}
 .sms-status-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px 18px}
 .sms-status-row .field-help{margin:0;flex:1;min-width:220px}
@@ -2769,14 +2791,17 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
 .sms-progress-bar span{display:block;height:100%;width:0;background:var(--ad-ink);border-radius:999px;transition:width .3s ease}
 .sms-progress .field-help.error{color:var(--ad-danger)}
 .sms-campaigns-table td{vertical-align:top}
-.app .sms-campaigns-table td:nth-child(1),.app .sms-campaigns-table td:nth-child(3){white-space:normal;min-width:110px}
+.app .sms-campaigns-table td:nth-child(1),.app .sms-campaigns-table td:nth-child(3){white-space:normal;min-width:96px}
 .app .sms-campaigns-table td.sms-campaign-text{min-width:220px;max-width:360px;white-space:normal;overflow-wrap:anywhere;line-height:1.5}
 @media (min-width:641px){.app .sms-messages .table td:last-child{white-space:normal;min-width:180px}}
 .app .link-button.sms-link{font-family:var(--ad-sans)!important;font-size:12.5px!important;color:var(--ad-ink-2)!important;text-decoration:underline!important;text-underline-offset:3px;white-space:nowrap}
 .sms-campaigns-table .field-help{display:block;margin-top:4px;font-size:11.5px}
-.sms-actions{white-space:nowrap}
-.sms-actions button{display:block;margin:0 0 6px auto;min-height:34px;padding:8px 12px;font-size:10px}
-.sms-actions .link-button{display:inline-block;min-height:0;padding:4px 0;margin:0}
+.app .sms-campaigns-table td.sms-actions{white-space:normal;min-width:150px;width:150px}
+.sms-actions button{display:block;width:100%;margin:0 0 6px;min-height:34px;padding:8px 10px;font-size:10px}
+.sms-delivery{display:grid;gap:2px}
+.sms-delivery .is-failed{color:var(--ad-wine)}
+.app .sms-campaigns-table td:nth-child(5){white-space:normal;min-width:120px}
+.sms-actions .link-button{display:inline-block;width:auto;min-height:0;padding:4px 0;margin:0}
 .sms-actions{text-align:right}
 #smsCampaignsInfo{display:block;margin:0 0 8px}
 #smsCampaignsInfo:empty{display:none}
@@ -2805,4 +2830,5 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
   .app .sms-cards td.sms-actions,.app .sms-cards td:not([data-label]){display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding-top:8px;text-align:left}
   .app .sms-cards td:not([data-label])::before{content:none}
   .sms-actions button{margin:0}
+  .app .sms-campaigns-table td.sms-actions,.app .sms-campaigns-table td:nth-child(5){width:100%;min-width:0}
 }

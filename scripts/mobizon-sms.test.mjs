@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { MobizonError, createMobizonClient, messageStatus } = require("../backend/mobizon-sms.js");
+const { MobizonError, createMobizonClient, messageStatus, webhookSignature, validWebhookSignature } = require("../backend/mobizon-sms.js");
+const crypto = require("crypto");
 
 function fakeFetch(reply) {
     const calls = [];
@@ -33,7 +34,7 @@ test("envio: número e texto no corpo; devolve o id da mensagem", async () => {
     const fetchImpl = fakeFetch({ code: 0, data: { campaignId: "1759377", status: 1, messageId: "12111324" }, message: "" });
     const client = createMobizonClient({ apiKey: "k", fetchImpl });
     const sent = await client.send({ recipient: "5585991234567", text: "MONTE: oi" });
-    assert.deepEqual(sent, { providerId: "12111324", providerStatus: "1" });
+    assert.deepEqual(sent, { providerId: "12111324", providerStatus: "1", providerCampaignId: "1759377" });
     assert.equal(fetchImpl.calls[0].body.get("recipient"), "5585991234567");
     assert.equal(fetchImpl.calls[0].body.get("text"), "MONTE: oi");
 });
@@ -82,4 +83,37 @@ test("situações desconhecidas contam como enviadas (ainda sem confirmação)",
     assert.equal(messageStatus("PDLIVRD"), "sent");
     assert.equal(messageStatus(""), "sent");
     assert.equal(messageStatus("expired"), "failed");
+});
+
+test("contar cliques: a Mobizon encurta o link e devolve a campanha do SMS", async () => {
+    const fetchImpl = fakeFetch({ code: 0, data: { campaignId: 555, status: 2, messageId: 777 }, message: "" });
+    const client = createMobizonClient({ apiKey: "k", fetchImpl });
+    const sent = await client.send({ recipient: "5585991234567", text: "MONTE: https://oficialmontee.com.br", shortenLinks: true });
+    assert.deepEqual(sent, { providerId: "777", providerStatus: "2", providerCampaignId: "555" });
+    assert.equal(fetchImpl.calls[0].body.get("params[shortenLinks]"), "1");
+    // Sem contar cliques, o link vai como está.
+    await client.send({ recipient: "5585991234567", text: "x" });
+    assert.equal(fetchImpl.calls[1].body.get("params[shortenLinks]"), null);
+});
+
+test("cliques de uma campanha: soma dos links curtos", async () => {
+    const fetchImpl = fakeFetch({ code: 0, data: [{ id: 1, shortLink: "https://mbz.li/a", clickCnt: 2, redirectCnt: 2 }, { id: 2, clickCnt: "1" }], message: "" });
+    const client = createMobizonClient({ apiKey: "k", fetchImpl });
+    assert.equal(await client.campaignClicks("555"), 3);
+    assert.match(fetchImpl.calls[0].url, /\/service\/campaign\/getlinks\?/);
+    assert.equal(fetchImpl.calls[0].body.get("campaignId"), "555");
+});
+
+test("assinatura do webhook: sha1 de eventId|attempt|eventCreateTs|chave", () => {
+    const event = { eventId: 26, attempt: 1, eventCreateTs: "2026-01-15 11:42:28", data: { messageId: 169275418, status: "DELIVRD" } };
+    const expected = crypto.createHash("sha1").update("26|1|2026-01-15 11:42:28|segredo").digest("hex");
+    assert.equal(webhookSignature(event, "segredo"), expected);
+    assert.equal(validWebhookSignature({ ...event, sign: expected }, "segredo"), true);
+    assert.equal(validWebhookSignature({ ...event, sign: expected.toUpperCase() }, "segredo"), true);
+    assert.equal(validWebhookSignature({ ...event, sign: expected }, "outra"), false);
+    assert.equal(validWebhookSignature({ ...event, attempt: 2, sign: expected }, "segredo"), false);
+    assert.equal(validWebhookSignature({ ...event, sign: "nada" }, "segredo"), false);
+    assert.equal(validWebhookSignature({ ...event }, "segredo"), false);
+    // Sem chave configurada, nenhum aviso vale.
+    assert.equal(validWebhookSignature({ ...event, sign: webhookSignature(event, "") }, ""), false);
 });
