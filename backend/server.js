@@ -5739,12 +5739,28 @@ async function smsOptouts() {
 }
 
 // Quem recebe: os públicos escolhidos e os números colados, sem repetir e sem quem saiu da lista.
+// Ids das listas salvas escolhidas (no máximo 20).
+function smsListIds(value) {
+    return [...new Set((Array.isArray(value) ? value : []).map(Number).filter(id => Number.isSafeInteger(id) && id > 0))].slice(0, 20);
+}
+
+// Celulares das listas salvas escolhidas, com o nome de cada lista.
+async function smsSavedListMembers(ids) {
+    if (!ids.length) return { members: [], names: [] };
+    const rows = await supabaseRequest("sms_list_members?list_id=in.(" + ids.join(",") + ")&select=phone,list_id,sms_lists(name)&order=created_at.asc&limit=20000", { method: "GET" });
+    const list = Array.isArray(rows) ? rows : [];
+    const names = [...new Set(list.map(row => safeString(row.sms_lists?.name)).filter(Boolean))];
+    return { members: list.map(row => row.phone), names };
+}
+
 async function smsRecipients(body) {
     const chosen = ["compradora", "nao_pagou"].filter(name => Array.isArray(body?.audience) && body.audience.includes(name));
     const pasted = SmsText.extractPhones(String(body?.numbers ?? "").slice(0, 200000));
-    const [audiences, optoutRows] = await Promise.all([
+    const listIds = smsListIds(body?.lists);
+    const [audiences, optoutRows, saved] = await Promise.all([
         chosen.length ? smsAudiences() : { compradora: [], nao_pagou: [] },
-        smsOptouts()
+        smsOptouts(),
+        smsSavedListMembers(listIds)
     ]);
     const optouts = new Set(optoutRows.map(row => row.phone));
     const recipients = new Map(), skipped = new Set();
@@ -5753,13 +5769,15 @@ async function smsRecipients(body) {
         if (!recipients.has(person.phone)) recipients.set(person.phone, person);
     };
     chosen.forEach(name => audiences[name].forEach(add));
+    // "salva": número de uma lista salva (no banco do envio fica como "lista", igual ao colado).
+    saved.members.forEach(phone => add({ phone, name: null, source: "salva" }));
     pasted.phones.forEach(phone => add({ phone, name: null, source: "lista" }));
     const list = [...recipients.values()];
-    const bySource = { compradora: 0, nao_pagou: 0, lista: 0 };
+    const bySource = { compradora: 0, nao_pagou: 0, salva: 0, lista: 0 };
     list.forEach(person => { bySource[person.source] += 1; });
     return {
         recipients: list,
-        audience: chosen.concat(pasted.phones.length ? ["lista"] : []),
+        audience: chosen.concat(saved.names.map(name => "Lista: " + name), pasted.phones.length ? ["lista"] : []),
         bySource,
         invalid: pasted.invalid,
         skippedOptout: skipped.size
@@ -5784,16 +5802,17 @@ function smsPreviewPayload(built, check) {
 
 app.get("/api/admin/sms", requireAdmin, async (req, res) => {
     try {
-        const [balance, audiences, optouts, campaigns, kvResult] = await Promise.allSettled([
+        const [balance, audiences, optouts, campaigns, kvResult, templates, lists] = await Promise.allSettled([
             MOBIZON_API_KEY ? smsClient().balance() : Promise.resolve(null),
             smsAudiences(),
             smsOptouts(),
             supabaseRequest("rpc/sms_campaign_overview", { method: "POST", body: JSON.stringify({ p_limit: 30 }) }),
-            readSmsKv()
+            readSmsKv(),
+            smsTemplates(),
+            smsSavedLists()
         ]);
-        if (audiences.status === "rejected" || optouts.status === "rejected" || campaigns.status === "rejected" || kvResult.status === "rejected") {
-            throw (audiences.reason || optouts.reason || campaigns.reason || kvResult.reason);
-        }
+        const failed = [audiences, optouts, campaigns, kvResult, templates, lists].find(result => result.status === "rejected");
+        if (failed) throw failed.reason;
         const kv = kvResult.value;
         // A chave do webhook é criada aqui na primeira vez (a loja só copia e cola na Mobizon).
         if (!kv.settings.webhook_secret) {
@@ -5816,7 +5835,9 @@ app.get("/api/admin/sms", requireAdmin, async (req, res) => {
             mobizon_panel_url: MOBIZON_PANEL_URL,
             low_balance_threshold: kv.settings.low_balance_threshold,
             low_balance_email: Boolean(RESEND_API_KEY && ORDER_NOTIFICATION_EMAILS),
-            webhook: { url: PUBLIC_SITE_URL + SMS_WEBHOOK_PATH, secret: kv.settings.webhook_secret, last_at: kv.webhookLastAt }
+            webhook: { url: PUBLIC_SITE_URL + SMS_WEBHOOK_PATH, secret: kv.settings.webhook_secret, last_at: kv.webhookLastAt },
+            templates: templates.value,
+            lists: lists.value
         });
     } catch (error) {
         console.error("Admin SMS GET:", error);
@@ -5904,7 +5925,7 @@ app.post("/api/admin/sms/campaigns", requireAdmin, smsRateLimit, async (req, res
                 await supabaseRequest("sms_messages", {
                     method: "POST",
                     headers: { "Prefer": "return=minimal" },
-                    body: JSON.stringify(built.recipients.slice(i, i + 500).map(person => ({ campaign_id: campaign.id, phone: person.phone, name: person.name, source: person.source })))
+                    body: JSON.stringify(built.recipients.slice(i, i + 500).map(person => ({ campaign_id: campaign.id, phone: person.phone, name: person.name, source: person.source === "salva" ? "lista" : person.source })))
                 });
             }
         } catch (error) {
@@ -6081,6 +6102,135 @@ app.post(SMS_WEBHOOK_PATH, smsWebhookRateLimit, express.text({ type: req => !/js
     } catch (error) {
         console.error("Webhook da Mobizon:", error.message);
         return res.status(500).json({ success: false });
+    }
+});
+
+/* ---------- Mensagens salvas e listas de números salvas ---------- */
+const SMS_LIST_MAX_MEMBERS = 5000;
+
+async function smsTemplates() {
+    const rows = await supabaseRequest("sms_templates?select=id,name,text,updated_at&order=name.asc&limit=200", { method: "GET" });
+    return Array.isArray(rows) ? rows : [];
+}
+
+async function smsSavedLists() {
+    const rows = await supabaseRequest("sms_lists?select=id,name,updated_at,sms_list_members(count)&order=name.asc&limit=100", { method: "GET" });
+    return (Array.isArray(rows) ? rows : []).map(row => ({ id: row.id, name: row.name, updated_at: row.updated_at, count: Number(row.sms_list_members?.[0]?.count) || 0 }));
+}
+
+function smsName(value) {
+    return safeString(value).replace(/\s+/g, " ").slice(0, 80);
+}
+
+function smsRowId(value) {
+    const id = Number(value);
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+// Salvar com um nome que já existe atualiza o texto dessa mensagem.
+app.post("/api/admin/sms/templates", requireAdmin, smsRateLimit, async (req, res) => {
+    const name = smsName(req.body?.name);
+    if (!name) return res.status(400).json({ success: false, message: "Dê um nome para a mensagem." });
+    const check = smsText(req.body?.text);
+    if (check.error) return res.status(400).json({ success: false, message: check.error });
+    try {
+        const rows = await supabaseRequest("sms_templates?on_conflict=name", {
+            method: "POST",
+            headers: { "Prefer": "resolution=merge-duplicates,return=representation" },
+            body: JSON.stringify({ name, text: check.text, updated_at: new Date().toISOString() })
+        });
+        return res.json({ success: true, template: Array.isArray(rows) ? rows[0] : rows });
+    } catch (error) {
+        console.error("Admin SMS salvar mensagem:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível salvar a mensagem agora." });
+    }
+});
+
+app.delete("/api/admin/sms/templates/:id", requireAdmin, async (req, res) => {
+    const id = smsRowId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, message: "Mensagem inválida." });
+    try {
+        await supabaseRequest("sms_templates?id=eq." + id, { method: "DELETE", headers: { "Prefer": "return=minimal" } });
+        return res.json({ success: true });
+    } catch (error) {
+        console.error("Admin SMS apagar mensagem:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível apagar agora." });
+    }
+});
+
+// Guarda números (colados ou de um arquivo) numa lista. Sem list_id, cria a lista com o nome dado
+// (ou usa a que já tem esse nome). Números repetidos não entram duas vezes.
+app.post("/api/admin/sms/lists", requireAdmin, smsRateLimit, async (req, res) => {
+    const { phones, invalid } = SmsText.extractPhones(String(req.body?.numbers ?? "").slice(0, 400000));
+    if (!phones.length) return res.status(400).json({ success: false, message: "Nenhum celular para guardar. Cole os números ou abra um arquivo." });
+    try {
+        let listId = smsRowId(req.body?.list_id);
+        if (!listId) {
+            const name = smsName(req.body?.name);
+            if (!name) return res.status(400).json({ success: false, message: "Dê um nome para a lista, por exemplo Clientes WhatsApp." });
+            const rows = await supabaseRequest("sms_lists?on_conflict=name", {
+                method: "POST",
+                headers: { "Prefer": "resolution=merge-duplicates,return=representation" },
+                body: JSON.stringify({ name, updated_at: new Date().toISOString() })
+            });
+            listId = (Array.isArray(rows) ? rows[0] : rows)?.id;
+        }
+        const current = (await smsSavedLists()).find(list => list.id === listId);
+        if (!current) return res.status(404).json({ success: false, message: "Lista não encontrada." });
+        const room = Math.max(0, SMS_LIST_MAX_MEMBERS - current.count);
+        if (!room) return res.status(400).json({ success: false, message: "A lista já tem " + SMS_LIST_MAX_MEMBERS + " números, o máximo." });
+        let added = 0;
+        const batch = phones.slice(0, room);
+        for (let i = 0; i < batch.length; i += 1000) {
+            const rows = await supabaseRequest("sms_list_members?on_conflict=list_id,phone", {
+                method: "POST",
+                headers: { "Prefer": "resolution=ignore-duplicates,return=representation" },
+                body: JSON.stringify(batch.slice(i, i + 1000).map(phone => ({ list_id: listId, phone })))
+            });
+            added += Array.isArray(rows) ? rows.length : 0;
+        }
+        await supabaseRequest("sms_lists?id=eq." + listId, { method: "PATCH", headers: { "Prefer": "return=minimal" }, body: JSON.stringify({ updated_at: new Date().toISOString() }) });
+        return res.json({ success: true, list_id: listId, name: current.name, added, already: batch.length - added, over_limit: phones.length - batch.length, invalid, total: current.count + added });
+    } catch (error) {
+        console.error("Admin SMS guardar lista:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível guardar os números agora." });
+    }
+});
+
+app.get("/api/admin/sms/lists/:id/members", requireAdmin, async (req, res) => {
+    const id = smsRowId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, message: "Lista inválida." });
+    try {
+        const rows = await supabaseRequest("sms_list_members?list_id=eq." + id + "&select=phone,created_at&order=created_at.desc&limit=" + SMS_LIST_MAX_MEMBERS, { method: "GET" });
+        return res.json({ success: true, members: Array.isArray(rows) ? rows : [] });
+    } catch (error) {
+        console.error("Admin SMS números da lista:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível carregar a lista." });
+    }
+});
+
+app.delete("/api/admin/sms/lists/:id/members/:phone", requireAdmin, async (req, res) => {
+    const id = smsRowId(req.params.id);
+    const phone = SmsText.brazilMobile(req.params.phone);
+    if (!id || !phone) return res.status(400).json({ success: false, message: "Número inválido." });
+    try {
+        await supabaseRequest("sms_list_members?list_id=eq." + id + "&phone=eq." + phone, { method: "DELETE", headers: { "Prefer": "return=minimal" } });
+        return res.json({ success: true });
+    } catch (error) {
+        console.error("Admin SMS tirar da lista:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível tirar o número agora." });
+    }
+});
+
+app.delete("/api/admin/sms/lists/:id", requireAdmin, async (req, res) => {
+    const id = smsRowId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, message: "Lista inválida." });
+    try {
+        await supabaseRequest("sms_lists?id=eq." + id, { method: "DELETE", headers: { "Prefer": "return=minimal" } });
+        return res.json({ success: true });
+    } catch (error) {
+        console.error("Admin SMS apagar lista:", error);
+        return res.status(500).json({ success: false, message: "Não foi possível apagar a lista agora." });
     }
 });
 

@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20261110-sms-mobizon">
+<link rel="stylesheet" href="admin.css?v=20261110-sms-salvar">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -276,16 +276,22 @@
             <div class="checks sms-audiences">
               <label><input type="checkbox" id="smsAudienceBuyers" value="compradora"> Compraram no site <b id="smsCountBuyers" class="sms-count"></b></label>
               <label><input type="checkbox" id="smsAudienceUnpaid" value="nao_pagou"> Criaram pedido e não pagaram <b id="smsCountUnpaid" class="sms-count"></b></label>
+              <span id="smsSavedLists" class="sms-saved-lists"></span>
             </div>
             <label class="full-width">Colar números (opcional)<textarea id="smsNumbers" rows="4" placeholder="Um por linha, por exemplo (85) 99123-4567, ou cole a planilha exportada do Google Contatos"></textarea></label>
             <div class="sms-file-row"><label class="secondary-link sms-file">ABRIR ARQUIVO (CSV, VCARD OU TXT)<input id="smsFile" type="file" accept=".csv,.vcf,.txt,text/csv,text/vcard,text/x-vcard,text/plain" hidden></label><span id="smsNumbersInfo" class="field-help"></span></div>
-            <details class="help-more"><summary>Como tirar os contatos do celular</summary><p>Salve na agenda do celular quem conversou com a loja pelo WhatsApp. No Android, abra contacts.google.com no computador, clique em <strong>Exportar</strong> e escolha <strong>CSV do Google</strong>. No iPhone, abra icloud.com/contacts, selecione os contatos e escolha <strong>Exportar vCard</strong>. Depois use ABRIR ARQUIVO: só os celulares entram na lista.</p></details>
+            <div id="smsSaveListRow" class="sms-save-list" hidden><label>Guardar estes números numa lista<select id="smsSaveListSelect"></select></label><button type="button" id="smsSaveListButton" class="secondary">GUARDAR NA LISTA</button><span class="field-help">A lista fica salva e aparece acima, para marcar nas próximas campanhas.</span></div>
+            <span id="smsSaveListMessage" class="field-help"></span>
+            <details id="smsListsManage" class="help-more" hidden><summary>Ver e editar as listas salvas</summary><div id="smsListsBox"></div><div id="smsListMembers"></div></details>
+            <details class="help-more"><summary>Como tirar os contatos do celular</summary><p>Salve na agenda do celular quem conversou com a loja pelo WhatsApp. No iPhone (iOS 16 ou mais novo), no app Contatos, toque em <strong>Listas</strong>, crie uma lista (por exemplo Clientes WhatsApp) com os clientes, toque e segure nela e escolha <strong>Exportar</strong> → <strong>Salvar em Arquivos</strong>. No Android, abra contacts.google.com no computador, clique em <strong>Exportar</strong> e escolha <strong>CSV do Google</strong>. Depois use ABRIR ARQUIVO (só os celulares entram) e GUARDAR NA LISTA.</p></details>
             <p class="field-help">Pedidos de teste não entram. Quem está em “Não querem receber”, no fim da página, fica de fora sozinho.</p>
           </fieldset>
           <fieldset class="form-block">
             <legend>2. Mensagem</legend>
+            <div class="sms-templates-row"><label>Usar uma mensagem salva<select id="smsTemplateSelect"></select></label><button type="button" id="smsTemplateDelete" class="link-button sms-link" hidden>Apagar esta mensagem salva</button></div>
             <label class="full-width">Texto do SMS<textarea id="smsText" rows="4" maxlength="1000"></textarea></label>
-            <div class="sms-counter-row"><span id="smsCounter" class="sms-counter"></span><button type="button" id="smsStripAccents" class="secondary" hidden>TIRAR ACENTOS</button></div>
+            <div class="sms-counter-row"><span id="smsCounter" class="sms-counter"></span><span class="sms-counter-actions"><button type="button" id="smsStripAccents" class="secondary" hidden>TIRAR ACENTOS</button><button type="button" id="smsTemplateSave" class="secondary">SALVAR MENSAGEM</button></span></div>
+            <span id="smsTemplateMessage" class="field-help"></span>
             <ul id="smsChecklist" class="sms-checklist"></ul>
             <div id="smsTrackRow" class="sms-track" hidden><label><input type="checkbox" id="smsTrackLinks"> Contar quem clicou no link</label><span class="field-help">A Mobizon troca o link por um link curto dela, um por pessoa, e conta os cliques. O link precisa começar com https:// (o painel coloca sozinho).</span></div>
             <div class="sms-test-row"><label>Testar antes no seu celular (opcional)<input id="smsTestPhone" inputmode="tel" autocomplete="tel" placeholder="(85) 99123-4567"></label><button type="button" id="smsTestButton" class="secondary">MANDAR TESTE</button></div>
@@ -422,6 +428,6 @@
 <script src="admin.js?v=20261110-sms"></script>
 <script src="admin-carousel.js?v=20261104-previa-link"></script>
 <script src="sms-text.js?v=20261110-sms-vcard"></script>
-<script src="admin-sms.js?v=20261110-sms-vcard"></script>
+<script src="admin-sms.js?v=20261110-sms-salvar"></script>
 </body>
 </html>
