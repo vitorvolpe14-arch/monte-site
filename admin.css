@@ -2750,6 +2750,12 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
 .sms-test-row label{flex:0 1 260px}
 .sms-test-row input{width:100%}
 #smsTestMessage{display:block;margin-top:8px}
+.sms-compose .sms-test-row{margin-top:18px}
+.sms-send-row{display:flex;align-items:center;flex-wrap:wrap;gap:10px 16px;margin-top:20px;padding-top:18px;border-top:1px solid var(--ad-line)}
+.sms-send-row .field-help{margin:0;flex:1;min-width:200px}
+.app button.sms-send-main{min-height:48px;padding:14px 28px;font-size:12px;letter-spacing:1.6px}
+#smsFormError:empty{display:none}
+#smsFormError{margin-top:12px}
 .sms-preview{margin-top:20px;padding:20px;border:1px solid var(--ad-line);border-radius:var(--ad-radius-sm);background:var(--ad-soft);display:grid;gap:12px}
 .sms-preview-head{display:grid;gap:4px}
 .sms-preview-total{font:400 22px/1.2 var(--ad-serif);color:var(--ad-ink)}
@@ -2785,7 +2791,7 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
   .sms-preview-stats{grid-template-columns:1fr}
   .sms-optout-form{grid-template-columns:1fr}
   .sms-test-row label{flex:1 1 100%}
-  .sms-test-row button,.sms-preview .modal-actions button{width:100%}
+  .sms-test-row button,.sms-preview .modal-actions button,.sms-send-row button{width:100%}
   /* No celular, cada linha das tabelas vira um cartão com o nome do campo à esquerda. */
   .app .table.sms-cards{min-width:0}
   .app .sms-cards thead{display:none}
