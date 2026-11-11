@@ -4826,7 +4826,27 @@ function productSharePreview(page, product, code) {
     return page;
 }
 
-app.get("/", async (req, res) => {
+// Página só da Sale (/sale): é a mesma página da loja (sacola, bolsa aberta, checkout),
+// aberta sem a animação de abertura e mostrando só a seção da Sale, com todas as peças.
+function salePageHtml(page) {
+    const title = "Sale | MONTÊ";
+    const description = "Sale da MONTÊ: todas as bolsas e acessórios com preço especial.";
+    const url = new URL("/sale", PUBLIC_SITE_URL).href;
+    return page
+        .replace('<html lang="pt-BR" class="intro-playing catalog-pending">', '<html lang="pt-BR" class="page-sale catalog-pending">')
+        .replace(/<title>[^<]*<\/title>/, "<title>" + title + "</title>")
+        .replace(/(<meta name="description" content=")[^"]*">/, (_, start) => start + description + '">')
+        .replace(/(<link rel="canonical" href=")[^"]*">/, (_, start) => start + url + '">')
+        .replace(/(<meta property="og:url" content=")[^"]*">/, (_, start) => start + url + '">')
+        .replace(/(<meta property="og:title" content=")[^"]*">/, (_, start) => start + title + '">')
+        .replace(/(<meta name="twitter:title" content=")[^"]*">/, (_, start) => start + title + '">');
+}
+
+app.get("/sale", (req, res) => sendStorePage(req, res, { sale: true }));
+
+app.get("/", (req, res) => sendStorePage(req, res, {}));
+
+async function sendStorePage(req, res, { sale = false }) {
     try {
         const [html, catalog, slides, editorial, topBar, promotions] = await Promise.all([
             readSitePage("index.html"),
@@ -4864,14 +4884,18 @@ app.get("/", async (req, res) => {
             ? catalog.find(product => product.short_code === shareCode)
             : null;
         if (sharedProduct) page = productSharePreview(page, sharedProduct, shareCode);
-        else if (Array.isArray(slides) && slides.length) page = homeSharePreview(page, slides[0]);
+        else if (!sale && Array.isArray(slides) && slides.length) page = homeSharePreview(page, slides[0]);
+        if (sale) page = salePageHtml(page);
         res.setHeader("Cache-Control", "no-cache");
         return res.status(200).type("html").send(page);
     } catch (error) {
         console.error("Página inicial:", error);
+        if (sale) {
+            try { return res.status(200).type("html").send(salePageHtml(await readSitePage("index.html"))); } catch {}
+        }
         return sendSitePage(res, "index.html");
     }
-});
+}
 
 
 /* =====================================================
@@ -8339,6 +8363,7 @@ app.get("/sitemap.xml", async (req, res) => {
         const products = await getPublicProductsForSeo();
         const urls = [
             { loc: new URL("/", PUBLIC_SITE_URL).href },
+            { loc: new URL("/sale", PUBLIC_SITE_URL).href },
             { loc: new URL("/trocas-devolucoes.html", PUBLIC_SITE_URL).href },
             { loc: new URL("/politica-privacidade.html", PUBLIC_SITE_URL).href },
             { loc: new URL("/entrega-frete.html", PUBLIC_SITE_URL).href },
@@ -8357,7 +8382,7 @@ app.get("/sitemap.xml", async (req, res) => {
     } catch (error) {
         console.error("❌ Sitemap:", error);
         // Sem acesso ao catálogo, publica ao menos as páginas institucionais.
-        const pages = ["/", "/trocas-devolucoes.html", "/politica-privacidade.html", "/entrega-frete.html", "/termos-de-compra.html"];
+        const pages = ["/", "/sale", "/trocas-devolucoes.html", "/politica-privacidade.html", "/entrega-frete.html", "/termos-de-compra.html"];
         res.set("Content-Type", "application/xml; charset=utf-8");
         return res.status(200).send(
             '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' +

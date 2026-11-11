@@ -127,6 +127,14 @@ function getCarouselVisibleCount() {
     return PRODUCTS_PER_PAGE;
 }
 
+// Página só da Sale (/sale): todas as peças da Sale em grade, sem carrossel.
+// O servidor já manda a página com a classe; aqui cobre a página aberta de outro jeito.
+const IS_SALE_PAGE = /^\/sale\/?$/.test(location.pathname);
+if (IS_SALE_PAGE) {
+    document.documentElement.classList.add("page-sale");
+    document.documentElement.classList.remove("intro-playing");
+}
+
 
 /* =====================================================
    FORMATAÇÃO DE PREÇO
@@ -600,6 +608,16 @@ function renderSalePage() {
         return;
     }
 
+    if (IS_SALE_PAGE) {
+        saleProducts.forEach(product => container.appendChild(createProductCard(product)));
+        [previousButton, nextButton].forEach(button => {
+            if (!button) return;
+            button.disabled = true;
+            button.style.visibility = "hidden";
+        });
+        return;
+    }
+
     const total = saleProducts.length;
     const start = currentSaleIndex % total;
 
@@ -638,6 +656,8 @@ function renderSalePage() {
 
 function nextSalePage() {
 
+    if (IS_SALE_PAGE) return;
+
     if (saleProducts.length <= getCarouselVisibleCount()) {
         return;
     }
@@ -652,6 +672,8 @@ function nextSalePage() {
 
 
 function previousSalePage() {
+
+    if (IS_SALE_PAGE) return;
 
     if (saleProducts.length <= getCarouselVisibleCount()) {
         return;

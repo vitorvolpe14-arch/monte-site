@@ -38,6 +38,9 @@
       "/sitemap.xml",
       "/robots.txt",
       "/",
+      // Página só da Sale (mesma página da loja, montada pelo servidor).
+      "/sale",
+      "/sale/",
       "/admin",
       "/admin/",
       "/pagamento-sucesso"

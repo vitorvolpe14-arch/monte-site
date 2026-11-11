@@ -8412,3 +8412,74 @@ html.catalog-pending .footer {
     border-bottom: 1.5px solid #fff;
     transform: rotate(-45deg);
 }
+
+
+/* =====================================================
+   PÁGINA SÓ DA SALE (/sale)
+   A mesma página da loja, mostrando só a seção da Sale
+   com todas as peças em grade (sem carrossel).
+===================================================== */
+html.page-sale #monteIntro,
+html.page-sale main#inicio > :not(#sale) {
+    display: none !important;
+}
+
+/* Sem a abertura, o cabeçalho e a barra do topo aparecem na hora (na home eles entram no fim dela). */
+html.page-sale .header,
+html.page-sale .shipping-bar {
+    animation: none !important;
+}
+
+html.page-sale .sale-section {
+    min-height: 70vh;
+}
+
+html.page-sale .sale-products-carousel {
+    display: block !important;
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 0 24px !important;
+}
+
+html.page-sale .sale-carousel-arrow {
+    display: none !important;
+}
+
+html.page-sale .sale-products-viewport {
+    overflow: visible !important;
+    width: 100% !important;
+}
+
+html.page-sale .sale-products-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 40px 20px !important;
+    width: 100% !important;
+    max-width: none !important;
+    transform: none !important;
+    flex-wrap: initial !important;
+}
+
+html.page-sale .sale-products-grid > .product-card {
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    flex: initial !important;
+}
+
+@media (max-width: 1024px) {
+    html.page-sale .sale-products-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 760px) {
+    html.page-sale .sale-products-carousel {
+        padding: 0 14px !important;
+    }
+
+    html.page-sale .sale-products-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 28px 10px !important;
+    }
+}
