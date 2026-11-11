@@ -8415,42 +8415,83 @@ html.catalog-pending .footer {
 
 
 /* =====================================================
-   PÁGINA SÓ DA SALE (/sale)
-   A mesma página da loja, mostrando só a seção da Sale
-   com todas as peças em grade (sem carrossel).
+   PÁGINAS DE UMA VITRINE SÓ (/sale, /novidades, /colecao,
+   /cintos-acessorios): a mesma página da loja, mostrando só
+   aquela seção, com todas as peças em grade (sem carrossel).
 ===================================================== */
-html.page-sale #monteIntro,
-html.page-sale main#inicio > :not(#sale) {
+html.section-page #monteIntro,
+html.page-sale main#inicio > :not(#sale),
+html.page-novidades main#inicio > :not(#novidades),
+html.page-colecao main#inicio > :not(#colecao),
+html.page-cintos-acessorios main#inicio > :not(#cintos-acessorios) {
     display: none !important;
 }
 
 /* Sem a abertura, o cabeçalho e a barra do topo aparecem na hora (na home eles entram no fim dela). */
-html.page-sale .header,
-html.page-sale .shipping-bar {
+html.section-page .header,
+html.section-page .shipping-bar {
     animation: none !important;
 }
 
-html.page-sale .sale-section {
+html.section-page main#inicio > .product-section,
+html.section-page main#inicio > .sale-section {
     min-height: 70vh;
 }
 
-html.page-sale .sale-products-carousel {
+html.section-page .sale-carousel-arrow,
+html.section-page .new-carousel-arrow,
+html.section-page .collection-carousel-arrow,
+html.section-page .category-intro-controls,
+html.page-novidades #novidades .section-heading > a {
+    display: none !important;
+}
+
+html.section-page .sale-products-carousel,
+html.section-page .new-products-carousel,
+html.section-page .collection-products-carousel {
     display: block !important;
     max-width: 1240px;
     margin: 0 auto;
     padding: 0 24px !important;
 }
 
-html.page-sale .sale-carousel-arrow {
-    display: none !important;
+/* Título alinhado com a grade. */
+html.section-page main#inicio > .product-section > .section-heading {
+    max-width: 1240px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 24px;
+    padding-right: 24px;
+    box-sizing: border-box;
 }
 
-html.page-sale .sale-products-viewport {
+/* Cintos & acessórios: na home o texto fica ao lado da vitrine; aqui, em cima da grade. */
+html.page-cintos-acessorios #cintos-acessorios {
+    display: block !important;
+}
+
+html.page-cintos-acessorios .category-intro {
+    max-width: 1240px;
+    margin: 0 auto 40px;
+    padding: 0 24px;
+    text-align: center;
+}
+
+html.page-cintos-acessorios .category-showcase-viewport {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 0 24px !important;
+}
+
+html.section-page .sale-products-viewport,
+html.section-page .new-products-viewport,
+html.section-page .collection-products-viewport {
     overflow: visible !important;
     width: 100% !important;
+    max-width: none !important;
 }
 
-html.page-sale .sale-products-grid {
+html.section-page main#inicio .products-grid {
     display: grid !important;
     grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
     gap: 40px 20px !important;
@@ -8460,7 +8501,7 @@ html.page-sale .sale-products-grid {
     flex-wrap: initial !important;
 }
 
-html.page-sale .sale-products-grid > .product-card {
+html.section-page main#inicio .products-grid > .product-card {
     width: auto !important;
     min-width: 0 !important;
     max-width: none !important;
@@ -8468,17 +8509,22 @@ html.page-sale .sale-products-grid > .product-card {
 }
 
 @media (max-width: 1024px) {
-    html.page-sale .sale-products-grid {
+    html.section-page main#inicio .products-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
     }
 }
 
 @media (max-width: 760px) {
-    html.page-sale .sale-products-carousel {
+    html.section-page .sale-products-carousel,
+    html.section-page .new-products-carousel,
+    html.section-page .collection-products-carousel,
+    html.page-cintos-acessorios .category-showcase-viewport,
+    html.page-cintos-acessorios .category-intro,
+    html.section-page main#inicio > .product-section > .section-heading {
         padding: 0 14px !important;
     }
 
-    html.page-sale .sale-products-grid {
+    html.section-page main#inicio .products-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
         gap: 28px 10px !important;
     }

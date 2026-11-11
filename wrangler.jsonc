@@ -38,9 +38,15 @@
       "/sitemap.xml",
       "/robots.txt",
       "/",
-      // Página só da Sale (mesma página da loja, montada pelo servidor).
+      // Páginas de uma vitrine só (mesma página da loja, montada pelo servidor).
       "/sale",
       "/sale/",
+      "/novidades",
+      "/novidades/",
+      "/colecao",
+      "/colecao/",
+      "/cintos-acessorios",
+      "/cintos-acessorios/",
       "/admin",
       "/admin/",
       "/pagamento-sucesso"

@@ -4826,27 +4826,37 @@ function productSharePreview(page, product, code) {
     return page;
 }
 
-// Página só da Sale (/sale): é a mesma página da loja (sacola, bolsa aberta, checkout),
-// aberta sem a animação de abertura e mostrando só a seção da Sale, com todas as peças.
-function salePageHtml(page) {
-    const title = "Sale | MONTÊ";
-    const description = "Sale da MONTÊ: todas as bolsas e acessórios com preço especial.";
-    const url = new URL("/sale", PUBLIC_SITE_URL).href;
+// Páginas de uma vitrine só (/sale, /novidades, /colecao, /cintos-acessorios): é a mesma página
+// da loja (sacola, bolsa aberta, checkout), aberta sem a animação de abertura e mostrando só
+// aquela seção, com todas as peças dela em grade.
+const SECTION_PAGES = {
+    sale: { title: "Sale | MONTÊ", description: "Sale da MONTÊ: todas as bolsas e acessórios com preço especial." },
+    novidades: { title: "Novidades | MONTÊ", description: "Novidades da MONTÊ: as bolsas e acessórios que acabaram de chegar." },
+    colecao: { title: "Coleção | MONTÊ", description: "Coleção MONTÊ: todas as bolsas femininas da loja. Compre online com pagamento seguro e entrega para todo o Brasil." },
+    "cintos-acessorios": { title: "Cintos & Acessórios | MONTÊ", description: "Cintos e acessórios MONTÊ: os detalhes que finalizam cada produção." }
+};
+
+function sectionPageHtml(page, section) {
+    const { title, description } = SECTION_PAGES[section];
+    const url = new URL("/" + section, PUBLIC_SITE_URL).href;
+    const text = value => escapeAttribute(value);
     return page
-        .replace('<html lang="pt-BR" class="intro-playing catalog-pending">', '<html lang="pt-BR" class="page-sale catalog-pending">')
-        .replace(/<title>[^<]*<\/title>/, "<title>" + title + "</title>")
-        .replace(/(<meta name="description" content=")[^"]*">/, (_, start) => start + description + '">')
+        .replace('<html lang="pt-BR" class="intro-playing catalog-pending">', '<html lang="pt-BR" class="section-page page-' + section + ' catalog-pending">')
+        .replace(/<title>[^<]*<\/title>/, () => "<title>" + text(title) + "</title>")
+        .replace(/(<meta name="description" content=")[^"]*">/, (_, start) => start + text(description) + '">')
         .replace(/(<link rel="canonical" href=")[^"]*">/, (_, start) => start + url + '">')
         .replace(/(<meta property="og:url" content=")[^"]*">/, (_, start) => start + url + '">')
-        .replace(/(<meta property="og:title" content=")[^"]*">/, (_, start) => start + title + '">')
-        .replace(/(<meta name="twitter:title" content=")[^"]*">/, (_, start) => start + title + '">');
+        .replace(/(<meta property="og:title" content=")[^"]*">/, (_, start) => start + text(title) + '">')
+        .replace(/(<meta name="twitter:title" content=")[^"]*">/, (_, start) => start + text(title) + '">');
 }
 
-app.get("/sale", (req, res) => sendStorePage(req, res, { sale: true }));
+Object.keys(SECTION_PAGES).forEach(section => {
+    app.get("/" + section, (req, res) => sendStorePage(req, res, { section }));
+});
 
 app.get("/", (req, res) => sendStorePage(req, res, {}));
 
-async function sendStorePage(req, res, { sale = false }) {
+async function sendStorePage(req, res, { section = "" }) {
     try {
         const [html, catalog, slides, editorial, topBar, promotions] = await Promise.all([
             readSitePage("index.html"),
@@ -4884,14 +4894,14 @@ async function sendStorePage(req, res, { sale = false }) {
             ? catalog.find(product => product.short_code === shareCode)
             : null;
         if (sharedProduct) page = productSharePreview(page, sharedProduct, shareCode);
-        else if (!sale && Array.isArray(slides) && slides.length) page = homeSharePreview(page, slides[0]);
-        if (sale) page = salePageHtml(page);
+        else if (!section && Array.isArray(slides) && slides.length) page = homeSharePreview(page, slides[0]);
+        if (section) page = sectionPageHtml(page, section);
         res.setHeader("Cache-Control", "no-cache");
         return res.status(200).type("html").send(page);
     } catch (error) {
         console.error("Página inicial:", error);
-        if (sale) {
-            try { return res.status(200).type("html").send(salePageHtml(await readSitePage("index.html"))); } catch {}
+        if (section) {
+            try { return res.status(200).type("html").send(sectionPageHtml(await readSitePage("index.html"), section)); } catch {}
         }
         return sendSitePage(res, "index.html");
     }
@@ -8363,7 +8373,7 @@ app.get("/sitemap.xml", async (req, res) => {
         const products = await getPublicProductsForSeo();
         const urls = [
             { loc: new URL("/", PUBLIC_SITE_URL).href },
-            { loc: new URL("/sale", PUBLIC_SITE_URL).href },
+            ...Object.keys(SECTION_PAGES).map(section => ({ loc: new URL("/" + section, PUBLIC_SITE_URL).href })),
             { loc: new URL("/trocas-devolucoes.html", PUBLIC_SITE_URL).href },
             { loc: new URL("/politica-privacidade.html", PUBLIC_SITE_URL).href },
             { loc: new URL("/entrega-frete.html", PUBLIC_SITE_URL).href },
@@ -8382,7 +8392,7 @@ app.get("/sitemap.xml", async (req, res) => {
     } catch (error) {
         console.error("❌ Sitemap:", error);
         // Sem acesso ao catálogo, publica ao menos as páginas institucionais.
-        const pages = ["/", "/sale", "/trocas-devolucoes.html", "/politica-privacidade.html", "/entrega-frete.html", "/termos-de-compra.html"];
+        const pages = ["/", ...Object.keys(SECTION_PAGES).map(section => "/" + section), "/trocas-devolucoes.html", "/politica-privacidade.html", "/entrega-frete.html", "/termos-de-compra.html"];
         res.set("Content-Type", "application/xml; charset=utf-8");
         return res.status(200).send(
             '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' +
