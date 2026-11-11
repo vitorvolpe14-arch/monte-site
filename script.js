@@ -127,12 +127,25 @@ function getCarouselVisibleCount() {
     return PRODUCTS_PER_PAGE;
 }
 
-// Página só da Sale (/sale): todas as peças da Sale em grade, sem carrossel.
-// O servidor já manda a página com a classe; aqui cobre a página aberta de outro jeito.
-const IS_SALE_PAGE = /^\/sale\/?$/.test(location.pathname);
-if (IS_SALE_PAGE) {
-    document.documentElement.classList.add("page-sale");
+// Páginas de uma vitrine só (/sale, /novidades, /colecao, /cintos-acessorios): mostram só
+// aquela seção, com todas as peças em grade, sem carrossel. O servidor já manda a página
+// com as classes; aqui cobre a página aberta de outro jeito.
+const PAGE_SECTION = (location.pathname.match(/^\/(sale|novidades|colecao|cintos-acessorios)\/?$/) || [])[1] || "";
+if (PAGE_SECTION) {
+    document.documentElement.classList.add("section-page", "page-" + PAGE_SECTION);
     document.documentElement.classList.remove("intro-playing");
+}
+
+// Na página da vitrine, todas as peças de uma vez e sem as setas. Devolve true quando montou.
+function renderWholeShowcase(section, container, list, buttons) {
+    if (PAGE_SECTION !== section) return false;
+    list.forEach(product => container.appendChild(createProductCard(product)));
+    buttons.forEach(button => {
+        if (!button) return;
+        button.disabled = true;
+        button.style.visibility = "hidden";
+    });
+    return true;
 }
 
 
@@ -493,6 +506,8 @@ function renderNewPage() {
 
     container.replaceChildren();
 
+    if (renderWholeShowcase("novidades", container, newProducts, [previousButton, nextButton])) return;
+
     if (!newProducts.length) {
         if (previousButton) {
             previousButton.disabled = true;
@@ -542,6 +557,7 @@ function renderNewPage() {
 
 
 function nextNewPage() {
+    if (PAGE_SECTION === "novidades") return;
 
     if (newProducts.length <= getCarouselVisibleCount()) return;
 
@@ -555,6 +571,7 @@ function nextNewPage() {
 
 
 function previousNewPage() {
+    if (PAGE_SECTION === "novidades") return;
 
     if (newProducts.length <= getCarouselVisibleCount()) return;
 
@@ -596,6 +613,8 @@ function renderSalePage() {
 
     container.replaceChildren();
 
+    if (renderWholeShowcase("sale", container, saleProducts, [previousButton, nextButton])) return;
+
     if (!saleProducts.length) {
         if (previousButton) {
             previousButton.disabled = true;
@@ -605,16 +624,6 @@ function renderSalePage() {
             nextButton.disabled = true;
             nextButton.style.visibility = "hidden";
         }
-        return;
-    }
-
-    if (IS_SALE_PAGE) {
-        saleProducts.forEach(product => container.appendChild(createProductCard(product)));
-        [previousButton, nextButton].forEach(button => {
-            if (!button) return;
-            button.disabled = true;
-            button.style.visibility = "hidden";
-        });
         return;
     }
 
@@ -656,7 +665,7 @@ function renderSalePage() {
 
 function nextSalePage() {
 
-    if (IS_SALE_PAGE) return;
+    if (PAGE_SECTION === "sale") return;
 
     if (saleProducts.length <= getCarouselVisibleCount()) {
         return;
@@ -673,7 +682,7 @@ function nextSalePage() {
 
 function previousSalePage() {
 
-    if (IS_SALE_PAGE) return;
+    if (PAGE_SECTION === "sale") return;
 
     if (saleProducts.length <= getCarouselVisibleCount()) {
         return;
@@ -704,6 +713,8 @@ function renderCollectionPage() {
 
 
     container.replaceChildren();
+
+    if (renderWholeShowcase("colecao", container, collectionProducts, [previousButton, nextButton])) return;
 
 
     if (!collectionProducts.length) {
@@ -764,6 +775,7 @@ function renderCollectionPage() {
 
 
 function nextCollectionPage() {
+    if (PAGE_SECTION === "colecao") return;
 
     if (collectionProducts.length <= getCarouselVisibleCount()) {
         return;
@@ -781,6 +793,7 @@ function nextCollectionPage() {
 
 
 function previousCollectionPage() {
+    if (PAGE_SECTION === "colecao") return;
 
     if (collectionProducts.length <= getCarouselVisibleCount()) {
         return;
@@ -821,6 +834,8 @@ function renderCategorySection(category) {
 
     container.replaceChildren();
 
+    if (renderWholeShowcase(category, container, list, [prev, next])) return;
+
     if (!list.length) {
         if (prev) prev.style.visibility = "hidden";
         if (next) next.style.visibility = "hidden";
@@ -853,6 +868,7 @@ function renderCategorySectionProducts(category, list) {
 }
 
 function nextCategoryPage(category) {
+    if (PAGE_SECTION === category) return;
     const list = categorySectionProducts[category] || [];
     if (list.length <= getCategoryVisibleCount()) return;
     slidePage(categoryContainer(category), 1, () => {
@@ -863,6 +879,7 @@ function nextCategoryPage(category) {
 }
 
 function previousCategoryPage(category) {
+    if (PAGE_SECTION === category) return;
     const list = categorySectionProducts[category] || [];
     if (list.length <= getCategoryVisibleCount()) return;
     slidePage(categoryContainer(category), -1, () => {
