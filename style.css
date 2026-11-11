@@ -597,9 +597,10 @@ a {
 }
 
 
-#novidades {
+#colecao {
 
-    /* Bege areia da paleta MONTÊ (antes era o bordô da Bordeaux Collection). */
+    /* Bege areia da paleta MONTÊ. As Novidades (agora logo abaixo do banner principal)
+       ficam no branco que era das Bolsas; as Bolsas ficam com o bege que era das Novidades. */
     background: var(--areia);
 
     color: var(--black);
@@ -607,19 +608,19 @@ a {
 }
 
 
-#novidades .section-label,
-#novidades .section-heading h2,
-#novidades .section-heading > a,
-#novidades .product-card,
-#novidades .product-name,
-#novidades .product-price {
+#colecao .section-label,
+#colecao .section-heading h2,
+#colecao .section-heading > a,
+#colecao .product-card,
+#colecao .product-name,
+#colecao .product-price {
 
     color: var(--black);
 
 }
 
 
-#novidades .section-heading > a {
+#colecao .section-heading > a {
 
     border-color: var(--black);
 
@@ -627,9 +628,16 @@ a {
 
 
 /* Preço promocional no fundo bege: em preto (o bege escuro dos textos perderia contraste). */
-#novidades .sale-price {
+#colecao .sale-price {
 
     color: var(--black);
+
+}
+
+
+#novidades {
+
+    background: #ffffff;
 
 }
 
@@ -5801,7 +5809,7 @@ canvas {
     color: var(--areia-texto);
 }
 
-#novidades .eyebrow {
+#colecao .eyebrow {
     color: rgba(13, 13, 13, .7);
 }
 
