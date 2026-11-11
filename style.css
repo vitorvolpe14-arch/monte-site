@@ -7966,6 +7966,8 @@ body.cart-open .toast { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); 
 /* Preço antigo (riscado) legível: antes ficava com 45% de opacidade. */
 .old-price { opacity: .72; }
 .sale-section .old-price { opacity: .85; }
+/* Preço promocional (o valor da Sale) em negrito, para se destacar do preço riscado. */
+.sale-price { font-weight: 600; }
 .store-benefit span:not(.store-benefit-icon) { color: #666; }
 
 /* Pontos do carrossel: o traço continua fino, mas a área de toque tem 24px de altura. */
