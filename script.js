@@ -2791,7 +2791,7 @@ function carouselSlideHtml(slide,i){
   const src=String(slide?.src||slide||"");
   const size=slide?.width&&slide?.height?' width="'+Number(slide.width)+'" height="'+Number(slide.height)+'"':"";
   const srcset=slide?.small?' srcset="'+escapeHTML(slide.small)+' 960w, '+escapeHTML(src)+' 2000w" sizes="100vw"':"";
-  return '<div class="slide'+(i===0?' active':'')+'"><img src="'+escapeHTML(src)+'"'+srcset+size+(i===0?' fetchpriority="high"':' loading="lazy"')+' decoding="async" alt="MONTÊ — Novidades"></div>';
+  return '<div class="slide'+(i===0?' active':'')+'"><img src="'+escapeHTML(src)+'"'+srcset+size+(i===0?' fetchpriority="high"':' loading="lazy"')+' decoding="async" alt="MONTÊ — Sale"></div>';
 }
 
 async function loadHomepageCarousel(){
@@ -3004,10 +3004,15 @@ async function subscribeNewsletter(event) {
    MENU MOBILE
 ===================================================== */
 
-function goToNovidades(event){
+// Clique (ou Enter) nos banners do carrossel do topo abre a página da Sale.
+// As setas do carrossel não contam; com Ctrl/Cmd abre em outra aba.
+function goToSale(event){
     if(event?.target?.closest?.("button")) return;
-    const section=document.getElementById("novidades");
-    if(section) section.scrollIntoView({behavior:"smooth",block:"start"});
+    if(event?.ctrlKey || event?.metaKey) {
+        window.open("/sale", "_blank", "noopener");
+        return;
+    }
+    window.location.href = "/sale";
 }
 
 function toggleMobileMenu() {
@@ -4597,7 +4602,7 @@ function forgetReturningCustomer() {
 
 registerClickActions({
     applyCoupon, browseNovidades, chooseGift, pickGiftProduct, removeGift, changeQuantity, checkout, closeCart, closeCartOutside, closeMobileMenu,
-    closeProductImageLightbox, closeProductModal, closeSearch, goToNovidades, navigateProductLightbox,
+    closeProductImageLightbox, closeProductModal, closeSearch, goToSale, navigateProductLightbox,
     nextCategoryPage, nextCollectionPage, nextNewPage, nextSalePage, nextSlide, openCart, openSearch,
     openWhatsAppReservation, previousCategoryPage, previousCollectionPage, previousNewPage,
     previousSalePage, previousSlide, removeCoupon, removeFromCart, toggleMobileMenu, updateItemQuantity,
@@ -4634,7 +4639,7 @@ document.getElementById("newsletterForm")?.addEventListener("submit", event => s
 document.getElementById("carouselSlides")?.addEventListener("keydown", event => {
     if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        goToNovidades(event);
+        goToSale(event);
     }
 });
 
