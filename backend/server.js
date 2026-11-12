@@ -13,6 +13,10 @@ const { sanitizeReportRow, reportRowKey, reportUntil, sanitizeSummary, mergeCove
 // Contagem de SMS e leitura de listas de celulares: o mesmo arquivo roda no painel (navegador).
 const SmsText = require("../sms-text.js");
 const { MobizonError, createMobizonClient, messageStatus, failureLabel, validWebhookSignature } = require("./mobizon-sms.js");
+// Contagem anônima de visitas (todas as visitantes, sem cookies e sem código de identificação).
+const { anonymousHits, anonymousSeries, storeDay } = require("./anonymous-visits.js");
+// Os totais por dia da contagem anônima ficam 25 meses (comparar com o mesmo mês do ano anterior).
+const ANON_RETENTION_MS = 761 * 24 * 60 * 60 * 1000;
 
 // Este servidor roda no Render (Node) e no Cloudflare Workers (nodejs_compat).
 // No Workers não há arquivos do projeto no disco nem timers fora de uma requisição:
@@ -2169,6 +2173,18 @@ app.post("/api/analytics/event",analyticsRateLimit,async(req,res)=>{
     res.status(201).json({success:true});
   }catch(e){console.error("Analytics:",e);res.status(400).json({success:false,message:"Não foi possível registrar o evento."})}
 });
+// Contagem anônima de visitas (backend/anonymous-visits.js). Vale para todas as visitantes, com ou sem a
+// permissão de cookies: só soma 1 no total do dia. O navegador e o IP são lidos na hora (celular ou
+// computador, robôs, "Não rastrear" e o limite de pedidos) e não são guardados.
+const ANON_OWN_HOST = (() => { try { return new URL(PUBLIC_SITE_URL).hostname; } catch { return ""; } })();
+app.post("/api/analytics/hit",analyticsRateLimit,async(req,res)=>{
+  try{
+    const b=req.body||{};
+    const hits=anonymousHits({event:safeString(b.event).slice(0,20),ref:safeString(b.ref).slice(0,253),utm:safeString(b.utm).slice(0,40),ua:req.headers["user-agent"],headers:req.headers,ownHost:ANON_OWN_HOST});
+    if(hits)await Promise.all(hits.map(h=>supabaseRequest("rpc/increment_site_hit",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({p_day:h.day,p_event:h.event,p_source:h.source,p_device:h.device})})));
+  }catch(e){console.error("Contagem anônima:",e.message)}
+  res.status(204).end();
+});
 app.post("/api/analytics/cart",analyticsRateLimit,async(req,res)=>{
   try{
     const b=req.body||{}, visitor_id=safeString(b.visitor_id).slice(0,120), session_key=safeString(b.session_id).slice(0,120);
@@ -2201,8 +2217,23 @@ app.get("/api/admin/analytics",requireAdmin,async(req,res)=>{
     const active=carts.filter(c=>c.status==="active"), converted=carts.filter(c=>c.status==="converted");
     const productMap={}, unitsSold={}; items.filter(i=>paidIds.has(String(i.order_id))).forEach(i=>{const key=i.product_name||i.product_id||"—";productMap[key]=(productMap[key]||0)+Number(i.total_price||0);unitsSold[key]=(unitsSold[key]||0)+Number(i.quantity||0)});
     const methods={};paid.forEach(o=>{const key=o.payment_method||"não informado";methods[key]=(methods[key]||0)+Number(o.total||0)});
-    const series=[];for(let i=days-1;i>=0;i--){const d=new Date(Date.now()-i*86400000).toISOString().slice(0,10),dayEvents=events.filter(e=>String(e.created_at).slice(0,10)===d),daySessions=sessions.filter(s=>String(s.last_seen_at).slice(0,10)===d),dayOrders=paid.filter(o=>String(o.paid_at||o.created_at).slice(0,10)===d);series.push({date:d,visitors:new Set(daySessions.map(s=>s.visitor_id)).size,pageViews:dayEvents.filter(e=>e.event_name==="page_view").length,purchases:dayOrders.length,revenue:dayOrders.reduce((s,o)=>s+Number(o.total||0),0)});}
-    res.json({success:true,summary:{visitors, pageViews, sessions:sessions.length, addToCart, checkoutStarted, orders:orders.length, paidOrders:paid.length, grossRevenue:revenue, ticketAverage:paid.length?revenue/paid.length:0, conversionRate:visitors?paid.length/visitors*100:0, activeCarts:active.length, abandonedValue:active.reduce((s,c)=>s+Number(c.total||0),0), abandonmentRate:(active.length+converted.length)?active.length/(active.length+converted.length)*100:0, convertedCarts:converted.length},series,topProducts:Object.keys(productMap).map(k=>({key:k,revenue:productMap[k],units:unitsSold[k]})).sort((a,b)=>b.revenue-a.revenue).slice(0,10),paymentMethods:methods,recentOrders:orders.slice(0,12),recentCarts:carts.slice(0,20),generatedAt:new Date().toISOString()});
+    // Um ponto por dia, no dia da loja (Fortaleza): visitas e pedidos da noite ficam no dia certo.
+    const dayList=[];for(let i=days-1;i>=0;i--)dayList.push(storeDay(new Date(Date.now()-i*86400000)));
+    const dayOf=v=>{const t=new Date(v||"");return Number.isFinite(t.getTime())?storeDay(t):""};
+    const byDay=(list,dateOf)=>{const m=new Map();list.forEach(x=>{const d=dateOf(x);if(!m.has(d))m.set(d,[]);m.get(d).push(x)});return m};
+    // Contagem anônima (todas as visitas, sem cookies): totais por dia. Só os últimos 25 meses contam
+    // para saber quando ela começou (a linha de teste da criação da tabela fica de fora).
+    const keepFrom=storeDay(new Date(Date.now()-ANON_RETENTION_MS));
+    const [hitRows,firstHit]=await Promise.all([
+      supabaseRequest("site_hits_daily?day=gte."+dayList[0]+"&select=day,event,source,device,hits&limit=20000",{method:"GET"}).catch(e=>{console.error("Contagem anônima (painel):",e.message);return []}),
+      supabaseRequest("site_hits_daily?day=gte."+keepFrom+"&event=eq.visit&select=day&order=day.asc&limit=1",{method:"GET"}).catch(()=>[])
+    ]);
+    const hits=Array.isArray(hitRows)?hitRows:[];
+    const anonSince=Array.isArray(firstHit)&&firstHit[0]?String(firstHit[0].day).slice(0,10):null;
+    const eventsBy=byDay(events,e=>dayOf(e.created_at)),sessionsBy=byDay(sessions,x=>dayOf(x.last_seen_at)),paidBy=byDay(paid,o=>dayOf(o.paid_at||o.created_at));
+    const base=dayList.map(d=>{const dayOrders=paidBy.get(d)||[];return {date:d,visitors:new Set((sessionsBy.get(d)||[]).map(x=>x.visitor_id)).size,pageViews:(eventsBy.get(d)||[]).filter(e=>e.event_name==="page_view").length,purchases:dayOrders.length,revenue:dayOrders.reduce((n,o)=>n+Number(o.total||0),0)}});
+    const {series,anonymous}=anonymousSeries(base,hits,anonSince);
+    res.json({success:true,summary:{visitors, pageViews, sessions:sessions.length, addToCart, checkoutStarted, orders:orders.length, paidOrders:paid.length, grossRevenue:revenue, ticketAverage:paid.length?revenue/paid.length:0, conversionRate:visitors?paid.length/visitors*100:0, activeCarts:active.length, abandonedValue:active.reduce((s,c)=>s+Number(c.total||0),0), abandonmentRate:(active.length+converted.length)?active.length/(active.length+converted.length)*100:0, convertedCarts:converted.length},series,topProducts:Object.keys(productMap).map(k=>({key:k,revenue:productMap[k],units:unitsSold[k]})).sort((a,b)=>b.revenue-a.revenue).slice(0,10),paymentMethods:methods,recentOrders:orders.slice(0,12),recentCarts:carts.slice(0,20),anonymous,generatedAt:new Date().toISOString()});
   }catch(e){console.error("Admin analytics:",e);res.status(500).json({success:false,message:"Não foi possível carregar o Dashboard."})}
 });
 
@@ -8973,6 +9004,9 @@ async function purgeExpiredAnalytics() {
     const minimal = { method: "DELETE", headers: { Prefer: "return=minimal" } };
     await supabaseRequest("cart_snapshots?updated_at=lt." + isoAgo(CART_SNAPSHOT_RETENTION_MS), minimal);
     await supabaseRequest("site_sessions?last_seen_at=lt." + isoAgo(ANALYTICS_RETENTION_MS), minimal);
+    // Contagem anônima: totais por dia com mais de 25 meses.
+    await supabaseRequest("site_hits_daily?day=lt." + storeDay(new Date(Date.now() - ANON_RETENTION_MS)), minimal)
+        .catch(error => console.error("Limpeza da contagem anônima:", error.message));
     await supabaseRequest("short_links?expires_at=lt." + encodeURIComponent(new Date().toISOString()), minimal);
     for (const [prefix, field, ttl] of KV_RETENTION) {
         await supabaseRequest("kv_store_48db9b7e?key=like." + encodeURIComponent(prefix + ":") + "*" +

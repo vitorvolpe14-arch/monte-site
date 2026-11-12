@@ -69,3 +69,14 @@ test("cumulative: soma dia a dia desde o início; fora do período não entra", 
     const c = C.cumulative([{ time: at(1, 10), total: 100 }, { time: at(1, 23), total: 50 }, { time: at(3, 9), total: 200 }, { time: at(5, 9), total: 999 }, { time: at(0, 9), total: 7 }], start, 4);
     assert.deepEqual(c, [150, 150, 350, 350]);
 });
+
+test("days: com a contagem anônima, o número mostrado é o de todas as visitas", () => {
+    const d = C.days([{ date: "2026-11-11", visitors: 8, visits: 0, anon: false, purchases: 1 }, { date: "2026-11-12", visitors: 9, visits: 120, anon: true, purchases: 3, cart: 7 }]);
+    assert.deepEqual(d.map(x => x.shown), [8, 120], "antes da contagem: só quem aceitou; depois: todas as visitas");
+    assert.equal(d[1].conversion, 2.5);
+    assert.equal(d[1].cart, 7);
+    const w = C.weeks(d);
+    assert.equal(w[0].shown, 128);
+    assert.equal(w[0].anon, false, "semana com dia antes da contagem não é toda anônima");
+    assert.equal(C.weekdays(d.filter(x => x.anon))[3].avg, 120, "2026-11-12 é quinta-feira");
+});

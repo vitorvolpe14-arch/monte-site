@@ -9,10 +9,13 @@ let promotions=[],promotionsLoaded=false,storeBenefitsData=null;
 async function loadAnalytics(){try{$("analyticsError").textContent="";analyticsData=await api("/api/admin/analytics?days="+Number($("analyticsDays").value||30));renderAnalytics()}catch(e){$("analyticsError").textContent=e.message}}
 function renderAnalytics(){
  const d=analyticsData.summary||{},series=analyticsData.series||[];
+ // Contagem anônima (todas as visitas, sem cookies), quando já existe; periodFrom = 1º dia do período.
+ const anon=analyticsData.anonymous?{...analyticsData.anonymous,periodFrom:series[0]?.date||""}:null;
  // Os 4 números com a tendência do período; o resto virou gráfico (admin-charts.js).
- renderAnalyticsKpis(d,series);
- renderVisitsChart(series);
- renderFunnel(d);
+ renderAnalyticsKpis(d,series,anon);
+ renderVisitsChart(series,anon);
+ renderFunnel(d,anon);
+ renderSources(anon);
  renderWeekdayChart(series);
  renderCartMeter(d);
  const tops=analyticsData.topProducts||[],topTotal=tops.reduce((n,x)=>n+Number(x.revenue||0),0);
@@ -941,11 +944,12 @@ function hideChartTip(box){box._active=null;const tip=box.querySelector(".dc-tip
   const box=$("dashRevenueChart");if(!box)return;
   const indexAt=e=>{const g=box._geo;if(!g)return -1;const x=e.clientX-box.getBoundingClientRect().left;return Math.max(0,Math.min(box._bins.length-1,Math.floor((x-g.padL)/g.slot)))};
   box.addEventListener("pointermove",e=>{const i=indexAt(e);if(i>=0)showChartTip(box,i)});
-  box.addEventListener("pointerdown",e=>{const i=indexAt(e);if(i>=0)showChartTip(box,i)});
+  // O toque também dá foco ao gráfico: o foco não troca o dia tocado pelo último dia com venda.
+  box.addEventListener("pointerdown",e=>{box._pointerFocus=true;const i=indexAt(e);if(i>=0)showChartTip(box,i)});
   // No toque a dica fica até tocar fora do gráfico; com o mouse some ao sair.
   box.addEventListener("pointerleave",e=>{if(e.pointerType!=="touch"&&document.activeElement!==box)hideChartTip(box)});
   document.addEventListener("pointerdown",e=>{if(box._active!=null&&!box.contains(e.target))hideChartTip(box)});
-  box.addEventListener("focus",()=>{const bins=box._bins||[];let i=bins.length-1;for(let k=bins.length-1;k>=0;k--)if(bins[k].count){i=k;break}showChartTip(box,i)});
+  box.addEventListener("focus",()=>{if(box._pointerFocus){box._pointerFocus=false;return}const bins=box._bins||[];let i=bins.length-1;for(let k=bins.length-1;k>=0;k--)if(bins[k].count){i=k;break}showChartTip(box,i)});
   box.addEventListener("blur",()=>hideChartTip(box));
   box.addEventListener("keydown",e=>{const bins=box._bins||[];if(!bins.length)return;let i=box._active??bins.length-1;if(e.key==="ArrowLeft")i--;else if(e.key==="ArrowRight")i++;else if(e.key==="Home")i=0;else if(e.key==="End")i=bins.length-1;else if(e.key==="Escape"){hideChartTip(box);return}else return;e.preventDefault();showChartTip(box,Math.max(0,Math.min(bins.length-1,i)))});
   // O gráfico acompanha a largura da tela (e aparece certo quando a Visão geral volta a ser mostrada).
