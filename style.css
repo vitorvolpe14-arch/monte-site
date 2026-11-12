@@ -8149,6 +8149,36 @@ html.catalog-pending .footer {
 #cartOverlay .presale-delivery-notice { border-left-color: var(--co-accent-soft); background: #f7f4ef; }
 #cartOverlay .presale-delivery-notice strong { color: var(--co-accent-deep); }
 
+/* Peças da Sale não têm troca: aviso no pagamento e etiqueta na peça, no bege do checkout. */
+.sale-exchange-notice {
+    margin: 4px 0 16px;
+    padding: 12px 14px;
+    background: #f7f4ef;
+    border-left: 3px solid var(--co-accent-soft, #d6ccbb);
+    font-size: 13px;
+    line-height: 1.55;
+    color: #3d3a36;
+}
+
+.sale-exchange-notice strong {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--co-accent-deep, #867251);
+    letter-spacing: .04em;
+}
+
+.sale-exchange-notice small {
+    display: block;
+    margin-top: 4px;
+    font-size: 11.5px;
+    color: #6b665f;
+}
+
+.sale-exchange-notice[hidden] {
+    display: none;
+}
+
+.cart-item-sale,
 .cart-item-presale {
     margin-top: 4px;
     font-size: 11px;
