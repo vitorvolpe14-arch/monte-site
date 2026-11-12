@@ -100,4 +100,35 @@ function anonymousHits({ event, ref, utm, ua, headers, ownHost }, now = new Date
     return [{ day, event: name, source: "-", device }];
 }
 
-module.exports = { HIT_EVENTS, SOURCE_CODES, sourceOf, deviceOf, isBot, optedOut, storeDay, anonymousHits, cleanHost };
+// Junta os totais anônimos de cada dia à série do Analytics (base: um item por dia, com date) e soma o
+// período desde o dia em que a contagem começou (since). Os pedidos pagos contam nos mesmos dias, para a
+// conversão comparar o que é comparável. Sem a contagem (since vazio), anonymous fica null.
+function anonymousSeries(base, rows, since) {
+    const hits = (Array.isArray(rows) ? rows : []).map(h => ({ day: String(h.day).slice(0, 10), event: h.event, source: h.source, device: h.device, hits: Number(h.hits) || 0 }));
+    const byDay = new Map();
+    hits.forEach(h => { if (!byDay.has(h.day)) byDay.set(h.day, []); byDay.get(h.day).push(h); });
+    const sum = (list, event) => (list || []).reduce((n, h) => n + (h.event === event ? h.hits : 0), 0);
+    const series = base.map(d => {
+        const list = byDay.get(d.date);
+        return { ...d, anon: !!since && d.date >= since, visits: sum(list, "visit"), anonPageViews: sum(list, "page_view"), cart: sum(list, "cart"), checkout: sum(list, "checkout") };
+    });
+    if (!since || !series.length) return { series, anonymous: null };
+    const from = since > series[0].date ? since : series[0].date, win = series.filter(d => d.date >= from);
+    const total = key => win.reduce((n, d) => n + (Number(d[key]) || 0), 0);
+    const sources = {}, devices = { mobile: 0, desktop: 0 };
+    hits.filter(h => h.event === "visit" && h.day >= from && h.day <= series[series.length - 1].date).forEach(h => {
+        sources[h.source] = (sources[h.source] || 0) + h.hits;
+        if (devices[h.device] != null) devices[h.device] += h.hits;
+    });
+    return {
+        series,
+        anonymous: {
+            since, from, to: series[series.length - 1].date,
+            visits: total("visits"), pageViews: total("anonPageViews"), cart: total("cart"), checkout: total("checkout"), paidOrders: total("purchases"),
+            sources: Object.entries(sources).map(([source, visits]) => ({ source, visits })).sort((a, b) => b.visits - a.visits),
+            devices
+        }
+    };
+}
+
+module.exports = { HIT_EVENTS, SOURCE_CODES, sourceOf, deviceOf, isBot, optedOut, storeDay, anonymousHits, anonymousSeries, cleanHost };

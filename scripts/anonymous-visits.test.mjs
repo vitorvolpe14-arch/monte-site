@@ -72,3 +72,34 @@ test("nada do que é guardado identifica a visitante", () => {
         assert.doesNotMatch(JSON.stringify(hit), /200\.1\.2\.3|iPhone|blog-da-amiga/);
     }
 });
+
+test("série do Analytics: totais anônimos por dia e o período desde o início da contagem", () => {
+    const base = ["2026-11-10", "2026-11-11", "2026-11-12"].map((date, i) => ({ date, visitors: 10 + i, pageViews: 30, purchases: i, revenue: i * 100 }));
+    const rows = [
+        { day: "2026-11-11", event: "visit", source: "instagram", device: "mobile", hits: 40 },
+        { day: "2026-11-11", event: "visit", source: "direto", device: "desktop", hits: 10 },
+        { day: "2026-11-11", event: "page_view", source: "-", device: "mobile", hits: 120 },
+        { day: "2026-11-12", event: "visit", source: "instagram", device: "mobile", hits: 25 },
+        { day: "2026-11-12", event: "cart", source: "-", device: "mobile", hits: 6 },
+        { day: "2026-11-12", event: "checkout", source: "-", device: "mobile", hits: 3 }
+    ];
+    const { series, anonymous } = A.anonymousSeries(base, rows, "2026-11-11");
+    assert.deepEqual(series.map(d => [d.date, d.anon, d.visits]), [["2026-11-10", false, 0], ["2026-11-11", true, 50], ["2026-11-12", true, 25]]);
+    assert.equal(series[1].anonPageViews, 120);
+    assert.equal(series[0].visitors, 10, "os números de quem aceitou continuam");
+    assert.equal(anonymous.from, "2026-11-11");
+    assert.equal(anonymous.visits, 75);
+    assert.equal(anonymous.cart, 6);
+    assert.equal(anonymous.checkout, 3);
+    assert.equal(anonymous.paidOrders, 1 + 2, "pedidos pagos só dos dias com contagem (11 e 12)");
+    assert.deepEqual(anonymous.sources, [{ source: "instagram", visits: 65 }, { source: "direto", visits: 10 }]);
+    assert.deepEqual(anonymous.devices, { mobile: 65, desktop: 10 });
+});
+
+test("série do Analytics: contagem começou antes do período = o período inteiro; sem contagem = null", () => {
+    const base = [{ date: "2026-11-12", visitors: 5, pageViews: 9, purchases: 1, revenue: 100 }];
+    assert.equal(A.anonymousSeries(base, [], "2026-10-01").anonymous.from, "2026-11-12");
+    const none = A.anonymousSeries(base, [], null);
+    assert.equal(none.anonymous, null);
+    assert.equal(none.series[0].anon, false);
+});

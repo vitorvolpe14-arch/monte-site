@@ -1,7 +1,9 @@
 /* =====================================================
    CONTAS DOS GRÁFICOS DO PAINEL (sem desenho)
    Usado por admin-charts.js e testado em scripts/chart-data.test.mjs.
-   - days: a série diária do Analytics em números (AAAA-MM-DD).
+   - days: a série diária do Analytics em números (AAAA-MM-DD). "shown" é o número de visitas
+     que os gráficos mostram: todas as visitas (contagem anônima) nos dias em que ela já existe
+     (anon), e só quem aceitou as estatísticas nos dias antes dela.
    - weeks: semanas de 7 dias contadas a partir do dia mais recente,
      com a média de visitantes por dia (a semana incompleta não parece menor).
    - weekdays: média de visitantes de cada dia da semana, de segunda a domingo.
@@ -21,10 +23,12 @@
         return (Array.isArray(series) ? series : [])
             .filter(x => x && /^\d{4}-\d{2}-\d{2}/.test(String(x.date || "")))
             .map(x => {
-                const visitors = num(x.visitors), purchases = num(x.purchases);
+                const visitors = num(x.visitors), purchases = num(x.purchases), anon = x.anon === true, visits = num(x.visits);
+                const shown = anon ? visits : visitors;
                 return {
                     date: String(x.date).slice(0, 10), visitors, pageViews: num(x.pageViews), purchases, revenue: num(x.revenue),
-                    conversion: visitors ? purchases / visitors * 100 : 0
+                    anon, visits, anonPageViews: num(x.anonPageViews), cart: num(x.cart), checkout: num(x.checkout), shown,
+                    conversion: shown ? purchases / shown * 100 : 0
                 };
             })
             .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
@@ -34,9 +38,11 @@
         const out = [];
         for (let end = list.length; end > 0; end -= 7) {
             const g = list.slice(Math.max(0, end - 7), end), sum = k => g.reduce((n, d) => n + d[k], 0);
+            const shown = g.reduce((n, d) => n + (d.shown ?? d.visitors), 0);
             out.unshift({
                 first: g[0], last: g[g.length - 1], n: g.length, visitors: sum("visitors"), pageViews: sum("pageViews"),
-                purchases: sum("purchases"), revenue: sum("revenue"), daily: sum("visitors") / g.length, week: true
+                purchases: sum("purchases"), revenue: sum("revenue"), visits: sum("visits"), anonPageViews: sum("anonPageViews"),
+                anon: g.every(d => d.anon === true), shown, daily: shown / g.length, week: true
             });
         }
         return out;
@@ -48,7 +54,7 @@
         const acc = new Map(WEEK_ORDER.map(wd => [wd, { weekday: wd, n: 0, visitors: 0, purchases: 0 }]));
         list.forEach(d => {
             const wd = new Date(d.date + "T12:00:00").getDay(), a = acc.get(wd);
-            a.n++; a.visitors += d.visitors; a.purchases += d.purchases;
+            a.n++; a.visitors += d.shown ?? d.visitors; a.purchases += d.purchases;
         });
         return WEEK_ORDER.map(wd => {
             const a = acc.get(wd);

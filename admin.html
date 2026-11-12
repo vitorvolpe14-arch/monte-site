@@ -8,7 +8,7 @@
 <title>MONTÊ — Gestão</title>
 <meta name="color-scheme" content="dark light">
 <script src="admin-theme.js?v=20261112-escuro"></script>
-<link rel="stylesheet" href="admin.css?v=20261112-contraste">
+<link rel="stylesheet" href="admin.css?v=20261112-contagem-anonima">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -343,13 +343,14 @@
         <div class="panel analytics-visits"><div class="panel-head"><div><h2>Visitas por dia</h2><p id="analyticsChartHint" class="field-help"></p></div></div><div id="analyticsChart" class="dash-chart" tabindex="0" aria-describedby="analyticsChartHint"></div><details class="help-more dash-table"><summary>Ver em tabela</summary><div id="analyticsVisitsTable" class="table-wrap"></div></details></div>
         <div class="panel"><div class="panel-head"><div><h2>Funil de compra</h2><p class="field-help">Quantas pessoas passam de uma etapa para a outra no período.</p></div></div><div id="analyticsFunnel" class="rank-list funnel"></div></div>
       </div>
-      <div class="analytics-grid">
+      <div class="analytics-grid analytics-grid-sources">
         <div class="panel"><div class="panel-head"><div><h2>Visitas por dia da semana</h2><p id="analyticsWeekHint" class="field-help"></p></div></div><div id="analyticsWeekChart" class="dash-chart" tabindex="0" aria-describedby="analyticsWeekHint"></div><details class="help-more dash-table"><summary>Ver em tabela</summary><div id="analyticsWeekTable" class="table-wrap"></div></details></div>
-        <div class="panel"><div class="panel-head"><div><h2>Abandono de carrinho</h2><p class="field-help">Carrinhos do período que não viraram pedido pago.</p></div></div><div id="analyticsCarts" class="cart-meter"></div></div>
+        <div id="analyticsSourcesPanel" class="panel" hidden><div class="panel-head"><div><h2>De onde vêm as visitas</h2><p class="field-help">Todas as visitas do período, contadas de forma anônima. “Direto”: digitou o endereço, usou um link salvo ou veio de um app que não diz a origem.</p></div></div><div id="analyticsSources"></div></div>
       </div>
-      <div class="analytics-grid">
+      <div class="analytics-grid analytics-grid-three">
         <div class="panel"><div class="panel-head"><div><h2>Produtos mais vendidos</h2><p class="field-help">Faturamento de cada peça nos pedidos pagos do site no período.</p></div></div><div id="analyticsTopProducts" class="rank-list"></div></div>
         <div class="panel"><div class="panel-head"><div><h2>Formas de pagamento</h2><p class="field-help">Faturamento de cada forma nos pedidos pagos do site.</p></div></div><div id="analyticsPayments" class="rank-list"></div></div>
+        <div class="panel"><div class="panel-head"><div><h2>Abandono de carrinho</h2><p class="field-help">Carrinhos do período que não viraram pedido pago. Só de quem aceitou as estatísticas: guardar a sacola precisa do código no navegador.</p></div></div><div id="analyticsCarts" class="cart-meter"></div></div>
       </div>
       <div class="panel analytics-orders"><div class="panel-head"><div><h2>Pedidos do período</h2></div></div><div id="analyticsOrders" class="table-wrap"></div></div>
       <div class="panel"><div class="panel-head"><div><h2>Carrinhos recentes</h2></div></div><div id="analyticsRecentCarts" class="table-wrap"></div></div>
@@ -447,9 +448,9 @@
 <script src="safe-html.js?v=20261007-seguranca"></script>
 <script src="infinitepay-report.js?v=20261108-fatura"></script>
 <script src="dash-compare.js?v=20261105-evolucao"></script>
-<script src="chart-data.js?v=20261112-graficos"></script>
-<script src="admin.js?v=20261112-graficos"></script>
-<script src="admin-charts.js?v=20261112-liquido"></script>
+<script src="chart-data.js?v=20261112-contagem-anonima"></script>
+<script src="admin.js?v=20261112-contagem-anonima"></script>
+<script src="admin-charts.js?v=20261112-contagem-anonima"></script>
 <script src="admin-carousel.js?v=20261104-previa-link"></script>
 <script src="sms-text.js?v=20261110-sms-motivo"></script>
 <script src="admin-sms.js?v=20261110-sms-arquivo"></script>

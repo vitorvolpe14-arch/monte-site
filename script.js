@@ -1373,6 +1373,7 @@ function addSelectedProductToCart(buyNow = false) {
 
     updateCart();
 
+    countAnonymously("cart");
     window.monteAnalytics?.track("add_to_cart", {
         product_id: selectedProduct.id,
         product_name: selectedProduct.name,
@@ -2672,6 +2673,7 @@ async function checkout() {
     const checkoutButton=document.querySelector(".checkout-button");
     if(checkoutButton){checkoutButton.disabled=true;checkoutButton.textContent="PREPARANDO PAGAMENTO...";}
     showToast("Preparando seu pagamento...");
+    countAnonymously("checkout");
     window.monteAnalytics?.track("begin_checkout",{value:getCartSubtotal(),metadata:{payment_method:paymentMethod,coupon:appliedCoupon?.code||null}});
     window.monteAnalytics?.saveCart();
 
@@ -3497,12 +3499,74 @@ function loadCloudflareAnalytics() {
     else inject();
 }
 
+/* =====================================================
+   CONTAGEM ANÔNIMA DE VISITAS (legítimo interesse — LGPD art. 7º, IX)
+   Vale para todas as visitantes, com ou sem a permissão de cookies, porque não identifica
+   ninguém: não usa cookies, não guarda nada no aparelho e não tem código de identificação.
+   O site só avisa o servidor que houve uma entrada no site (com o domínio de onde ela veio,
+   ou o utm_source do link), outra página, uma peça na sacola ou o começo do pagamento; o
+   servidor soma 1 no total do dia (backend/anonymous-visits.js).
+   Não conta quem ligou o "Não rastrear" ou o Global Privacy Control do navegador, nem quem
+   escolheu "Não contar minhas visitas" nas preferências de cookies (aí o navegador guarda só
+   esse pedido: monte_nao_contar).
+===================================================== */
+const ANON_OPTOUT_KEY = "monte_nao_contar";
+function browserAsksNotToTrack() {
+    return navigator.globalPrivacyControl === true || navigator.doNotTrack === "1" || window.doNotTrack === "1";
+}
+function anonymousCountOptedOut() {
+    try { return localStorage.getItem(ANON_OPTOUT_KEY) === "1"; } catch { return false; }
+}
+// Sacola e pagamento: no máximo uma vez por página aberta (a loja inteira é uma página só).
+const anonymousCountSent = new Set();
+function countAnonymously(event, extra = {}) {
+    if (browserAsksNotToTrack() || anonymousCountOptedOut()) return;
+    if (event === "cart" || event === "checkout") {
+        if (anonymousCountSent.has(event)) return;
+        anonymousCountSent.add(event);
+    }
+    try {
+        fetch("/api/analytics/hit", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "omit", keepalive: true, body: JSON.stringify({ event, ...extra }) }).catch(() => {});
+    } catch {}
+}
+// Ao abrir a página: entrada no site (veio de fora ou sem link de origem, e não é recarregar
+// ou voltar) ou outra página da loja.
+(function countThisPage() {
+    const send = () => {
+        const nav = window.performance?.getEntriesByType ? performance.getEntriesByType("navigation")[0] : null;
+        let ref = "";
+        try { ref = document.referrer ? new URL(document.referrer).hostname.replace(/^www\./, "") : ""; } catch {}
+        const own = location.hostname.replace(/^www\./, "");
+        if (ref === own || (nav && (nav.type === "reload" || nav.type === "back_forward"))) { countAnonymously("page_view"); return; }
+        let utm = "";
+        try { utm = (new URLSearchParams(location.search).get("utm_source") || "").slice(0, 40); } catch {}
+        countAnonymously("visit", { ref, utm });
+    };
+    if (document.readyState === "complete") send();
+    else window.addEventListener("load", send, { once: true });
+})();
+// "Não contar minhas visitas" (preferências de cookies): fica guardado só esse pedido.
+function toggleAnonymousCount() {
+    const stop = !anonymousCountOptedOut();
+    try { if (stop) localStorage.setItem(ANON_OPTOUT_KEY, "1"); else localStorage.removeItem(ANON_OPTOUT_KEY); } catch {}
+    renderAnonymousCountChoice();
+}
+function renderAnonymousCountChoice() {
+    const button = document.getElementById("anonCountToggle"), note = document.getElementById("anonCountNote");
+    if (!button) return;
+    const gpc = browserAsksNotToTrack(), off = anonymousCountOptedOut();
+    button.hidden = gpc;
+    button.textContent = off ? "Voltar a contar" : "Não contar minhas visitas";
+    if (note) note.textContent = gpc ? "Seu navegador pede para não rastrear: suas visitas não são contadas." : off ? "Suas visitas não são contadas neste navegador." : "";
+}
+
 function showCookieConsent(customize = false) {
     const box = document.getElementById("cookieConsent");
     if (!box) return;
     document.getElementById("consentAnalytics").checked = privacyConsent ? privacyConsent.analytics : false;
     document.getElementById("consentReminders").checked = privacyConsent ? privacyConsent.reminders : false;
     document.getElementById("cookieOptions").hidden = !customize;
+    renderAnonymousCountChoice();
     document.getElementById("cookieCustomize").hidden = customize;
     document.getElementById("cookieSave").hidden = !customize;
     box.hidden = false;
@@ -4642,7 +4706,7 @@ registerClickActions({
     nextCategoryPage, nextCollectionPage, nextNewPage, nextSalePage, nextSlide, openCart, openSearch,
     openWhatsAppReservation, previousCategoryPage, previousCollectionPage, previousNewPage,
     previousSalePage, previousSlide, removeCoupon, removeFromCart, toggleMobileMenu, updateItemQuantity,
-    acceptCookies, rejectCookies, customizeCookies, saveCookieChoices, openCookiePreferences,
+    acceptCookies, rejectCookies, customizeCookies, saveCookieChoices, openCookiePreferences, toggleAnonymousCount,
     applyEmailSuggestion, forgetReturningCustomer
 });
 

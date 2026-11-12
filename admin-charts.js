@@ -54,10 +54,11 @@ function bindChart(box,{show,count,start,rerender,indexAt}){
   if(!box)return;
   const at=indexAt||(e=>{const g=box._geo,n=count();if(!g||!n)return -1;const x=e.clientX-box.getBoundingClientRect().left;return Math.max(0,Math.min(n-1,Math.floor((x-g.padL)/g.slot)))});
   box.addEventListener("pointermove",e=>{const i=at(e);if(i>=0)show(i)});
-  box.addEventListener("pointerdown",e=>{const i=at(e);if(i>=0)show(i)});
+  // O toque também dá foco ao gráfico: o foco não troca o dia tocado pelo último dia.
+  box.addEventListener("pointerdown",e=>{box._pointerFocus=true;const i=at(e);if(i>=0)show(i)});
   box.addEventListener("pointerleave",e=>{if(e.pointerType!=="touch"&&document.activeElement!==box)hideChartTip(box)});
   document.addEventListener("pointerdown",e=>{if(box._active!=null&&!box.contains(e.target))hideChartTip(box)});
-  box.addEventListener("focus",()=>{const n=count();if(box._geo&&n)show(start?start():n-1)});
+  box.addEventListener("focus",()=>{if(box._pointerFocus){box._pointerFocus=false;return}const n=count();if(box._geo&&n)show(start?start():n-1)});
   box.addEventListener("blur",()=>hideChartTip(box));
   box.addEventListener("keydown",e=>{const n=count();if(!n||!box._geo)return;let i=box._active??n-1;if(e.key==="ArrowLeft")i--;else if(e.key==="ArrowRight")i++;else if(e.key==="Home")i=0;else if(e.key==="End")i=n-1;else if(e.key==="Escape"){hideChartTip(box);return}else return;e.preventDefault();show(Math.max(0,Math.min(n-1,i)))});
   if(window.ResizeObserver){let frame=0;new ResizeObserver(()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{const w=Math.round(box.clientWidth);if(w&&(box._pending||w!==box._width))rerender()})}).observe(box)}
@@ -69,22 +70,31 @@ function chartDayLabel(d){return chartDay(d).toLocaleDateString("pt-BR",{weekday
 /* ---------- Analytics: visitas por dia ----------
    Uma coluna por dia; período longo em tela estreita (e 90 dias no computador):
    cada coluna é uma semana, com a média por dia (a escala continua a mesma). */
-function renderVisitsChart(series){
+function renderVisitsChart(series,anon){
   const box=$("analyticsChart");if(!box)return;
-  box._series=series;
-  const days=window.ChartData.days(series),total=days.reduce((n,d)=>n+d.visitors,0),avg=days.length?total/days.length:0;
+  box._series=series;box._anon=anon;
+  const days=window.ChartData.days(series),hasAnon=days.some(d=>d.anon),total=days.reduce((n,d)=>n+d.shown,0),avg=days.length?total/days.length:0;
   const hint=$("analyticsChartHint"),table=$("analyticsVisitsTable");
-  box.setAttribute("aria-label",`Gráfico de colunas das visitas por dia: média de ${fmtInt(Math.round(avg))} visitantes por dia em ${days.length} ${plural(days.length,"dia","dias")}.`);
+  box.setAttribute("aria-label",`Gráfico de colunas das visitas por dia: média de ${fmtInt(Math.round(avg))} por dia em ${days.length} ${plural(days.length,"dia","dias")}.`);
   if(!total){box._geo=null;box._items=null;setHTML(box,'<p class="rank-empty">Sem visitas registradas no período.</p>');if(hint)hint.textContent="Nenhuma visita registrada no período.";if(table)setHTML(table,'<p class="field-help">Sem visitas registradas no período.</p>');return}
   const W=Math.round(box.clientWidth),plotW=W-(W<520?36:46)-10,weekly=W>0&&plotW/days.length<7;
-  const bins=weekly?window.ChartData.weeks(days):days.map(d=>({...d,first:d,last:d,daily:d.visitors,week:false}));
-  const items=bins.map(b=>({value:b.daily,label:shortDate(chartDay(b.first)),tip:b.week
-    ?[`${shortDate(chartDay(b.first))} – ${shortDate(chartDay(b.last))}`,`média de ${fmtInt(Math.round(b.daily))} por dia`,`${fmtInt(b.visitors)} visitas na semana · ${fmtInt(b.pageViews)} ${plural(b.pageViews,"página vista","páginas vistas")}`,b.purchases?`${fmtInt(b.purchases)} ${plural(b.purchases,"pedido pago","pedidos pagos")} · ${money(b.revenue)}`:"nenhum pedido pago"]
-    :[chartDayLabel(b),`${fmtInt(b.visitors)} ${plural(b.visitors,"visitante","visitantes")}`,`${fmtInt(b.pageViews)} ${plural(b.pageViews,"página vista","páginas vistas")}`,b.purchases?`${fmtInt(b.purchases)} ${plural(b.purchases,"pedido pago","pedidos pagos")} · ${money(b.revenue)}`:"nenhum pedido pago"]}));
-  if(hint)hint.textContent=`Visitantes únicos em cada dia · média de ${fmtInt(Math.round(avg))} por dia. ${chartHow()} para ver o dia, com os pedidos e o faturamento.${weekly?" Aqui cada coluna é uma semana (média de visitantes por dia).":""}`;
+  const bins=weekly?window.ChartData.weeks(days):days.map(d=>({...d,first:d,last:d,daily:d.shown,week:false}));
+  const orders=b=>b.purchases?`${fmtInt(b.purchases)} ${plural(b.purchases,"pedido pago","pedidos pagos")} · ${money(b.revenue)}`:"nenhum pedido pago";
+  // Preto: todas as visitas (contagem anônima). Cinza: dias antes dela, só quem aceitou as estatísticas.
+  const items=bins.map(b=>{
+    const date=b.week?`${shortDate(chartDay(b.first))} – ${shortDate(chartDay(b.last))}`:chartDayLabel(b);
+    const tip=b.anon
+      ?[date,b.week?`média de ${fmtInt(Math.round(b.daily))} visitas por dia`:`${fmtInt(b.visits)} ${plural(b.visits,"visita","visitas")}`,`${fmtInt(b.anonPageViews)} ${plural(b.anonPageViews,"página vista","páginas vistas")} · ${fmtInt(b.visitors)} ${plural(b.visitors,"aceitou","aceitaram")} as estatísticas`,orders(b)]
+      :[date,b.week?`média de ${fmtInt(Math.round(b.daily))} por dia`:`${fmtInt(b.visitors)} ${plural(b.visitors,"visitante","visitantes")}`,hasAnon?"só quem aceitou as estatísticas (antes da contagem de todas as visitas)":`${fmtInt(b.pageViews)} ${plural(b.pageViews,"página vista","páginas vistas")}`,orders(b)];
+    return {value:b.daily,label:shortDate(chartDay(b.first)),muted:hasAnon&&!b.anon,tip};
+  });
+  const since=anon&&anon.since?shortDate(chartDay({date:anon.since})):"";
+  if(hint)hint.textContent=(hasAnon
+    ?`Todas as visitas de cada dia, contadas de forma anônima (sem cookies) · média de ${fmtInt(Math.round(avg))} por dia.${days.some(d=>!d.anon)?` Em cinza, os dias antes de ${since}: só quem aceitou as estatísticas.`:""}`
+    :`Visitantes únicos em cada dia (só quem aceitou as estatísticas) · média de ${fmtInt(Math.round(avg))} por dia.`)+` ${chartHow()} para ver o dia, com os pedidos e o faturamento.${weekly?" Aqui cada coluna é uma semana (média por dia).":""}`;
   drawColumns(box,items);
   // Tabela: o mesmo conteúdo, sem precisar passar o mouse (do dia mais recente ao mais antigo).
-  if(table)setHTML(table,`<table class="table"><thead><tr><th>DIA</th><th>VISITANTES</th><th>PÁGINAS VISTAS</th><th>PEDIDOS PAGOS</th><th>CONVERSÃO</th><th>FATURAMENTO</th></tr></thead><tbody>${days.slice().reverse().map(d=>`<tr><td>${esc(chartDayLabel(d))}</td><td>${fmtInt(d.visitors)}</td><td>${fmtInt(d.pageViews)}</td><td>${fmtInt(d.purchases)}</td><td>${pct(d.conversion)}</td><td>${money(d.revenue)}</td></tr>`).join("")}</tbody></table>`);
+  if(table)setHTML(table,`<table class="table"><thead><tr><th>DIA</th>${hasAnon?"<th>VISITAS</th>":""}<th>${hasAnon?"ACEITARAM AS ESTATÍSTICAS":"VISITANTES"}</th><th>PÁGINAS VISTAS</th><th>PEDIDOS PAGOS</th><th>CONVERSÃO</th><th>FATURAMENTO</th></tr></thead><tbody>${days.slice().reverse().map(d=>`<tr><td>${esc(chartDayLabel(d))}</td>${hasAnon?`<td>${d.anon?fmtInt(d.visits):"—"}</td>`:""}<td>${fmtInt(d.visitors)}</td><td>${fmtInt(d.anon?d.anonPageViews:d.pageViews)}</td><td>${fmtInt(d.purchases)}</td><td>${pct(d.conversion)}</td><td>${money(d.revenue)}</td></tr>`).join("")}</tbody></table>`);
 }
 
 /* ---------- Analytics: visitas por dia da semana ----------
@@ -93,25 +103,33 @@ const WEEKDAY_NAMES={0:["Dom","domingo"],1:["Seg","segunda-feira"],2:["Ter","ter
 function renderWeekdayChart(series){
   const box=$("analyticsWeekChart");if(!box)return;
   box._series=series;
-  const days=window.ChartData.days(series),w=window.ChartData.weekdays(days),hint=$("analyticsWeekHint"),table=$("analyticsWeekTable");
+  // Com a contagem anônima, só os dias que ela já cobre (todas as visitas); antes dela, quem aceitou.
+  const all=window.ChartData.days(series),hasAnon=all.some(d=>d.anon),days=hasAnon?all.filter(d=>d.anon):all;
+  const w=window.ChartData.weekdays(days),hint=$("analyticsWeekHint"),table=$("analyticsWeekTable");
   let best=-1;w.forEach((x,i)=>{if(x.n&&x.avg>0&&(best<0||x.avg>w[best].avg))best=i});
   if(best<0){box._geo=null;box._items=null;setHTML(box,'<p class="rank-empty">Sem visitas registradas no período.</p>');if(hint)hint.textContent="Nenhuma visita registrada no período.";if(table)setHTML(table,"");return}
   const name=x=>WEEKDAY_NAMES[x.weekday][1];
   box.setAttribute("aria-label",`Gráfico de colunas da média de visitantes por dia da semana. Mais movimento: ${name(w[best])}, média de ${fmtInt(Math.round(w[best].avg))}.`);
-  if(hint)hint.textContent=(days.length<7?"Escolha 30 dias ou mais para comparar melhor os dias da semana. ":"")+`Média de visitantes em cada dia da semana. Mais movimento: ${name(w[best])} (média de ${fmtInt(Math.round(w[best].avg))} por dia), um bom dia para postar novidades e mandar SMS.`;
+  if(hint)hint.textContent=(days.length<14?(hasAnon?`A contagem de todas as visitas começou há ${days.length} ${plural(days.length,"dia","dias")}: a comparação fica melhor com 2 semanas ou mais. `:"Escolha 30 dias ou mais para comparar melhor os dias da semana. "):"")+`Média de ${hasAnon?"visitas":"visitantes"} em cada dia da semana. Mais movimento: ${name(w[best])} (média de ${fmtInt(Math.round(w[best].avg))} por dia), um bom dia para postar novidades e mandar SMS.`;
   drawColumns(box,w.map((x,i)=>({value:x.avg,label:WEEKDAY_NAMES[x.weekday][0],muted:i!==best,tip:x.n
-    ?[name(x),`média de ${fmtInt(Math.round(x.avg))} ${plural(Math.round(x.avg),"visitante","visitantes")}`,`${x.n} ${plural(x.n,"dia","dias")} no período · ${fmtInt(x.visitors)} no total`,`conversão de ${pct(x.conversion)}`]
+    ?[name(x),`média de ${fmtInt(Math.round(x.avg))} ${hasAnon?plural(Math.round(x.avg),"visita","visitas"):plural(Math.round(x.avg),"visitante","visitantes")}`,`${x.n} ${plural(x.n,"dia","dias")} no período · ${fmtInt(x.visitors)} no total`,`conversão de ${pct(x.conversion)}`]
     :[name(x),"sem dias no período","",""]})),{allLabels:true});
-  if(table)setHTML(table,`<table class="table"><thead><tr><th>DIA DA SEMANA</th><th>DIAS NO PERÍODO</th><th>MÉDIA DE VISITANTES</th><th>CONVERSÃO</th></tr></thead><tbody>${w.map(x=>`<tr><td>${esc(name(x))}</td><td>${fmtInt(x.n)}</td><td>${fmtInt(Math.round(x.avg))}</td><td>${pct(x.conversion)}</td></tr>`).join("")}</tbody></table>`);
+  if(table)setHTML(table,`<table class="table"><thead><tr><th>DIA DA SEMANA</th><th>DIAS NO PERÍODO</th><th>${hasAnon?"MÉDIA DE VISITAS":"MÉDIA DE VISITANTES"}</th><th>CONVERSÃO</th></tr></thead><tbody>${w.map(x=>`<tr><td>${esc(name(x))}</td><td>${fmtInt(x.n)}</td><td>${fmtInt(Math.round(x.avg))}</td><td>${pct(x.conversion)}</td></tr>`).join("")}</tbody></table>`);
 }
 
 /* ---------- Analytics: funil de compra ----------
    Barras do tamanho de cada etapa (a primeira é 100%), com o número e quanto passou da etapa anterior. */
-function renderFunnel(d){
+function renderFunnel(d,anon){
   const box=$("analyticsFunnel");if(!box)return;
-  const steps=window.ChartData.funnel([{label:"Visitaram o site",value:d.visitors},{label:"Puseram no carrinho",value:d.addToCart},{label:"Começaram o checkout",value:d.checkoutStarted},{label:"Pagaram",value:d.paidOrders}]);
+  // Com a contagem anônima: todas as visitas, quem pôs peça na sacola e quem começou o pagamento
+  // (no máximo uma vez por visita) e os pedidos pagos nos mesmos dias. Sem ela: só quem aceitou.
+  const since=anon&&anon.from&&anon.from>(anon.periodFrom||"")?` desde ${shortDate(chartDay({date:anon.from}))}`:"";
+  const steps=window.ChartData.funnel(anon
+    ?[{label:"Visitaram o site",value:anon.visits},{label:"Puseram peça na sacola",value:anon.cart},{label:"Começaram o pagamento",value:anon.checkout},{label:"Pagaram",value:anon.paidOrders}]
+    :[{label:"Visitaram o site",value:d.visitors},{label:"Puseram no carrinho",value:d.addToCart},{label:"Começaram o checkout",value:d.checkoutStarted},{label:"Pagaram",value:d.paidOrders}]);
   if(!steps[0].value){setHTML(box,'<p class="rank-empty">Sem visitas registradas no período.</p>');return}
-  setHTML(box,steps.map((s,i)=>`<div class="rank-row funnel-step"><div class="rank-body"><div class="rank-top"><span class="rank-name">${esc(s.label)}</span><strong class="rank-value">${fmtInt(s.value)}</strong></div><div class="rank-track"><i data-w="${s.value?Math.max(0.6,s.ofFirst).toFixed(2):0}"></i></div><small class="rank-sub">${i===0?"visitantes únicos no período":i===1?`${esc(pct(s.ofFirst))} das visitas`:`${esc(pct(s.ofPrev))} da etapa anterior · ${esc(pct(s.ofFirst))} das visitas`}</small></div></div>`).join(""));
+  const first=anon?`todas as visitas${since}, sem cookies`:"visitantes únicos que aceitaram as estatísticas";
+  setHTML(box,steps.map((s,i)=>`<div class="rank-row funnel-step"><div class="rank-body"><div class="rank-top"><span class="rank-name">${esc(s.label)}</span><strong class="rank-value">${fmtInt(s.value)}</strong></div><div class="rank-track"><i data-w="${s.value?Math.max(0.6,s.ofFirst).toFixed(2):0}"></i></div><small class="rank-sub">${i===0?esc(first):i===1?`${esc(pct(s.ofFirst))} das visitas`:`${esc(pct(s.ofPrev))} da etapa anterior · ${esc(pct(s.ofFirst))} das visitas`}</small></div></div>`).join(""));
   chartWidths(box);
 }
 
@@ -134,17 +152,38 @@ function sparkHtml(values){
   const d=values.map((v,i)=>(i?"L":"M")+(i*W/(values.length-1)).toFixed(2)+" "+y(v).toFixed(2)).join(" ");
   return `<div class="spark" aria-hidden="true"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><path d="${d}" vector-effect="non-scaling-stroke"/></svg><i data-top="${(y(values[values.length-1])/H*100).toFixed(2)}"></i></div>`;
 }
-function renderAnalyticsKpis(d,series){
+function renderAnalyticsKpis(d,series,anon){
   const box=$("analyticsKpis");if(!box)return;
   const days=window.ChartData.days(series),col=k=>days.map(x=>x[k]);
-  const perVisitor=d.visitors?(Number(d.pageViews||0)/d.visitors).toLocaleString("pt-BR",{maximumFractionDigits:1}):"0";
   const tile=(label,value,sub,values)=>`<div class="kpi kpi-spark"><span class="kpi-label">${esc(label)}</span><strong class="kpi-value">${esc(value)}</strong><small class="kpi-sub">${esc(sub)}</small>${sparkHtml(values)}</div>`;
-  setHTML(box,
-    tile("Visitantes únicos",fmtInt(d.visitors),`${fmtInt(d.pageViews)} páginas vistas · ${perVisitor} por visitante`,col("visitors"))+
-    tile("Pedidos pagos",fmtInt(d.paidOrders),Number(d.orders)>=Number(d.paidOrders)&&Number(d.orders)>0?`de ${fmtInt(d.orders)} ${plural(Number(d.orders),"pedido criado","pedidos criados")} no site`:"no período",col("purchases"))+
-    tile("Faturamento bruto",money(d.grossRevenue),`ticket médio ${money(d.ticketAverage)}`,col("revenue"))+
-    tile("Conversão",pct(d.conversionRate),"das visitas viraram pedido pago",col("conversion")));
+  const orders=Number(d.orders)>=Number(d.paidOrders)&&Number(d.orders)>0?`de ${fmtInt(d.orders)} ${plural(Number(d.orders),"pedido criado","pedidos criados")} no site`:"no período";
+  let first,last;
+  if(anon){
+    // Visitas e conversão com a contagem anônima (todas as visitas); desde quando, se começou no meio do período.
+    const since=anon.from&&anon.from>(anon.periodFrom||"")?` desde ${shortDate(chartDay({date:anon.from}))}`:"";
+    first=tile("Visitas",fmtInt(anon.visits),`todas as visitas${since}, sem cookies · ${fmtInt(anon.pageViews)} páginas vistas`,col("shown"));
+    last=tile("Conversão",pct(anon.visits?anon.paidOrders/anon.visits*100:0),`das visitas viraram pedido pago${since}`,col("conversion"));
+  }else{
+    const perVisitor=d.visitors?(Number(d.pageViews||0)/d.visitors).toLocaleString("pt-BR",{maximumFractionDigits:1}):"0";
+    first=tile("Visitantes únicos",fmtInt(d.visitors),`${fmtInt(d.pageViews)} páginas vistas · ${perVisitor} por visitante`,col("visitors"));
+    last=tile("Conversão",pct(d.conversionRate),"das visitas viraram pedido pago",col("conversion"));
+  }
+  setHTML(box,first+tile("Pedidos pagos",fmtInt(d.paidOrders),orders,col("purchases"))+tile("Faturamento bruto",money(d.grossRevenue),`ticket médio ${money(d.ticketAverage)}`,col("revenue"))+last);
   box.querySelectorAll(".spark i[data-top]").forEach(el=>{el.style.top=el.dataset.top+"%"});
+}
+
+/* ---------- Analytics: de onde vêm as visitas (contagem anônima) ----------
+   Barras por origem (maior primeiro) e a divisão celular × computador. */
+const SOURCE_LABELS={instagram:"Instagram",facebook:"Facebook",google:"Google",whatsapp:"WhatsApp",sms:"SMS",tiktok:"TikTok",email:"E-mail",youtube:"YouTube",pinterest:"Pinterest",x:"X (Twitter)",buscador:"Outros buscadores",outros:"Outros sites",campanha:"Outras campanhas",direto:"Direto"};
+function renderSources(anon){
+  const box=$("analyticsSources"),panel=$("analyticsSourcesPanel");if(!box||!panel)return;
+  panel.hidden=!anon;if(!anon)return;
+  const list=(anon.sources||[]).filter(x=>x.visits>0),total=list.reduce((n,x)=>n+x.visits,0);
+  if(!total){setHTML(box,'<p class="rank-empty">Nenhuma visita contada no período ainda.</p>');return}
+  const max=list[0].visits,dev=anon.devices||{},devTotal=(dev.mobile||0)+(dev.desktop||0),mobile=devTotal?dev.mobile/devTotal*100:0;
+  setHTML(box,`<div class="rank-list">${list.slice(0,7).map(x=>`<div class="rank-row"><div class="rank-body"><div class="rank-top"><span class="rank-name">${esc(SOURCE_LABELS[x.source]||"Outros")}</span><strong class="rank-value">${fmtInt(x.visits)}</strong></div><div class="rank-track"><i data-w="${(x.visits/max*100).toFixed(1)}"></i></div><small class="rank-sub">${esc(pct(x.visits/total*100))} das visitas</small></div></div>`).join("")}</div>`+
+    (devTotal?`<div class="device-split"><div class="meter" role="img" aria-label="${esc(`${pct(mobile)} das visitas pelo celular`)}"><i data-w="${mobile.toFixed(2)}"></i></div><ul class="meter-legend"><li><i class="meter-key is-fill" aria-hidden="true"></i><span><strong>${esc(pct(mobile))}</strong> pelo celular</span></li><li><i class="meter-key" aria-hidden="true"></i><span><strong>${esc(pct(100-mobile))}</strong> pelo computador</span></li></ul></div>`:""));
+  chartWidths(box);
 }
 
 /* ---------- Visão geral: ritmo das vendas ----------
@@ -222,7 +261,7 @@ function showPaceTip(box,i){
 
 (function(){
   const visits=$("analyticsChart"),week=$("analyticsWeekChart"),pace=$("dashPaceChart");
-  bindChart(visits,{show:i=>showColumnTip(visits,i),count:()=>(visits._items||[]).length,rerender:()=>{if(visits._series)renderVisitsChart(visits._series)}});
+  bindChart(visits,{show:i=>showColumnTip(visits,i),count:()=>(visits._items||[]).length,rerender:()=>{if(visits._series)renderVisitsChart(visits._series,visits._anon)}});
   bindChart(week,{show:i=>showColumnTip(week,i),count:()=>(week._items||[]).length,start:()=>Math.max(0,(week._items||[]).findIndex(it=>!it.muted)),rerender:()=>{if(week._series)renderWeekdayChart(week._series)}});
   bindChart(pace,{show:i=>showPaceTip(pace,i),count:()=>pace._pace?pace._pace.N:0,start:()=>pace._pace?pace._pace.n-1:0,rerender:()=>{if(pace._args)renderPaceChart(...pace._args)},
     indexAt:e=>{const g=pace._geo,p=pace._pace;if(!g||!p)return -1;const xx=e.clientX-pace.getBoundingClientRect().left;return p.N===1?0:Math.max(0,Math.min(p.N-1,Math.round((xx-g.padL)/(g.plotW/(p.N-1)))))}});

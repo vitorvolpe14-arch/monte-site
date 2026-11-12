@@ -8135,6 +8135,11 @@ html.catalog-pending .footer {
 .cookie-consent-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 .cookie-button { flex: none; min-width: 90px; padding: 8px 14px; border: 1px solid var(--black); border-radius: 999px; background: #fff; color: var(--black); font: inherit; font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
 .cookie-button[hidden] { display: none; }
+/* Contagem anônima de visitas: explicação e a opção de não ser contada (não é um consentimento). */
+.cookie-anon { margin: 4px 0 0; padding-top: 10px; border-top: 1px solid #ececec; font-size: 12px; line-height: 1.5; color: #555; }
+.cookie-anon strong { color: var(--black); font-weight: 600; }
+.cookie-anon-toggle { padding: 0; border: 0; background: none; color: var(--black); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.cookie-anon-toggle[hidden] { display: none; }
 .cookie-button-dark { background: var(--black); color: #fff; }
 .cookie-button-text { min-width: 0; margin-right: auto; padding: 8px 0; border-color: transparent; background: none; color: #666; letter-spacing: .06em; text-decoration: underline; text-underline-offset: 3px; }
 .newsletter-privacy { margin-top: 10px; font-size: 12px; opacity: .8; }
