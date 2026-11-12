@@ -8,100 +8,23 @@ let coupons=[],couponsLoaded=false;
 let promotions=[],promotionsLoaded=false,storeBenefitsData=null;
 async function loadAnalytics(){try{$("analyticsError").textContent="";analyticsData=await api("/api/admin/analytics?days="+Number($("analyticsDays").value||30));renderAnalytics()}catch(e){$("analyticsError").textContent=e.message}}
 function renderAnalytics(){
- const d=analyticsData.summary||{}, k=[["Visitantes únicos",fmtInt(d.visitors)],["Visualizações",fmtInt(d.pageViews)],["Pedidos pagos",fmtInt(d.paidOrders)],["Faturamento bruto",money(d.grossRevenue)],["Ticket médio",money(d.ticketAverage)],["Conversão",pct(d.conversionRate)],["Carrinhos ativos",fmtInt(d.activeCarts)],["Valor em abandono",money(d.abandonedValue)]];
- setHTML($("analyticsKpis"), k.map(x=>'<div class="analytics-kpi"><span>'+x[0]+'</span><strong>'+x[1]+'</strong></div>').join(""));
- renderVisitsRevenueChart(analyticsData.series||[]);
-
- const f=[["Visitas",d.visitors],["Add ao carrinho",d.addToCart],["Checkout",d.checkoutStarted],["Pagos",d.paidOrders]]; setHTML($("analyticsFunnel"), f.map((x,i)=>'<div class="funnel-row"><span>'+x[0]+'</span><strong>'+fmtInt(x[1])+'</strong>'+(i?'<em>'+pct(Number(f[i-1][1])?x[1]/f[i-1][1]*100:0)+'</em>':'')+'</div>').join(""));
- setHTML($("analyticsCarts"), '<div class="mini-stats"><div><span>Abandono estimado</span><strong>'+pct(d.abandonmentRate)+'</strong></div><div><span>Carrinhos convertidos</span><strong>'+fmtInt(d.convertedCarts)+'</strong></div></div><p class="analytics-note">'+fmtInt(d.activeCarts)+' carrinhos ativos representam '+money(d.abandonedValue)+'.</p>');
- const pays=Object.entries(analyticsData.paymentMethods||{});setHTML($("analyticsPayments"), pays.length?'<table class="table"><thead><tr><th>MEIO</th><th>RECEITA</th></tr></thead><tbody>'+pays.map(x=>'<tr><td>'+esc(x[0])+'</td><td>'+money(x[1])+'</td></tr>').join("")+'</tbody></table>':'<p>Nenhum pagamento.</p>');
- const tops=analyticsData.topProducts||[];setHTML($("analyticsTopProducts"), tops.length?'<table class="table"><thead><tr><th>PRODUTO</th><th>UNID.</th><th>RECEITA</th></tr></thead><tbody>'+tops.map(x=>'<tr><td>'+esc(x.key)+'</td><td>'+fmtInt(x.units)+'</td><td>'+money(x.revenue)+'</td></tr>').join("")+'</tbody></table>':'<p>Nenhuma venda.</p>');
+ const d=analyticsData.summary||{},series=analyticsData.series||[];
+ // Os 4 números com a tendência do período; o resto virou gráfico (admin-charts.js).
+ renderAnalyticsKpis(d,series);
+ renderVisitsChart(series);
+ renderFunnel(d);
+ renderWeekdayChart(series);
+ renderCartMeter(d);
+ const tops=analyticsData.topProducts||[],topTotal=tops.reduce((n,x)=>n+Number(x.revenue||0),0);
+ renderRankList($("analyticsTopProducts"),tops.map(x=>{const p=products.find(y=>y.name===x.key);return {name:x.key,revenue:Number(x.revenue||0),count:Number(x.units||0),img:p&&Array.isArray(p.images)&&p.images[0]?smallPhoto(p.images[0]):""}}),"revenue",{limit:6,sub:r=>`${fmtInt(r.count)} ${plural(r.count,"peça","peças")} · ${topTotal?Math.round(r.revenue/topTotal*100):0}% do faturamento`,empty:"Nenhuma venda no período."});
+ const pays=new Map();Object.entries(analyticsData.paymentMethods||{}).forEach(([k,v])=>{const name=paymentLabel(k);pays.set(name,(pays.get(name)||0)+Number(v||0))});
+ const payTotal=[...pays.values()].reduce((n,v)=>n+v,0);
+ renderRankList($("analyticsPayments"),[...pays].map(([name,revenue])=>({name,revenue,count:0})),"revenue",{sub:r=>`${payTotal?Math.round(r.revenue/payTotal*100):0}% do faturamento`,empty:"Nenhum pagamento no período."});
  setHTML($("analyticsOrders"), orderTable(analyticsData.recentOrders||[]));
  const cs=analyticsData.recentCarts||[];setHTML($("analyticsRecentCarts"), cs.length?'<table class="table"><thead><tr><th>ATIVIDADE</th><th>CLIENTE</th><th>ITENS</th><th>TOTAL</th><th>STATUS</th></tr></thead><tbody>'+cs.map(x=>'<tr><td>'+date(x.last_activity_at)+'</td><td>'+esc(x.customer_name||x.customer_email||"Visitante")+'</td><td>'+fmtInt(Array.isArray(x.items)?x.items.reduce((n,i)=>n+Number(i.quantity||1),0):0)+'</td><td>'+money(x.total)+'</td><td>'+esc(x.status)+'</td></tr>').join("")+'</tbody></table>':'<p>Nenhum carrinho.</p>');
 }
 function fmtInt(v){return new Intl.NumberFormat("pt-BR").format(Number(v||0))}
 function pct(v){return Number(v||0).toLocaleString("pt-BR",{maximumFractionDigits:1})+"%"}
-/* Visitas por dia (Analytics): uma coluna fina por dia do período, no mesmo estilo do
-   "Faturamento por dia" da Visão geral. Um eixo só (visitantes): os pedidos e o faturamento
-   do dia aparecem na dica e na tabela, sem um segundo eixo misturando duas escalas. */
-function visitDay(d){return new Date(d.date+"T12:00:00")}
-function visitDayLabel(d){return visitDay(d).toLocaleDateString("pt-BR",{weekday:"short",day:"2-digit",month:"2-digit"})}
-function axisInt(v){return v>=10000?(v/1000).toLocaleString("pt-BR",{maximumFractionDigits:1})+" mil":fmtInt(v)}
-function renderVisitsRevenueChart(series){
-  const box=$("analyticsChart");if(!box)return;
-  box._series=series;
-  const days=(Array.isArray(series)?series:[]).filter(x=>/^\d{4}-\d{2}-\d{2}/.test(String(x.date||""))).map(x=>({date:String(x.date).slice(0,10),visitors:Number(x.visitors||0),pageViews:Number(x.pageViews||0),purchases:Number(x.purchases||0),revenue:Number(x.revenue||0)}));
-  const total=days.reduce((n,d)=>n+d.visitors,0),avg=days.length?total/days.length:0,touch=window.matchMedia&&window.matchMedia("(hover: none)").matches;
-  const hint=$("analyticsChartHint");
-  if(hint)hint.textContent=total?`Visitantes únicos em cada dia · média de ${fmtInt(Math.round(avg))} por dia. ${touch?"Toque em uma coluna":"Passe o mouse ou use as setas do teclado"} para ver o dia, com os pedidos e o faturamento.`:"Nenhuma visita registrada no período.";
-  box.setAttribute("aria-label",`Gráfico de colunas das visitas por dia: média de ${fmtInt(Math.round(avg))} visitantes por dia em ${days.length} ${plural(days.length,"dia","dias")}.`);
-  const table=$("analyticsVisitsTable");
-  if(!total){box._geo=null;box._vbins=null;setHTML(box,'<p class="rank-empty">Sem visitas registradas no período.</p>');if(table)setHTML(table,'<p class="field-help">Sem visitas registradas no período.</p>');return}
-  const W=Math.round(box.clientWidth);
-  if(!W){box._pending=true;return}
-  box._pending=false;box._width=W;
-  const H=W<520?220:260,padL=W<520?36:46,padR=10,padT=26,padB=28,plotW=W-padL-padR,plotH=H-padT-padB,base=padT+plotH;
-  // Período longo em tela estreita: cada coluna vira uma semana, com a média por dia
-  // (a escala continua a mesma, e a semana incompleta não parece menor).
-  const bins=plotW/days.length<7?visitWeeks(days):days.map(d=>({...d,first:d,last:d,daily:d.visitors,week:false}));
-  box._vbins=bins;
-  if(hint&&bins[0]&&bins[0].week)hint.textContent+=" Aqui cada coluna é uma semana (média de visitantes por dia).";
-  const max=Math.max(...bins.map(b=>b.daily)),step=Math.max(1,Math.ceil(niceStep(max||10,4))),top=Math.max(step,Math.ceil((max||1)/step)*step);
-  const y=v=>base-(v/top)*plotH,slot=plotW/bins.length,barW=Math.max(2,Math.min(24,slot*0.62));
-  let grid="";for(let v=0;v<=top+0.001;v+=step){const gy=y(v).toFixed(1);grid+=`<line x1="${padL}" x2="${W-padR}" y1="${gy}" y2="${gy}" class="dc-grid${v===0?" dc-base":""}"/><text x="${padL-8}" y="${(+gy+4).toFixed(1)}" text-anchor="end" class="dc-tick">${axisInt(v)}</text>`}
-  const labelEvery=Math.max(1,Math.ceil(bins.length/(W<520?4:8)));
-  let bars="",labels="",maxIdx=-1;
-  bins.forEach((d,i)=>{
-    const cx=padL+slot*i+slot/2,x=cx-barW/2;
-    if(d.daily>0){const yy=y(d.daily),h=base-yy,rr=Math.min(4,barW/2,h);bars+=`<path class="dc-bar" data-i="${i}" d="M${x.toFixed(1)} ${base} V${(yy+rr).toFixed(1)} Q${x.toFixed(1)} ${yy.toFixed(1)} ${(x+rr).toFixed(1)} ${yy.toFixed(1)} H${(x+barW-rr).toFixed(1)} Q${(x+barW).toFixed(1)} ${yy.toFixed(1)} ${(x+barW).toFixed(1)} ${(yy+rr).toFixed(1)} V${base} Z"/>`;if(maxIdx<0||d.daily>bins[maxIdx].daily)maxIdx=i}
-    if((bins.length-1-i)%labelEvery===0)labels+=`<text x="${cx.toFixed(1)}" y="${H-8}" text-anchor="middle" class="dc-tick">${esc(shortDate(visitDay(d.first)))}</text>`;
-  });
-  let peak="";
-  if(maxIdx>=0){const cx=padL+slot*maxIdx+slot/2,tx=Math.min(W-padR-4,Math.max(padL+4,cx)),anchor=tx===cx?"middle":(tx<cx?"end":"start");peak=`<text x="${tx.toFixed(1)}" y="${(y(bins[maxIdx].daily)-8).toFixed(1)}" text-anchor="${anchor}" class="dc-peak">${esc(fmtInt(Math.round(bins[maxIdx].daily)))}</text>`}
-  setHTML(box,`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true"><g>${grid}</g><line class="dc-cross" x1="0" x2="0" y1="${padT}" y2="${base}" visibility="hidden"/><g>${bars}</g>${peak}<g>${labels}</g></svg><div class="dc-tip" hidden><span class="dc-tip-date"></span><strong class="dc-tip-value"></strong><span class="dc-tip-count"></span><span class="dc-tip-split"></span></div>`);
-  box._geo={padL,slot,padT,base,W};
-  // Tabela: o mesmo conteúdo do gráfico, sem precisar passar o mouse (do dia mais recente ao mais antigo).
-  if(table)setHTML(table,`<table class="table"><thead><tr><th>DIA</th><th>VISITANTES</th><th>PÁGINAS VISTAS</th><th>PEDIDOS PAGOS</th><th>FATURAMENTO</th></tr></thead><tbody>${days.slice().reverse().map(d=>`<tr><td>${esc(visitDayLabel(d))}</td><td>${fmtInt(d.visitors)}</td><td>${fmtInt(d.pageViews)}</td><td>${fmtInt(d.purchases)}</td><td>${money(d.revenue)}</td></tr>`).join("")}</tbody></table>`);
-  if(box._active!=null)showVisitTip(box,Math.min(box._active,bins.length-1));
-}
-// Semanas de 7 dias contadas a partir do dia mais recente (a primeira pode ficar incompleta).
-function visitWeeks(days){
-  const weeks=[];
-  for(let end=days.length;end>0;end-=7){
-    const g=days.slice(Math.max(0,end-7),end),sum=k=>g.reduce((n,d)=>n+d[k],0);
-    weeks.unshift({first:g[0],last:g[g.length-1],n:g.length,visitors:sum("visitors"),pageViews:sum("pageViews"),purchases:sum("purchases"),revenue:sum("revenue"),daily:sum("visitors")/g.length,week:true});
-  }
-  return weeks;
-}
-function showVisitTip(box,i){
-  const bins=box._vbins,g=box._geo;if(!bins||!g||i<0||i>=bins.length)return;
-  box._active=i;const d=bins[i],tip=box.querySelector(".dc-tip"),cross=box.querySelector(".dc-cross");
-  box.querySelectorAll(".dc-bar").forEach(el=>el.classList.toggle("is-active",Number(el.dataset.i)===i));
-  const cx=g.padL+g.slot*i+g.slot/2;
-  if(cross){cross.setAttribute("x1",cx);cross.setAttribute("x2",cx);cross.setAttribute("visibility","visible")}
-  tip.querySelector(".dc-tip-date").textContent=d.week?`${shortDate(visitDay(d.first))} – ${shortDate(visitDay(d.last))}`:visitDayLabel(d);
-  tip.querySelector(".dc-tip-value").textContent=d.week?`média de ${fmtInt(Math.round(d.daily))} por dia`:`${fmtInt(d.visitors)} ${plural(d.visitors,"visitante","visitantes")}`;
-  tip.querySelector(".dc-tip-count").textContent=`${d.week?fmtInt(d.visitors)+" visitas na semana · ":""}${fmtInt(d.pageViews)} ${plural(d.pageViews,"página vista","páginas vistas")}`;
-  tip.querySelector(".dc-tip-split").textContent=d.purchases?`${fmtInt(d.purchases)} ${plural(d.purchases,"pedido pago","pedidos pagos")} · ${money(d.revenue)}`:"nenhum pedido pago";
-  tip.hidden=false;
-  const w=tip.offsetWidth,left=cx+14+w<=g.W?cx+14:Math.max(0,cx-14-w);
-  tip.style.left=left+"px";tip.style.top=Math.max(0,g.padT-6)+"px";
-}
-(function(){
-  const box=$("analyticsChart");if(!box)return;
-  const indexAt=e=>{const g=box._geo,bins=box._vbins;if(!g||!bins)return -1;const x=e.clientX-box.getBoundingClientRect().left;return Math.max(0,Math.min(bins.length-1,Math.floor((x-g.padL)/g.slot)))};
-  box.addEventListener("pointermove",e=>{const i=indexAt(e);if(i>=0)showVisitTip(box,i)});
-  box.addEventListener("pointerdown",e=>{const i=indexAt(e);if(i>=0)showVisitTip(box,i)});
-  // No toque a dica fica até tocar fora do gráfico; com o mouse some ao sair.
-  box.addEventListener("pointerleave",e=>{if(e.pointerType!=="touch"&&document.activeElement!==box)hideChartTip(box)});
-  document.addEventListener("pointerdown",e=>{if(box._active!=null&&!box.contains(e.target))hideChartTip(box)});
-  box.addEventListener("focus",()=>{const bins=box._vbins||[];if(box._geo&&bins.length)showVisitTip(box,bins.length-1)});
-  box.addEventListener("blur",()=>hideChartTip(box));
-  box.addEventListener("keydown",e=>{const bins=box._vbins||[];if(!bins.length||!box._geo)return;let i=box._active??bins.length-1;if(e.key==="ArrowLeft")i--;else if(e.key==="ArrowRight")i++;else if(e.key==="Home")i=0;else if(e.key==="End")i=bins.length-1;else if(e.key==="Escape"){hideChartTip(box);return}else return;e.preventDefault();showVisitTip(box,Math.max(0,Math.min(bins.length-1,i)))});
-  // Acompanha a largura da tela (e aparece certo quando a aba Analytics é aberta).
-  if(window.ResizeObserver){let frame=0;new ResizeObserver(()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{const w=Math.round(box.clientWidth);if(w&&(box._pending||w!==box._width)&&box._series)renderVisitsRevenueChart(box._series)})}).observe(box)}
-})();
-
 document.addEventListener("DOMContentLoaded",init);
 async function init(){
   const loginForm=$("loginForm"); if(loginForm) loginForm.addEventListener("submit",login);
@@ -855,6 +778,12 @@ function soldPieces(list){return list.reduce((n,s)=>n+s.items.reduce((m,i)=>m+i.
 // A cor: classe "up" é verde e "down" é vermelho. neutral: sem verde nem vermelho (juros).
 // inverse: menor é melhor (porcentagem das taxas): caiu fica verde e subiu fica vermelho; a seta continua mostrando se subiu ou caiu.
 function trendTone(dir,{neutral=false,inverse=false}={}){return dir==="flat"?"flat":neutral?"neutral":inverse?(dir==="up"?"down":"up"):dir}
+// Só a seta e o número (linhas de dentro do cartão de vendas); sem o "vs ..." ao lado.
+function deltaShort(cur,prev){
+  if(!prev)return cur?`<span class="delta-value ${trendTone("up")}">▲ novo</span>`:"";
+  const dir=window.DashCompare.trend(cur,prev),abs=Math.abs((cur-prev)/prev*100);
+  return `<span class="delta-value ${trendTone(dir)}">${dir==="flat"?"= igual":(dir==="up"?"▲ ":"▼ ")+(abs>=999?"999+":abs<0.1?"menos de 0,1":abs.toLocaleString("pt-BR",{maximumFractionDigits:abs<10?1:0}))+"%"}</span>`;
+}
 function deltaHtml(cur,prev,label,{neutral=false,empty="sem vendas"}={}){
   if(!prev&&!cur)return `<span class="delta-label">${esc(label)}: ${esc(empty)}</span>`;
   if(!prev)return `<span class="delta-value ${trendTone("up",{neutral})}">▲ novo</span> <span class="delta-label">${esc(label)}: ${esc(empty)}</span>`;
@@ -938,11 +867,13 @@ function renderDashboardPeriod(sales){
   // Valor em verde quando subiu em relação ao mesmo período do mês anterior, em vermelho quando caiu, preto quando igual.
   const kpi=(label,value,c,p,sub,extra="")=>`<div class="kpi"><span class="kpi-label">${esc(label)}</span><strong class="kpi-value ${window.DashCompare.trend(c,p)}">${esc(value)}</strong>${extra}<span class="delta">${deltaHtml(c,p,r.compare)}</span><small class="kpi-sub">${esc(sub)}</small></div>`;
   const prevRevenue=sumTotal(prev),prevTicket=prev.length?prevRevenue/prev.length:0;
+  // Dois cartões (faturamento e vendas, com ticket médio e peças dentro) e, ao lado, o ritmo das vendas.
+  const ticket=cur.length?revenue/cur.length:0,prevPieces=soldPieces(prev);
+  const mini=(label,value,c,p)=>`<div class="kpi-mini"><span>${esc(label)}</span><strong>${esc(value)}</strong>${deltaShort(c,p)}</div>`;
   setHTML($("dashKpis"),
     kpi("Faturamento",money(revenue),revenue,prevRevenue,dashSource==="olist"?"valor dos pedidos na Olist":"total pago pelas clientes, com frete",(()=>{const n=periodNet(r.start,r.end);return cur.length||n.txs.length?`<span class="kpi-net">líquido ${esc((n.approx?"≈ ":"")+money(n.net))}</span>`:""})())+
-    kpi("Vendas",fmtInt(cur.length),cur.length,prev.length,dashSource==="site"?"pedidos pagos":"pedidos pagos no site e vendas na Olist")+
-    kpi("Ticket médio",money(cur.length?revenue/cur.length:0),cur.length?revenue/cur.length:0,prevTicket,"valor médio por venda")+
-    kpi("Peças vendidas",fmtInt(pieces),pieces,soldPieces(prev),noItems?`${noItems} ${plural(noItems,"venda da Olist ainda sem itens","vendas da Olist ainda sem itens")}`:"sem contar os presentes"));
+    `<div class="kpi"><span class="kpi-label">Vendas</span><strong class="kpi-value ${window.DashCompare.trend(cur.length,prev.length)}">${esc(fmtInt(cur.length))}</strong><span class="delta">${deltaHtml(cur.length,prev.length,r.compare)}</span><small class="kpi-sub">${esc(noItems?`${noItems} ${plural(noItems,"venda da Olist ainda sem itens","vendas da Olist ainda sem itens")}`:dashSource==="site"?"pedidos pagos":"pedidos pagos no site e vendas na Olist")}</small><div class="kpi-minis">${mini("Ticket médio",money(ticket),ticket,prevTicket)}${mini("Peças vendidas",fmtInt(pieces),pieces,prevPieces)}</div></div>`);
+  if(typeof renderPaceChart==="function")renderPaceChart(cur,prev,r);
   renderRevenueChart(revenueBins(cur,r));
   renderTopProducts(cur);
   renderRankList($("dashPayments"),groupSales(cur,s=>s.payment),"revenue");

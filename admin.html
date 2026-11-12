@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20261112-visitas">
+<link rel="stylesheet" href="admin.css?v=20261112-graficos">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -128,7 +128,14 @@
           <label class="dash-date"><span>até</span><input type="date" id="dashTo" aria-label="Data final"></label>
         </div>
       </div>
-      <div id="dashKpis" class="kpis"></div>
+      <div class="dash-grid dash-grid-pace">
+        <div id="dashKpis" class="kpis kpis-stack"></div>
+        <div class="panel dash-pace-panel">
+          <div class="panel-head"><div><h2>Ritmo das vendas</h2><p id="dashPaceHint" class="field-help"></p></div><div id="dashPaceLegend" class="chart-legend-row"></div></div>
+          <div id="dashPaceChart" class="dash-chart" tabindex="0" aria-describedby="dashPaceHint"></div>
+          <details class="help-more dash-table"><summary>Ver em tabela</summary><div id="dashPaceTable" class="table-wrap"></div></details>
+        </div>
+      </div>
       <div class="dash-grid dash-grid-main">
         <div class="panel dash-chart-panel">
           <div class="panel-head"><div><h2>Faturamento por dia</h2><p id="dashChartHint" class="field-help"></p></div></div>
@@ -329,11 +336,21 @@
 
     <section id="analyticsSection" class="section hidden">
       <div class="section-head"><div class="section-head-text"><p class="eyebrow">PAINEL</p><h1>Analytics &amp; Financeiro</h1><p class="section-desc">Visitas, vendas e funil de compra no período escolhido.</p></div><div class="section-head-actions analytics-toolbar"><select id="analyticsDays" aria-label="Período"><option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option></select><button id="refreshAnalytics" class="secondary">ATUALIZAR</button></div></div>
-      <div id="analyticsError" class="error"></div><div id="analyticsKpis" class="analytics-kpis"></div>
-      <div class="analytics-grid"><div class="panel analytics-visits"><div class="panel-head"><div><h2>Visitas por dia</h2><p id="analyticsChartHint" class="field-help"></p></div></div><div id="analyticsChart" class="dash-chart" tabindex="0" aria-describedby="analyticsChartHint"></div><details class="help-more dash-table"><summary>Ver em tabela</summary><div id="analyticsVisitsTable" class="table-wrap"></div></details></div><div class="panel"><div class="panel-head"><h2>Funil de compra</h2></div><div id="analyticsFunnel" class="analytics-funnel"></div></div></div>
-      <div class="analytics-grid"><div class="panel"><div class="panel-head"><h2>Abandono de carrinho</h2></div><div id="analyticsCarts"></div></div><div class="panel"><div class="panel-head"><h2>Formas de pagamento</h2></div><div id="analyticsPayments"></div></div></div>
-      <div class="analytics-grid"><div class="panel"><div class="panel-head"><h2>Produtos mais vendidos</h2></div><div id="analyticsTopProducts"></div></div><div class="panel"><div class="panel-head"><h2>Pedidos do período</h2></div><div id="analyticsOrders"></div></div></div>
-      <div class="panel"><div class="panel-head"><h2>Carrinhos recentes</h2></div><div id="analyticsRecentCarts"></div></div>
+      <div id="analyticsError" class="error"></div><div id="analyticsKpis" class="kpis analytics-kpis"></div>
+      <div class="analytics-grid">
+        <div class="panel analytics-visits"><div class="panel-head"><div><h2>Visitas por dia</h2><p id="analyticsChartHint" class="field-help"></p></div></div><div id="analyticsChart" class="dash-chart" tabindex="0" aria-describedby="analyticsChartHint"></div><details class="help-more dash-table"><summary>Ver em tabela</summary><div id="analyticsVisitsTable" class="table-wrap"></div></details></div>
+        <div class="panel"><div class="panel-head"><div><h2>Funil de compra</h2><p class="field-help">Quantas pessoas passam de uma etapa para a outra no período.</p></div></div><div id="analyticsFunnel" class="rank-list funnel"></div></div>
+      </div>
+      <div class="analytics-grid">
+        <div class="panel"><div class="panel-head"><div><h2>Visitas por dia da semana</h2><p id="analyticsWeekHint" class="field-help"></p></div></div><div id="analyticsWeekChart" class="dash-chart" tabindex="0" aria-describedby="analyticsWeekHint"></div><details class="help-more dash-table"><summary>Ver em tabela</summary><div id="analyticsWeekTable" class="table-wrap"></div></details></div>
+        <div class="panel"><div class="panel-head"><div><h2>Abandono de carrinho</h2><p class="field-help">Carrinhos do período que não viraram pedido pago.</p></div></div><div id="analyticsCarts" class="cart-meter"></div></div>
+      </div>
+      <div class="analytics-grid">
+        <div class="panel"><div class="panel-head"><div><h2>Produtos mais vendidos</h2><p class="field-help">Faturamento de cada peça nos pedidos pagos do site no período.</p></div></div><div id="analyticsTopProducts" class="rank-list"></div></div>
+        <div class="panel"><div class="panel-head"><div><h2>Formas de pagamento</h2><p class="field-help">Faturamento de cada forma nos pedidos pagos do site.</p></div></div><div id="analyticsPayments" class="rank-list"></div></div>
+      </div>
+      <div class="panel"><div class="panel-head"><div><h2>Pedidos do período</h2></div></div><div id="analyticsOrders" class="table-wrap"></div></div>
+      <div class="panel"><div class="panel-head"><div><h2>Carrinhos recentes</h2></div></div><div id="analyticsRecentCarts" class="table-wrap"></div></div>
     </section>
 
     <section id="stockSection" class="section hidden">
@@ -428,7 +445,9 @@
 <script src="safe-html.js?v=20261007-seguranca"></script>
 <script src="infinitepay-report.js?v=20261108-fatura"></script>
 <script src="dash-compare.js?v=20261105-evolucao"></script>
-<script src="admin.js?v=20261112-visitas"></script>
+<script src="chart-data.js?v=20261112-graficos"></script>
+<script src="admin.js?v=20261112-graficos"></script>
+<script src="admin-charts.js?v=20261112-graficos"></script>
 <script src="admin-carousel.js?v=20261104-previa-link"></script>
 <script src="sms-text.js?v=20261110-sms-motivo"></script>
 <script src="admin-sms.js?v=20261110-sms-arquivo"></script>
