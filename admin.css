@@ -2923,25 +2923,25 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 3px rgba(0,0,0,.06)}
 .form-drawer-summary{padding:16px 22px}
 
 /* ---------- Visão geral ---------- */
-.welcome{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:28px;padding:30px 32px;border:1px solid var(--ad-line);border-radius:16px;color:var(--ad-ink);background:#fff}
+/* O bloco do "Boa noite" é preto: o resumo do mês é o primeiro que se vê. Liso, sem moldura. */
+.welcome{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:28px;padding:30px 32px;border:0;border-radius:16px;color:#fff;background:var(--ad-ink)}
 .welcome::after{display:none}
-.welcome .eyebrow{color:var(--ad-muted);font-size:10px;letter-spacing:.24em}
+.welcome .eyebrow{color:rgba(255,255,255,.6);font-size:10px;letter-spacing:.24em}
 .welcome h2{font-size:clamp(30px,3vw,40px)}
-.welcome-copy p:not(.eyebrow){max-width:460px;color:var(--ad-muted);font-size:13.5px;line-height:1.55}
+.welcome-copy p:not(.eyebrow){max-width:460px;color:rgba(255,255,255,.62);font-size:13.5px;line-height:1.55}
 .welcome-actions{margin-top:22px}
-.app .welcome-actions button{min-height:40px;background:var(--ad-ink);color:#fff}
-.app .welcome-actions button:hover{background:#2b2b2b}
-.app .welcome-actions button.secondary{background:#fff;color:var(--ad-ink);border:1px solid var(--ad-line-strong)}
-.app .welcome-actions button.secondary:hover{background:#fff;color:var(--ad-ink);border-color:var(--ad-ink)}
-.welcome-revenue{align-self:stretch;align-content:center;gap:8px;padding-left:28px;border-left:1px solid var(--ad-line)}
-.welcome-revenue #heroLabel{color:var(--ad-muted);letter-spacing:.2em}
-.welcome-revenue strong{font-size:clamp(34px,3.6vw,48px);color:var(--ad-ink)}
-.welcome-revenue strong.up{color:var(--ad-up)}
-.welcome-revenue strong.down{color:var(--ad-down)}
-.welcome .delta-value.up{color:var(--ad-up)}
-.welcome .delta-value.down{color:var(--ad-down)}
-.welcome .delta-value.flat,.welcome .delta-label,.welcome-revenue small{color:var(--ad-muted)}
-.hero-net{margin:0 0 2px;font-size:14px;color:var(--ad-ink-2)}
+.app .welcome-actions button{min-height:40px;background:#fff;color:var(--ad-ink);border:0}
+.app .welcome-actions button:hover{background:#ececec;color:var(--ad-ink)}
+.app .welcome-actions button.secondary{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.35)}
+.app .welcome-actions button.secondary:hover{background:rgba(255,255,255,.08);color:#fff;border-color:#fff}
+.welcome-revenue{align-self:stretch;align-content:center;gap:8px;padding-left:28px;border-left:1px solid rgba(255,255,255,.14)}
+.welcome-revenue #heroLabel{color:rgba(255,255,255,.6);letter-spacing:.2em}
+.welcome-revenue strong{font-size:clamp(34px,3.6vw,48px);color:#fff}
+/* Verde se subiu, vermelho se caiu: tons claros, que aparecem bem no preto. */
+.welcome-revenue strong.up,.welcome .delta-value.up{color:#5fd68c}
+.welcome-revenue strong.down,.welcome .delta-value.down{color:#ff7a70}
+.welcome .delta-value.flat,.welcome .delta-label,.welcome-revenue small{color:rgba(255,255,255,.6)}
+.hero-net{margin:0 0 2px;font-size:14px;color:rgba(255,255,255,.82)}
 
 /* Precisa da sua atenção: número num círculo vinho, sem a faixa grossa à esquerda. */
 .todo-list{margin:0 0 6px}
@@ -2966,6 +2966,9 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 3px rgba(0,0,0,.06)}
 .app button.pipeline-step:hover{border-color:var(--ad-line-strong);background:var(--ad-soft);box-shadow:none}
 .pipeline-step strong{font-size:24px}
 .net-step strong{font-size:22px}
+
+/* Gráficos de colunas: enquanto a dica está aberta, o rótulo do maior valor some (não ficam sobrepostos). */
+.dash-chart:has(.dc-tip:not([hidden])) .dc-peak{opacity:0}
 
 /* ---------- Tabelas ---------- */
 .table th{padding:10px 12px;font-size:10.5px;letter-spacing:.1em}
@@ -3024,7 +3027,7 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 3px rgba(0,0,0,.06)}
 /* ---------- Telas médias ---------- */
 @media (max-width:1000px){
   .welcome{grid-template-columns:1fr;gap:22px}
-  .welcome-revenue{justify-self:stretch;padding:20px 0 0;border-left:0;border-top:1px solid var(--ad-line)}
+  .welcome-revenue{justify-self:stretch;padding:20px 0 0;border-left:0;border-top:1px solid rgba(255,255,255,.14)}
 }
 
 /* ---------- Celular: topo branco, seção ativa em preto ---------- */
