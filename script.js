@@ -3336,8 +3336,9 @@ document.addEventListener("DOMContentLoaded", () => {
 /* =====================================================
    PRIVACIDADE — PERMISSÃO DE COOKIES (LGPD)
    Necessários (sacola e a própria escolha) ficam sempre ativos.
-   Estatísticas (Google Analytics e estatísticas da loja) e o lembrete
-   da sacola por e-mail só funcionam depois que a cliente permite.
+   Estatísticas (Google Analytics, Cloudflare Web Analytics e as
+   estatísticas da loja) e o lembrete da sacola por e-mail só funcionam
+   depois que a cliente permite.
    A escolha vale 12 meses e muda pelo link "Preferências de cookies".
 ===================================================== */
 
@@ -3389,7 +3390,10 @@ function forgetTrackingData() {
 
 function applyPrivacyConsent() {
     if (privacyConsent?.analytics || privacyConsent?.reminders) startStoreAnalytics();
-    if (privacyConsent?.analytics) loadGoogleAnalytics();
+    if (privacyConsent?.analytics) {
+        loadGoogleAnalytics();
+        loadCloudflareAnalytics();
+    }
 }
 
 let storeAnalyticsStarted = false;
@@ -3469,6 +3473,28 @@ function loadGoogleAnalytics() {
     const schedule = () => (window.requestIdleCallback ? requestIdleCallback(inject, { timeout: 4000 }) : setTimeout(inject, 2000));
     if (document.readyState === "complete") schedule();
     else window.addEventListener("load", schedule, { once: true });
+}
+
+// Estatísticas da Cloudflare (Web Analytics): contam as visitas e medem a velocidade das páginas,
+// sem cookies. A Cloudflare coloca a chamada do script dela no fim de toda página, e a política de
+// segurança (CSP) barra essa chamada: sem a permissão de estatísticas nada roda. Com a permissão,
+// a loja carrega o mesmo script pelo endereço fixo liberado na CSP, com a configuração que veio na
+// chamada da Cloudflare. Sem a chamada na página (Web Analytics desligado lá), não há o que carregar.
+let cloudflareAnalyticsLoaded = false;
+function loadCloudflareAnalytics() {
+    if (cloudflareAnalyticsLoaded) return;
+    cloudflareAnalyticsLoaded = true;
+    const inject = () => {
+        const config = document.querySelector('script[data-cf-beacon][src^="https://static.cloudflareinsights.com/"]')?.getAttribute("data-cf-beacon");
+        if (!config) return;
+        const script = document.createElement("script");
+        script.src = "https://static.cloudflareinsights.com/beacon.min.js";
+        script.setAttribute("data-cf-beacon", config);
+        document.head.appendChild(script);
+    };
+    // A chamada da Cloudflare vem depois deste arquivo no HTML: espera a página terminar de ser lida.
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", inject, { once: true });
+    else inject();
 }
 
 function showCookieConsent(customize = false) {
