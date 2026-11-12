@@ -1496,7 +1496,6 @@ button.secondary:hover,
     }
 
     #analyticsPayments .table,
-    #analyticsOrders .table,
     #analyticsTopProducts .table,
     #analyticsRecentCarts .table{
         width:100%;
@@ -1506,8 +1505,6 @@ button.secondary:hover,
 
     #analyticsPayments .table th,
     #analyticsPayments .table td,
-    #analyticsOrders .table th,
-    #analyticsOrders .table td,
     #analyticsTopProducts .table th,
     #analyticsTopProducts .table td,
     #analyticsRecentCarts .table th,
@@ -1524,15 +1521,6 @@ button.secondary:hover,
     #analyticsPayments .table td:nth-child(1){width:58%}
     #analyticsPayments .table th:nth-child(2),
     #analyticsPayments .table td:nth-child(2){width:42%;text-align:right}
-
-    #analyticsOrders .table th:nth-child(1),
-    #analyticsOrders .table td:nth-child(1){width:23%}
-    #analyticsOrders .table th:nth-child(2),
-    #analyticsOrders .table td:nth-child(2){width:27%}
-    #analyticsOrders .table th:nth-child(3),
-    #analyticsOrders .table td:nth-child(3){width:22%}
-    #analyticsOrders .table th:nth-child(4),
-    #analyticsOrders .table td:nth-child(4){width:28%}
 
     #analyticsTopProducts .table th:nth-child(1),
     #analyticsTopProducts .table td:nth-child(1){width:50%}
@@ -1794,76 +1782,6 @@ button.secondary:hover,
     overflow-wrap:anywhere;
     text-align:left;
 }
-@media(max-width:800px){
-    #analyticsOrders .order-table{
-        display:block;
-        width:100%;
-        min-width:0;
-        border:0;
-    }
-    #analyticsOrders .order-table thead{
-        display:none;
-    }
-    #analyticsOrders .order-table tbody,
-    #analyticsOrders .order-table tr{
-        display:block;
-        width:100%;
-    }
-    #analyticsOrders .order-table tr{
-        box-sizing:border-box;
-        margin:0 0 10px;
-        padding:12px;
-        border:1px solid #e1e1e1;
-        background:#fff;
-    }
-    #analyticsOrders .order-table td{
-        display:grid;
-        grid-template-columns:82px minmax(0,1fr);
-        gap:8px;
-        width:100%;
-        min-width:0 !important;
-        box-sizing:border-box;
-        padding:6px 0;
-        border:0;
-        text-align:left !important;
-        white-space:normal !important;
-        overflow-wrap:anywhere;
-        word-break:break-word;
-        font-size:10px;
-        line-height:1.35;
-    }
-    #analyticsOrders .order-table td:before{
-        color:#848484;
-        font-size:8px;
-        font-weight:600;
-        letter-spacing:1px;
-    }
-    #analyticsOrders .order-table td:nth-child(1):before{content:"PEDIDO"}
-    #analyticsOrders .order-table td:nth-child(2):before{content:"CLIENTE"}
-    #analyticsOrders .order-table td:nth-child(3):before{content:"DATA"}
-    #analyticsOrders .order-table td:nth-child(4):before{content:"TOTAL"}
-    #analyticsOrders .order-table td:nth-child(5):before{content:"STATUS"}
-    #analyticsOrders .order-table td:nth-child(6):before{content:"AÇÃO"}
-    #analyticsOrders .order-table td:nth-child(6){
-        margin-top:5px;
-        padding-top:9px;
-        border-top:1px solid #ebebeb;
-    }
-    #analyticsOrders .order-table .link-button{
-        font-size:10px;
-        padding:0;
-        line-height:1.35;
-    }
-    #analyticsOrders .order-table .badge{
-        justify-self:start;
-    }
-    #analyticsOrders .order-table .small-button{
-        width:max-content;
-        min-height:30px;
-        padding:7px 10px;
-        font-size:8px;
-    }
-}
 
 
 /* MONTÊ — mesma tipografia do logotipo do site */
@@ -1874,43 +1792,6 @@ button.secondary:hover,
     letter-spacing:5px;
 }
 
-
-/* CORREÇÃO FINAL — cards de pedidos no mobile */
-@media(max-width:800px){
-    #analyticsOrders .order-table td:nth-child(1),
-    #analyticsOrders .order-table td:nth-child(2),
-    #analyticsOrders .order-table td:nth-child(3),
-    #analyticsOrders .order-table td:nth-child(4),
-    #analyticsOrders .order-table td:nth-child(5),
-    #analyticsOrders .order-table td:nth-child(6){
-        width:100% !important;
-        min-width:0 !important;
-        max-width:none !important;
-        display:grid !important;
-        grid-template-columns:82px minmax(0,1fr) !important;
-        gap:8px !important;
-        box-sizing:border-box !important;
-    }
-    #analyticsOrders .order-table td:nth-child(1) .link-button,
-    #analyticsOrders .order-table td:nth-child(6) .small-button{
-        min-width:0 !important;
-        max-width:100% !important;
-    }
-    #analyticsOrders .order-table td:nth-child(1) .link-button{
-        display:block !important;
-        width:100% !important;
-        white-space:normal !important;
-        overflow-wrap:anywhere !important;
-        word-break:normal !important;
-        text-align:left !important;
-    }
-    #analyticsOrders .order-table td:nth-child(2),
-    #analyticsOrders .order-table td:nth-child(3),
-    #analyticsOrders .order-table td:nth-child(4),
-    #analyticsOrders .order-table td:nth-child(5){
-        align-items:start;
-    }
-}
 
 /* Limpeza dos produtos sincronizados da Olist */
 .olist-cleanup-bar{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin:0 0 18px;padding:14px 16px;background:#fff;border:1px solid #d6d6d6}
@@ -2614,18 +2495,18 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
   .app .notice button{width:100%}
 
   /* Pedidos e estoque em cartões: nada escondido à direita. */
-  #recentOrders .order-table,#ordersTable .order-table,#stockTable .table{display:block;min-width:0;width:100%}
-  #recentOrders .order-table thead,#ordersTable .order-table thead,#stockTable .table thead{display:none}
-  #recentOrders .order-table tbody,#ordersTable .order-table tbody,#stockTable .table tbody{display:grid;gap:10px}
-  #recentOrders .order-table tr,#ordersTable .order-table tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;padding:14px;border:1px solid var(--ad-line);border-radius:12px;background:#fff}
-  #recentOrders .order-table td,#ordersTable .order-table td,#stockTable .table td{display:block;min-width:0!important;padding:0;border:0;white-space:normal;font-size:13px}
-  #recentOrders .order-table td:nth-child(1),#ordersTable .order-table td:nth-child(1){grid-column:1;grid-row:1}
-  #recentOrders .order-table td:nth-child(4),#ordersTable .order-table td:nth-child(4){grid-column:2;grid-row:1;text-align:right;font-weight:600;white-space:nowrap}
-  #recentOrders .order-table td:nth-child(5),#ordersTable .order-table td:nth-child(5){grid-column:1/-1;grid-row:2;display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 2px}
-  #recentOrders .order-table td:nth-child(2),#ordersTable .order-table td:nth-child(2){grid-column:1;grid-row:3;color:var(--ad-ink-2)}
-  #recentOrders .order-table td:nth-child(3),#ordersTable .order-table td:nth-child(3){grid-column:1;grid-row:4;font-size:12px;color:var(--ad-muted)}
-  #recentOrders .order-table td:nth-child(6),#ordersTable .order-table td:nth-child(6){grid-column:2;grid-row:3/5;align-self:center;text-align:right!important}
-  #recentOrders .order-table tbody tr:hover,#ordersTable .order-table tbody tr:hover{background:#fff}
+  #recentOrders .order-table,#ordersTable .order-table,#analyticsOrders .order-table,#stockTable .table{display:block;min-width:0;width:100%}
+  #recentOrders .order-table thead,#ordersTable .order-table thead,#analyticsOrders .order-table thead,#stockTable .table thead{display:none}
+  #recentOrders .order-table tbody,#ordersTable .order-table tbody,#analyticsOrders .order-table tbody,#stockTable .table tbody{display:grid;gap:10px}
+  #recentOrders .order-table tr,#ordersTable .order-table tr,#analyticsOrders .order-table tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;padding:14px;border:1px solid var(--ad-line);border-radius:12px;background:#fff}
+  #recentOrders .order-table td,#ordersTable .order-table td,#analyticsOrders .order-table td,#stockTable .table td{display:block;min-width:0!important;padding:0;border:0;white-space:normal;font-size:13px}
+  #recentOrders .order-table td:nth-child(1),#ordersTable .order-table td:nth-child(1),#analyticsOrders .order-table td:nth-child(1){grid-column:1;grid-row:1}
+  #recentOrders .order-table td:nth-child(4),#ordersTable .order-table td:nth-child(4),#analyticsOrders .order-table td:nth-child(4){grid-column:2;grid-row:1;text-align:right;font-weight:600;white-space:nowrap}
+  #recentOrders .order-table td:nth-child(5),#ordersTable .order-table td:nth-child(5),#analyticsOrders .order-table td:nth-child(5){grid-column:1/-1;grid-row:2;display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 2px}
+  #recentOrders .order-table td:nth-child(2),#ordersTable .order-table td:nth-child(2),#analyticsOrders .order-table td:nth-child(2){grid-column:1;grid-row:3;color:var(--ad-ink-2)}
+  #recentOrders .order-table td:nth-child(3),#ordersTable .order-table td:nth-child(3),#analyticsOrders .order-table td:nth-child(3){grid-column:1;grid-row:4;font-size:12px;color:var(--ad-muted)}
+  #recentOrders .order-table td:nth-child(6),#ordersTable .order-table td:nth-child(6),#analyticsOrders .order-table td:nth-child(6){grid-column:2;grid-row:3/5;align-self:center;text-align:right!important}
+  #recentOrders .order-table tbody tr:hover,#ordersTable .order-table tbody tr:hover,#analyticsOrders .order-table tbody tr:hover{background:#fff}
   #ordersTable{padding:14px}
   #ordersTable .order-alert{margin:0 0 10px}
   #stockTable .table tr{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:4px 10px;padding:12px 14px;border:1px solid var(--ad-line);border-radius:12px;background:#fff}
@@ -3050,7 +2931,8 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 3px rgba(0,0,0,.06)}
   .kpi-value{font-size:21px}
   .app .order-table td:last-child .small-button{border-color:var(--ad-line-strong);color:var(--ad-ink)}
   /* Os pedidos já viram cartões: sem a caixa em volta (nada de caixa dentro de caixa). */
-  #ordersTable.panel,.dash-recent.panel{padding:0;border:0;background:transparent}
+  #ordersTable.panel,.dash-recent.panel,.analytics-orders.panel{padding:0;border:0;background:transparent}
+  .analytics-orders .panel-head{margin:8px 0 12px}
   #ordersTable .order-alert{margin:0 0 10px}
 }
 
