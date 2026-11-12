@@ -3557,7 +3557,7 @@ function renderAnonymousCountChoice() {
     const gpc = browserAsksNotToTrack(), off = anonymousCountOptedOut();
     button.hidden = gpc;
     button.textContent = off ? "Voltar a contar" : "Não contar minhas visitas";
-    if (note) note.textContent = gpc ? "Seu navegador pede para não rastrear: suas visitas não são contadas." : off ? "Suas visitas não são contadas neste navegador." : "";
+    if (note) note.textContent = gpc ? "Seu navegador pede para não rastrear, então as suas não são." : off ? "As suas não são contadas neste navegador." : "";
 }
 
 function showCookieConsent(customize = false) {
