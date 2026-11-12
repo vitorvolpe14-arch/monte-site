@@ -8124,24 +8124,28 @@ html.catalog-pending .footer {
    PRIVACIDADE — permissão de cookies na entrada (aviso curto e discreto)
    Abaixo da sacola, da busca e da janela do produto (300); acima do cabeçalho (200).
 ===================================================== */
-.cookie-consent { position: fixed; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 250; max-width: 400px; padding: 14px 16px 12px; background: #fff; color: var(--black); border: 1px solid #e7e2dc; border-radius: 14px; box-shadow: 0 12px 34px -16px rgba(0, 0, 0, .3); font-size: 12.5px; line-height: 1.5; }
+/* No celular: uma faixa fina presa ao rodapé (texto curto + botões na mesma linha), sem cobrir a tela.
+   No computador: uma caixa pequena no canto. "Recusar" e "Aceitar" com o mesmo destaque (guia de cookies da ANPD). */
+.cookie-consent { position: fixed; left: 0; right: 0; bottom: 0; z-index: 250; padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); background: rgba(255, 255, 255, .98); color: var(--black); border-top: 1px solid #e7e2dc; box-shadow: 0 -10px 28px -22px rgba(0, 0, 0, .4); font-size: 12px; line-height: 1.4; }
 .cookie-consent[hidden] { display: none; }
 .cookie-consent-text { margin: 0; color: #555; }
-.cookie-consent-text a { color: var(--black); text-decoration: underline; text-underline-offset: 3px; }
-.cookie-consent-options { display: grid; gap: 8px; margin: 12px 0 0; color: #444; }
+.cookie-consent-text a { color: var(--black); text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+.cookie-consent-options { display: grid; gap: 6px; margin: 8px 0 0; color: #444; }
 .cookie-consent-options[hidden] { display: none; }
 .cookie-consent-options label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
 .cookie-consent-options input { width: 16px; height: 16px; margin: 0; accent-color: var(--black); }
-.cookie-consent-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
-.cookie-button { flex: none; min-width: 90px; padding: 8px 14px; border: 1px solid var(--black); border-radius: 999px; background: #fff; color: var(--black); font: inherit; font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
+.cookie-consent-actions { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.cookie-button { flex: none; min-width: 84px; min-height: 32px; padding: 0 12px; border: 1px solid var(--black); border-radius: 999px; background: #fff; color: var(--black); font: inherit; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
 .cookie-button[hidden] { display: none; }
-/* Contagem anônima de visitas: explicação e a opção de não ser contada (não é um consentimento). */
-.cookie-anon { margin: 4px 0 0; padding-top: 10px; border-top: 1px solid #ececec; font-size: 12px; line-height: 1.5; color: #555; }
-.cookie-anon strong { color: var(--black); font-weight: 600; }
+.cookie-button-dark { background: #fff; color: var(--black); }
+.cookie-button-text { min-width: 0; margin-right: auto; padding: 0; border-color: transparent; background: none; color: #555; letter-spacing: .06em; text-decoration: underline; text-underline-offset: 3px; }
+/* Contagem anônima de visitas: uma linha com a opção de não ser contada (não é um consentimento). */
+.cookie-anon { margin: 2px 0 0; padding-top: 6px; border-top: 1px solid #ececec; font-size: 11.5px; line-height: 1.4; color: #666; }
 .cookie-anon-toggle { padding: 0; border: 0; background: none; color: var(--black); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .cookie-anon-toggle[hidden] { display: none; }
-.cookie-button-dark { background: var(--black); color: #fff; }
-.cookie-button-text { min-width: 0; margin-right: auto; padding: 8px 0; border-color: transparent; background: none; color: #666; letter-spacing: .06em; text-decoration: underline; text-underline-offset: 3px; }
+@media (min-width: 640px) {
+    .cookie-consent { left: 16px; right: auto; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: 360px; padding: 12px 14px; border: 1px solid #e7e2dc; border-radius: 12px; box-shadow: 0 12px 30px -18px rgba(0, 0, 0, .35); }
+}
 .newsletter-privacy { margin-top: 10px; font-size: 12px; opacity: .8; }
 .newsletter-privacy a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
 
