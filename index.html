@@ -37,7 +37,7 @@
     <meta name="twitter:description" content="Conheça a coleção MONTÊ e compre online.">
     <meta name="twitter:image" content="https://oficialmontee.com.br/og-image.jpg?v=1">
 
-    <link rel="stylesheet" href="style.css?v=20261112-sale-sem-troca">
+    <link rel="stylesheet" href="style.css?v=20261112-checkout-limpo">
     <!-- PRELOAD DO BANNER -->
 
     <link rel="preload" href="/fonts/dm-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
@@ -919,7 +919,6 @@
 
         <div class="cart-header">
             <div class="cart-title">
-                <p class="cart-kicker">MONTÊ</p>
                 <h2>Sua sacola <span id="cartHeaderCount" class="cart-header-count">0</span></h2>
             </div>
             <button class="cart-close" data-click="closeCart" aria-label="Fechar sacola">
@@ -943,6 +942,9 @@
                 <span>Subtotal</span>
                 <strong id="cartTotal">R$ 0,00</strong>
             </div>
+
+            <!-- Benefícios da compra num bloco só: desconto do Pix, presente da promoção e frete grátis. -->
+            <div class="cart-benefits">
 
             <div class="pix-perk" id="pixPerk" hidden>
                 <span class="pix-perk-icon" aria-hidden="true"></span>
@@ -980,6 +982,8 @@
                     <p id="freeShippingPerkText">Faltam <strong>R$ 0,00</strong> para frete grátis em Fortaleza e região</p>
                     <span class="free-shipping-perk-bar" aria-hidden="true"><i id="freeShippingPerkFill"></i></span>
                 </div>
+            </div>
+
             </div>
 
             <div class="checkout-form">
@@ -1049,7 +1053,6 @@
                     <div class="payment-methods" role="radiogroup" aria-label="Forma de pagamento">
                         <label class="payment-option selected" id="paymentOptionPix">
                             <input type="radio" name="paymentMethod" value="pix" checked>
-                            <span class="payment-option-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2.8l9.2 9.2-9.2 9.2L2.8 12z"/><path d="M8.2 12l3.8-3.8 3.8 3.8-3.8 3.8z"/></svg></span>
                             <span class="payment-option-content">
                                 <strong>Pix</strong>
                                 <small>Aprovação imediata</small>
@@ -1058,7 +1061,6 @@
                         </label>
                         <label class="payment-option" id="paymentOptionCard">
                             <input type="radio" name="paymentMethod" value="credit_card">
-                            <span class="payment-option-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19M6 15h4"/></svg></span>
                             <span class="payment-option-content">
                                 <strong>Cartão de crédito</strong>
                                 <small id="cardInstallments">3x sem juros · até 10x</small>
@@ -1091,12 +1093,13 @@
                 </header>
                 <dl class="order-note-grid" data-depth="0.8">
                     <div class="wide"><dt>Destinatária</dt><dd id="noteName" class="note-script"></dd></div>
-                    <div><dt>Contato</dt><dd id="noteContact"></dd></div>
-                    <div><dt>CPF</dt><dd id="noteCpf"></dd></div>
+                    <div class="wide"><dt>Contato</dt><dd id="noteContact"></dd></div>
+                    <div class="wide"><dt>CPF</dt><dd id="noteCpf"></dd></div>
                     <div class="wide"><dt>Entrega</dt><dd id="noteAddress"></dd></div>
                 </dl>
                 <div class="order-note-items" id="noteItems" data-depth="0.5"></div>
                 <dl class="order-note-sum" data-depth="0.5">
+                    <div><dt>Subtotal</dt><dd id="noteSubtotal"></dd></div>
                     <div><dt>Frete</dt><dd id="noteShipping"></dd></div>
                     <div id="noteDiscountRow" hidden><dt>Desconto Pix</dt><dd id="noteDiscount"></dd></div>
                     <div id="noteCouponRow" hidden><dt id="noteCouponLabel">Cupom</dt><dd id="noteCoupon"></dd></div>
@@ -1125,7 +1128,7 @@
 
         <div class="checkout-bar">
             <div class="checkout-bar-total">
-                <span>Total</span>
+                <span id="checkoutTotalLabel">Total</span>
                 <strong id="checkoutTotal">R$ 0,00</strong>
                 <small id="checkoutBarHint"></small>
             </div>
@@ -1168,7 +1171,7 @@
 
 <!-- CATÁLOGO -->
 <script src="safe-html.js?v=20261007-seguranca"></script>
-<script src="script.js?v=20261112-sale-sem-troca"></script>
+<script src="script.js?v=20261112-checkout-limpo"></script>
 
 </body>
 </html>
