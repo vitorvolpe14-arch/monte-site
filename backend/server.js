@@ -4758,7 +4758,7 @@ function heroSlidesHtml(slides) {
         const size = slide.width && slide.height ? ' width="' + slide.width + '" height="' + slide.height + '"' : "";
         const srcset = slide.small ? ' srcset="' + escapeAttribute(slide.small) + ' 960w, ' + escapeAttribute(slide.src) + ' 2000w" sizes="100vw"' : "";
         const priority = i === 0 ? ' fetchpriority="high"' : ' loading="lazy"';
-        return '<div class="slide' + (i === 0 ? " active" : "") + '"><img src="' + escapeAttribute(slide.src) + '"' + srcset + size + priority + ' decoding="async" alt="MONTÊ — Novidades"></div>';
+        return '<div class="slide' + (i === 0 ? " active" : "") + '"><img src="' + escapeAttribute(slide.src) + '"' + srcset + size + priority + ' decoding="async" alt="MONTÊ — Sale"></div>';
     }).join("");
 }
 
