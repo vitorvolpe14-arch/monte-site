@@ -585,7 +585,7 @@ function startPromotionNow(id){if(!window.confirm("Colocar esta promoção no ar
 function endPromotionNow(id){if(!window.confirm("Encerrar esta promoção agora? Ela sai do site na hora (pedidos já feitos mantêm o presente)."))return;patchPromotion(id,{ends_at:new Date().toISOString()})}
 async function deletePromotion(id){const p=promotions.find(x=>String(x.id)===String(id));if(!window.confirm("Excluir a promoção "+(p?.name||"")+"? Os pedidos que já ganharam o presente continuam com ele. Esta ação não pode ser desfeita."))return;try{await api("/api/admin/promotions/"+encodeURIComponent(id),{method:"DELETE"});if(String($("promoId").value)===String(id))resetPromotionForm();await loadPromotions()}catch(e){window.alert(e.message)}}
 
-registerClickActions({editPromotion,togglePromotion,startPromotionNow,endPromotionNow,deletePromotion,editCoupon,toggleCoupon,deleteCoupon,approveOrder,rejectOrder,markRefundDone,openProduct,toggleProduct,adjustStock,openOrder,closeOrder,sendTrackingWhatsApp,sendTrackingEmail,syncPaidOrderOlist,saveOrderStatus,removeProductImage,removePendingImage});
+registerClickActions({copyProductLink,editPromotion,togglePromotion,startPromotionNow,endPromotionNow,deletePromotion,editCoupon,toggleCoupon,deleteCoupon,approveOrder,rejectOrder,markRefundDone,openProduct,toggleProduct,adjustStock,openOrder,closeOrder,sendTrackingWhatsApp,sendTrackingEmail,syncPaidOrderOlist,saveOrderStatus,removeProductImage,removePendingImage});
 
 /* =====================================================
    FOTOS LEVES
@@ -601,7 +601,18 @@ const PHOTO_SIZES={product:{full:1600,small:640,quality:[.84,.8]},banner:{full:2
 // Link curto fixo de cada bolsa para mandar à cliente: a prévia (WhatsApp, Instagram) mostra a
 // foto e o nome, e a cliente cai na loja com a bolsa aberta. Só o link, em texto: um toque
 // seleciona ele inteiro para copiar. Só aparece em bolsa ativa.
-function productLinkHtml(p){if(!p.active||!/^[A-Za-z0-9]{6,12}$/.test(String(p.short_code||"")))return "";return `<div class="admin-product-link"><span class="admin-product-link-text">oficialmontee.com.br/?p=${esc(p.short_code)}</span></div>`}
+// Link curto de cada peça: o endereço inteiro (sem cortar) e o botão Copiar, que já leva o https://.
+function productLinkHtml(p){if(!p.active||!/^[A-Za-z0-9]{6,12}$/.test(String(p.short_code||"")))return "";const text="oficialmontee.com.br/?p="+p.short_code;return `<div class="admin-product-link"><span class="admin-product-link-text">${esc(text)}</span><button type="button" class="secondary small-button link-copy" data-click="copyProductLink" data-args="${esc(JSON.stringify(["https://"+text]))}" aria-label="${esc("Copiar o link "+text)}">Copiar</button></div>`}
+// Copia o link (área de transferência; em navegador sem acesso, o jeito antigo). Se nada der certo,
+// seleciona o link inteiro para copiar à mão. O botão mostra o resultado por um instante.
+async function copyProductLink(url){
+  const button=this instanceof Element?this:null;let ok=false;
+  try{await navigator.clipboard.writeText(url);ok=true}catch{}
+  if(!ok){try{const box=document.createElement("textarea");box.value=url;box.setAttribute("readonly","");box.style.position="fixed";box.style.top="0";box.style.opacity="0";document.body.appendChild(box);box.select();ok=document.execCommand("copy");box.remove()}catch{}}
+  const text=button&&button.previousElementSibling;
+  if(!ok&&text){const range=document.createRange();range.selectNodeContents(text);const sel=window.getSelection();sel.removeAllRanges();sel.addRange(range)}
+  if(button){button.textContent=ok?"Copiado ✓":"Selecionado";button.classList.toggle("is-done",ok);clearTimeout(button._reset);button._reset=setTimeout(()=>{button.textContent="Copiar";button.classList.remove("is-done")},1800)}
+}
 function smallPhoto(url){return isOptimizedPhoto(url)?String(url).replace(/-full\.(webp|jpg)$/,"-small.$1"):url}
 function isOptimizedPhoto(url){return /\/opt\/[^?#]+-full\.(webp|jpg)$/.test(String(url||""))}
 async function loadImageSource(source){
