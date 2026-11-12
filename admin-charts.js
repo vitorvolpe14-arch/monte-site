@@ -156,15 +156,25 @@ function renderPaceChart(cur,prev,r){
   const n=Math.max(1,r.days),pn=Math.max(1,Math.ceil((r.prevEnd-r.prevStart)/DAY_MS));
   const a=window.ChartData.cumulative(cur,r.start,n),b=window.ChartData.cumulative(prev,r.prevStart,pn),N=Math.max(n,pn);
   const dayAt=(start,i)=>new Date(new Date(start).getFullYear(),new Date(start).getMonth(),new Date(start).getDate()+i);
-  box._pace={a,b,n,pn,N,r,dayAt};
+  // Líquido acumulado: o mesmo cálculo do "líquido" dos cartões (periodNet, em admin.js): relatório da
+  // InfinitePay nos dias que ele cobre, senão as taxas; menos o que foi pago com o saldo. O do último dia
+  // é igual ao do cartão de Faturamento.
+  if(!box._net||box._net.cur!==cur||box._net.prev!==prev||box._net.r!==r){
+    const netOf=(start,count,limit)=>typeof periodNet==="function"?Array.from({length:count},(_,i)=>periodNet(start,Math.min(dayAt(start,i+1).getTime()-1,limit))):null;
+    box._net={cur,prev,r,a:netOf(r.start,n,r.end),b:netOf(r.prevStart,pn,r.prevEnd-1)};
+  }
+  const an=box._net.a,bn=box._net.b;
+  box._pace={a,b,n,pn,N,r,dayAt,an,bn};
   const nowV=a[n-1],k=Math.min(n,pn)-1,thenV=b[k];
+  const netText=x=>x?`líquido ${x.approx?"≈ ":""}${money(x.net)}`:"";
   const legend=$("dashPaceLegend");
   if(legend)setHTML(legend,`<span class="lg"><i class="lg-line"></i>${esc(r.days===1?"Hoje":"Este período")}</span><span class="lg"><i class="lg-line is-prev"></i>${esc(r.prevLabel)}</span>`);
   const hint=$("dashPaceHint");
   if(hint){const diff=thenV?(nowV-thenV)/thenV*100:0,dir=!thenV?(nowV?"up":"flat"):window.DashCompare.trend(nowV,thenV);
     const pctText=Math.abs(diff).toLocaleString("pt-BR",{maximumFractionDigits:Math.abs(diff)<10?1:0})+"%";
-    const vs=!thenV?"; no mesmo ponto do mês anterior não houve vendas":dir==="flat"?`, igual ao mesmo ponto do mês anterior (${money(thenV)})`:`, ${pctText} ${dir==="up"?"à frente do":"atrás do"} mesmo ponto do mês anterior (${money(thenV)})`;
-    hint.textContent=!nowV&&!thenV?"Faturamento somado dia a dia. Nenhuma venda nos dois períodos.":`Faturamento somado dia a dia: ${money(nowV)} até ${shortDate(r.end)}${vs}. ${chartHow()} para ver cada dia.`}
+    const nowNet=an&&an[n-1]?` (${netText(an[n-1])})`:"",thenNet=bn&&bn[k]?`; ${netText(bn[k])}`:"";
+    const vs=!thenV?"; no mesmo ponto do mês anterior não houve vendas":dir==="flat"?`, igual ao mesmo ponto do mês anterior (${money(thenV)}${thenNet})`:`, ${pctText} ${dir==="up"?"à frente do":"atrás do"} mesmo ponto do mês anterior (${money(thenV)}${thenNet})`;
+    hint.textContent=!nowV&&!thenV?"Faturamento somado dia a dia. Nenhuma venda nos dois períodos.":`Faturamento somado dia a dia: ${money(nowV)} até ${shortDate(r.end)}${nowNet}${vs}. ${chartHow()} para ver cada dia.`}
   box.setAttribute("aria-label",`Gráfico de linhas do faturamento acumulado: ${money(nowV)} neste período e ${money(thenV)} no mesmo ponto do mês anterior.`);
   const W=Math.round(box.clientWidth);
   if(!W){box._pending=true;box._geo=null;return}
@@ -183,12 +193,13 @@ function renderPaceChart(cur,prev,r){
   const ends=wide
     ?`<text x="${(x(n-1)+10).toFixed(1)}" y="${(ya+4).toFixed(1)}" class="pc-label is-cur">${esc(money(nowV))}</text>`+(close?"":`<text x="${(x(pn-1)+10).toFixed(1)}" y="${(yb+4).toFixed(1)}" class="pc-label is-prev">${esc(money(b[pn-1]))}</text>`)
     :`<text x="${(x(n-1)-6).toFixed(1)}" y="${(ya-10).toFixed(1)}" text-anchor="end" class="pc-label is-cur">${esc(money(nowV))}</text>`;
-  setHTML(box,`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true"><g>${grid}</g><line class="dc-cross" x1="0" x2="0" y1="${padT}" y2="${base}" visibility="hidden"/><path class="pc-area" d="${area}"/><path class="pc-line is-prev" d="${path(b)}"/><path class="pc-line is-cur" d="${path(a)}"/><circle class="pc-dot is-prev" cx="${x(pn-1).toFixed(1)}" cy="${yb.toFixed(1)}" r="4"/><circle class="pc-dot is-cur" cx="${x(n-1).toFixed(1)}" cy="${ya.toFixed(1)}" r="4"/><circle class="pc-hover is-prev" r="4" visibility="hidden"/><circle class="pc-hover is-cur" r="4" visibility="hidden"/>${ends}<g>${labels}</g></svg><div class="dc-tip pace-tip" hidden><span class="dc-tip-date"></span><span class="pace-row is-cur"><i></i><strong></strong><small></small></span><span class="pace-row is-prev"><i></i><strong></strong><small></small></span></div>`);
+  setHTML(box,`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true"><g>${grid}</g><line class="dc-cross" x1="0" x2="0" y1="${padT}" y2="${base}" visibility="hidden"/><path class="pc-area" d="${area}"/><path class="pc-line is-prev" d="${path(b)}"/><path class="pc-line is-cur" d="${path(a)}"/><circle class="pc-dot is-prev" cx="${x(pn-1).toFixed(1)}" cy="${yb.toFixed(1)}" r="4"/><circle class="pc-dot is-cur" cx="${x(n-1).toFixed(1)}" cy="${ya.toFixed(1)}" r="4"/><circle class="pc-hover is-prev" r="4" visibility="hidden"/><circle class="pc-hover is-cur" r="4" visibility="hidden"/>${ends}<g>${labels}</g></svg><div class="dc-tip pace-tip" hidden><span class="dc-tip-date"></span><span class="pace-row is-cur"><i></i><strong></strong><small></small><small class="pace-net"></small></span><span class="pace-row is-prev"><i></i><strong></strong><small></small><small class="pace-net"></small></span></div>`);
   box._geo={padL,padT,base,W,x,y,plotW};
   // Tabela: o acumulado de cada dia nos dois períodos.
   const table=$("dashPaceTable");
-  if(table){let rows="";for(let i=N-1;i>=0;i--)rows+=`<tr><td>${i+1}º dia</td><td>${i<n?esc(shortDate(dayAt(r.start,i))):"—"}</td><td>${i<n?money(a[i]):"—"}</td><td>${i<pn?esc(shortDate(dayAt(r.prevStart,i))):"—"}</td><td>${i<pn?money(b[i]):"—"}</td></tr>`;
-    setHTML(table,`<table class="table"><thead><tr><th>DIA DO PERÍODO</th><th>DATA</th><th>ACUMULADO</th><th>MÊS ANTERIOR</th><th>ACUMULADO</th></tr></thead><tbody>${rows}</tbody></table>`)}
+  if(table){const net=(list,i)=>list&&list[i]?esc((list[i].approx?"≈ ":"")+money(list[i].net)):"—";let rows="";
+    for(let i=N-1;i>=0;i--)rows+=`<tr><td data-label="Este período">${i<n?esc(shortDate(dayAt(r.start,i))):"—"}</td><td data-label="Bruto">${i<n?money(a[i]):"—"}</td><td data-label="Líquido">${i<n?net(an,i):"—"}</td><td data-label="Mês anterior">${i<pn?esc(shortDate(dayAt(r.prevStart,i))):"—"}</td><td data-label="Bruto">${i<pn?money(b[i]):"—"}</td><td data-label="Líquido">${i<pn?net(bn,i):"—"}</td></tr>`;
+    setHTML(table,`<table class="table pace-table"><thead><tr><th colspan="3">ESTE PERÍODO (ACUMULADO)</th><th colspan="3" class="pace-prev-head">MÊS ANTERIOR (ACUMULADO)</th></tr><tr><th>DATA</th><th>BRUTO</th><th>LÍQUIDO</th><th class="pace-prev-head">DATA</th><th>BRUTO</th><th>LÍQUIDO</th></tr></thead><tbody>${rows}</tbody></table>`)}
   if(box._active!=null)showPaceTip(box,Math.min(box._active,N-1));
 }
 function showPaceTip(box,i){
@@ -196,11 +207,12 @@ function showPaceTip(box,i){
   box._active=i;const tip=box.querySelector(".dc-tip"),cross=box.querySelector(".dc-cross");if(!tip)return;
   const cx=g.x(i);
   if(cross){cross.setAttribute("x1",cx);cross.setAttribute("x2",cx);cross.setAttribute("visibility","visible")}
-  [["is-cur",p.a,p.n,p.r.start],["is-prev",p.b,p.pn,p.r.prevStart]].forEach(([cls,list,len,start])=>{
+  [["is-cur",p.a,p.n,p.r.start,p.an],["is-prev",p.b,p.pn,p.r.prevStart,p.bn]].forEach(([cls,list,len,start,nets])=>{
     const dot=box.querySelector(".pc-hover."+cls),row=tip.querySelector(".pace-row."+cls),has=i<len;
     if(dot){dot.setAttribute("cx",cx);dot.setAttribute("cy",has?g.y(list[i]):0);dot.setAttribute("visibility",has?"visible":"hidden")}
     row.hidden=!has;
-    if(has){row.querySelector("strong").textContent=money(list[i]);row.querySelector("small").textContent=cls==="is-cur"?"acumulado neste período":"mês anterior, até "+shortDate(p.dayAt(start,i))}
+    if(has){row.querySelector("strong").textContent=money(list[i]);row.querySelector("small").textContent=cls==="is-cur"?"acumulado neste período":"mês anterior, até "+shortDate(p.dayAt(start,i));
+      const netEl=row.querySelector(".pace-net"),x=nets&&nets[i];netEl.hidden=!x;if(x)netEl.textContent=`líquido ${x.approx?"≈ ":""}${money(x.net)}`}
   });
   tip.querySelector(".dc-tip-date").textContent=i<p.n?p.dayAt(p.r.start,i).toLocaleDateString("pt-BR",{weekday:"short",day:"2-digit",month:"2-digit"}):`${shortDate(p.dayAt(p.r.prevStart,i))} do mês anterior`;
   tip.hidden=false;
