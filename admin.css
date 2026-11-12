@@ -3011,3 +3011,193 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 3px rgba(0,0,0,.06)}
   .kpi-spark .kpi-sub{min-height:0}
   .meter-figure strong{font-size:28px}
 }
+
+/* =====================================================
+   TEMA ESCURO (padrão) — admin-theme.js põe data-theme="dark" no <html>
+   Mesmas cores da marca: fundo quase preto, cartões um tom acima,
+   texto quase branco. O que era preto com letra branca (botão principal,
+   PAGO, aba ativa) vira claro com letra escura. Gráficos: claro = o que
+   importa; cinza #6f6f6a = comparação (3,5:1 no cartão e 4,5:1 contra o claro).
+===================================================== */
+.theme-icon-moon{display:none}
+[data-theme="light"] .theme-icon-sun{display:none}
+[data-theme="light"] .theme-icon-moon{display:block}
+
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ad-ink:#f2f2ef;
+  --ad-ink-2:#c9c9c4;
+  --ad-muted:#9a9a94;
+  --ad-faint:#6f6f6a;
+  --ad-side:#000;
+  --ad-bg:#0e0e0d;
+  --ad-card:#171716;
+  --ad-soft:#1d1d1b;
+  --ad-hover:#242422;
+  --ad-line:#2a2a28;
+  --ad-line-strong:#3a3a37;
+  --ad-light:#fff;
+  --ad-wine:#e08a9b;
+  --ad-danger:#ff8a80;
+  --ad-up:#5fd68c;
+  --ad-down:#ff7a70;
+  --ad-on-ink:#0e0e0d;
+  --ad-chart-muted:#6f6f6a;
+  --ad-shadow:none;
+}
+[data-theme="dark"] body{background:var(--ad-bg);color:var(--ad-ink)}
+[data-theme="dark"] ::selection{background:#f2f2ef;color:#0e0e0d}
+
+/* Botões: o principal fica claro com letra escura. */
+[data-theme="dark"] button,[data-theme="dark"] .upload-file-button{background:var(--ad-ink);color:var(--ad-on-ink);border-color:var(--ad-ink)}
+[data-theme="dark"] .app button:not(.secondary):not(.nav-button):not(.link-button):not(.text-button):not(.danger-button):not(.image-remove):not(.remove-variant):not(.stat):not(.subtab):not(.todo-item):not(.dash-period):not(.dash-src):not(.pipeline-step):hover,
+[data-theme="dark"] .modal button:not(.secondary):not(.danger-button):not(.image-remove):not(.remove-variant):hover,
+[data-theme="dark"] #loginForm button:hover,[data-theme="dark"] .upload-file-button:hover{background:#d9d9d4;color:var(--ad-on-ink);box-shadow:none}
+[data-theme="dark"] #loginForm button{background:var(--ad-ink);color:var(--ad-on-ink)}
+[data-theme="dark"] .app button.secondary,[data-theme="dark"] .app .text-button,[data-theme="dark"] .modal button.secondary,[data-theme="dark"] .secondary-link{background:transparent;color:var(--ad-ink);border:1px solid var(--ad-line-strong)}
+[data-theme="dark"] .app button.secondary:hover,[data-theme="dark"] .app .text-button:hover,[data-theme="dark"] .modal button.secondary:hover,[data-theme="dark"] .secondary-link:hover{background:var(--ad-hover);color:var(--ad-ink);border-color:var(--ad-ink-2)}
+[data-theme="dark"] .app .danger-button,[data-theme="dark"] .modal .danger-button{background:transparent;color:var(--ad-danger)!important;border:1px solid #5a2f30!important}
+[data-theme="dark"] .app .danger-button:hover,[data-theme="dark"] .modal .danger-button:hover{background:rgba(255,138,128,.08);border-color:var(--ad-danger)!important}
+[data-theme="dark"] .app button.link-button,[data-theme="dark"] .modal button.link-button{background:transparent;color:var(--ad-ink)!important}
+[data-theme="dark"] .app .admin-product-actions .edit-product-button{background:transparent;color:var(--ad-ink);border:1px solid var(--ad-ink)}
+[data-theme="dark"] .app .admin-product-actions .edit-product-button:hover{background:var(--ad-ink);color:var(--ad-on-ink)}
+[data-theme="dark"] .app a.sms-recharge{background:var(--ad-ink);color:var(--ad-on-ink)}
+[data-theme="dark"] .app a.sms-recharge:hover{background:#d9d9d4}
+[data-theme="dark"] .app .variant-row button,[data-theme="dark"] .modal .variant-row .remove-variant,[data-theme="dark"] .image-remove,
+[data-theme="dark"] #closeModal,[data-theme="dark"] #closeOrderModal{background:var(--ad-card);color:var(--ad-ink);border:1px solid var(--ad-line-strong)}
+[data-theme="dark"] #closeModal:hover,[data-theme="dark"] #closeOrderModal:hover,[data-theme="dark"] .image-remove:hover{background:var(--ad-hover);border-color:var(--ad-ink-2);color:var(--ad-ink)}
+[data-theme="dark"] .app button:focus-visible,[data-theme="dark"] .modal button:focus-visible,[data-theme="dark"] .app a:focus-visible,[data-theme="dark"] .app summary:focus-visible{outline-color:var(--ad-ink)}
+
+/* Campos */
+[data-theme="dark"] input,[data-theme="dark"] select,[data-theme="dark"] textarea{background:#121211;color:var(--ad-ink);border-color:var(--ad-line-strong)}
+[data-theme="dark"] input:hover,[data-theme="dark"] select:hover,[data-theme="dark"] textarea:hover{border-color:#4a4a46}
+[data-theme="dark"] input:focus,[data-theme="dark"] select:focus,[data-theme="dark"] textarea:focus{border-color:var(--ad-ink-2);box-shadow:0 0 0 3px rgba(255,255,255,.08)}
+[data-theme="dark"] input::placeholder,[data-theme="dark"] textarea::placeholder{color:#6f6f6a}
+[data-theme="dark"] input:disabled,[data-theme="dark"] select:disabled,[data-theme="dark"] textarea:disabled{background:#1a1a19;color:#77776f}
+[data-theme="dark"] .toolbar input{background-color:#121211}
+[data-theme="dark"] label{color:var(--ad-ink-2)}
+
+/* Login */
+[data-theme="dark"] .auth-view{background:var(--ad-bg)}
+[data-theme="dark"] .auth-card{background:var(--ad-card);border-color:var(--ad-line);box-shadow:none}
+[data-theme="dark"] .auth-card p:not(.eyebrow){color:var(--ad-muted)}
+
+/* Menu e topo */
+[data-theme="dark"] .app .sidebar{background:#121211;border-right-color:var(--ad-line)}
+[data-theme="dark"] .nav-badge{background:var(--ad-ink);color:var(--ad-on-ink)}
+[data-theme="dark"] .admin-email{border-color:var(--ad-line);color:var(--ad-muted)}
+
+/* Cartões e blocos */
+[data-theme="dark"] .panel,[data-theme="dark"] .stat,[data-theme="dark"] .analytics-kpi,[data-theme="dark"] .admin-product,[data-theme="dark"] .mini-stats>div,[data-theme="dark"] .kpi,
+[data-theme="dark"] .app .todo-item,[data-theme="dark"] .todo-empty,[data-theme="dark"] .app button.pipeline-step,[data-theme="dark"] .app .notice{background:var(--ad-card);border-color:var(--ad-line);color:var(--ad-ink)}
+[data-theme="dark"] .app .todo-item:hover,[data-theme="dark"] .app button.todo-item:hover,[data-theme="dark"] .app button.pipeline-step:hover{background:var(--ad-hover);border-color:var(--ad-line-strong)}
+[data-theme="dark"] .todo-item strong{background:rgba(224,138,155,.14);color:var(--ad-wine)}
+[data-theme="dark"] .todo-empty::before,[data-theme="dark"] .drawer-plus{background:var(--ad-ink);color:var(--ad-on-ink)}
+[data-theme="dark"] .app .olist-cleanup-bar.notice{border-color:#4a2e33;background:#1d1517}
+[data-theme="dark"] .help-more>p{background:var(--ad-soft);color:var(--ad-ink-2);border-left-color:var(--ad-ink-2)}
+[data-theme="dark"] .form-drawer-summary:hover{background:var(--ad-soft)}
+
+/* Visão geral: o bloco do "Boa noite" continua preto, com uma linha para se destacar do fundo. */
+[data-theme="dark"] .welcome{background:#000;border:1px solid #262624;color:#fff}
+[data-theme="dark"] .app .welcome-actions button{background:#fff;color:#0b0b0b}
+[data-theme="dark"] .app .welcome-actions button:hover{background:#e6e6e2;color:#0b0b0b}
+[data-theme="dark"] .app .welcome-actions button.secondary{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.35)}
+[data-theme="dark"] .app .welcome-actions button.secondary:hover{background:rgba(255,255,255,.08);color:#fff;border-color:#fff}
+[data-theme="dark"] .dash-periods,[data-theme="dark"] .dash-range{background:var(--ad-card);border-color:var(--ad-line)}
+[data-theme="dark"] .app button.dash-period,[data-theme="dark"] .app button.dash-src{background:transparent;color:var(--ad-ink-2)}
+[data-theme="dark"] .app button.dash-period:hover,[data-theme="dark"] .app button.dash-src:hover{background:var(--ad-hover);color:var(--ad-ink)}
+[data-theme="dark"] .app button.dash-period.active,[data-theme="dark"] .app button.dash-period.active:hover,[data-theme="dark"] .app button.dash-src.active,[data-theme="dark"] .app button.dash-src.active:hover{background:var(--ad-ink);color:var(--ad-on-ink)}
+[data-theme="dark"] .app .dash-date input{background:var(--ad-soft)}
+[data-theme="dark"] .rank-thumb{background:#fff}
+[data-theme="dark"] .rank-track,[data-theme="dark"] .meter,[data-theme="dark"] .sms-progress-bar{background:#2a2a28}
+[data-theme="dark"] .meter-key{background:#3a3a37}
+[data-theme="dark"] .meter-key.is-fill{background:var(--ad-ink)}
+[data-theme="dark"] .net-flow{background:var(--ad-line);border-color:var(--ad-line)}
+
+/* Gráficos */
+[data-theme="dark"] .dc-grid{stroke:#262624}
+[data-theme="dark"] .dc-base{stroke:#3a3a37}
+[data-theme="dark"] .dc-bar.is-active{fill:#bdbdb8}
+[data-theme="dark"] .dc-bar.is-muted{fill:var(--ad-chart-muted)}
+[data-theme="dark"] .dc-bar.is-muted.is-active{fill:#8f8f8a}
+[data-theme="dark"] .dc-cross{stroke:#4a4a46}
+[data-theme="dark"] .dc-tip{background:#262624;color:#f2f2ef;box-shadow:0 0 0 1px #3a3a37,0 12px 28px -12px rgba(0,0,0,.8)}
+[data-theme="dark"] .pc-line.is-prev{stroke:var(--ad-chart-muted)}
+[data-theme="dark"] .lg-line.is-prev,[data-theme="dark"] .pace-row.is-prev i{background:var(--ad-chart-muted)}
+[data-theme="dark"] .pc-dot.is-prev,[data-theme="dark"] .pc-hover.is-prev{fill:var(--ad-chart-muted)}
+[data-theme="dark"] .pc-dot,[data-theme="dark"] .pc-hover{stroke:var(--ad-card)}
+[data-theme="dark"] .pc-area{opacity:.07}
+[data-theme="dark"] .spark path{stroke:var(--ad-chart-muted)}
+[data-theme="dark"] .spark i{box-shadow:0 0 0 2px var(--ad-card)}
+
+/* Tabelas e situação dos pedidos */
+[data-theme="dark"] .table td{border-bottom-color:#232321;color:var(--ad-ink)}
+[data-theme="dark"] .table th{border-bottom-color:var(--ad-line)}
+[data-theme="dark"] .badge{background:#242422;color:var(--ad-ink-2)}
+[data-theme="dark"] .badge.paid{background:var(--ad-ink);color:var(--ad-on-ink);box-shadow:none}
+[data-theme="dark"] .badge.processing{background:transparent;color:var(--ad-ink);box-shadow:inset 0 0 0 1px var(--ad-ink)}
+[data-theme="dark"] .badge.shipped{background:#2c2c2a;color:var(--ad-ink)}
+[data-theme="dark"] .badge.delivered{background:#1f1f1d;color:#b5b5b0}
+[data-theme="dark"] .badge.pending{background:transparent;color:var(--ad-muted);box-shadow:inset 0 0 0 1px var(--ad-line-strong)}
+[data-theme="dark"] .badge.expired{background:transparent;color:#77776f;box-shadow:inset 0 0 0 1px var(--ad-line)}
+[data-theme="dark"] .badge.cancelled{background:rgba(255,138,128,.1);color:var(--ad-danger);box-shadow:none}
+[data-theme="dark"] #stockTable .badge.paid{background:transparent;color:var(--ad-ink);box-shadow:inset 0 0 0 1px var(--ad-line-strong)}
+[data-theme="dark"] #stockTable .badge.pending{background:#242422;color:var(--ad-muted)}
+[data-theme="dark"] .stock-pill{background:#242422;color:var(--ad-ink)}
+[data-theme="dark"] .stock-pill.is-low{background:transparent;box-shadow:inset 0 0 0 1px var(--ad-ink)}
+[data-theme="dark"] .stock-pill.is-out{background:var(--ad-ink);color:var(--ad-on-ink)}
+[data-theme="dark"] .order-alert,[data-theme="dark"] .decision-card{background:#1d1517;color:var(--ad-ink-2);border-color:var(--ad-wine)}
+[data-theme="dark"] .chip.chip-test{background:#3a3220;color:#f0dca0}
+[data-theme="dark"] .test-card{background:#1f1c14;border-color:#4a4128}
+/* Etiquetas em cima das fotos (fotos claras): continuam com as cores do tema claro. */
+[data-theme="dark"] .chip-sale{background:#fff;color:#0b0b0b;box-shadow:inset 0 0 0 1px #0b0b0b}
+[data-theme="dark"] .chip-off{background:#fff;color:#555;border-color:#e6e6e6}
+[data-theme="dark"] .chip-low{background:#e6e6e6;color:#0b0b0b}
+
+/* Produtos, banners e fotos */
+[data-theme="dark"] .admin-product img{background:#fff}
+[data-theme="dark"] .admin-product-link-text{color:var(--ad-muted)}
+[data-theme="dark"] .product-image-dropzone,[data-theme="dark"] #carouselImageDropzone{background:var(--ad-soft);border-color:#4a4a46}
+[data-theme="dark"] .product-image-dropzone:hover,[data-theme="dark"] .product-image-dropzone.drag-over,[data-theme="dark"] #carouselImageDropzone:hover,[data-theme="dark"] #carouselImageDropzone.drag-over{background:var(--ad-hover);border-color:var(--ad-ink-2)}
+[data-theme="dark"] .product-image-dropzone .dropzone-icon{background:var(--ad-card);border-color:var(--ad-line-strong);color:var(--ad-ink)}
+[data-theme="dark"] .product-image-dropzone strong{color:var(--ad-ink)}
+[data-theme="dark"] .product-image-item{background:var(--ad-card);border-color:var(--ad-line)}
+
+[data-theme="dark"] #carouselImageDropzone,[data-theme="dark"] #editorialImageDropzone{background:var(--ad-soft);border-color:#4a4a46}
+[data-theme="dark"] #carouselImageDropzone:hover,[data-theme="dark"] #editorialImageDropzone:hover,[data-theme="dark"] #carouselImageDropzone.drag-over,[data-theme="dark"] #editorialImageDropzone.drag-over{background:var(--ad-hover);border-color:var(--ad-ink-2)}
+
+/* Códigos (SKU, chaves) e linhas destacadas das tabelas da Olist */
+[data-theme="dark"] .sku-table code,[data-theme="dark"] .sku-done code,[data-theme="dark"] .stock-sync-list code,[data-theme="dark"] .stock-sync-missing code,[data-theme="dark"] .decision-card code{background:#242422;color:var(--ad-ink)}
+[data-theme="dark"] .sku-table .sku-divergente td,[data-theme="dark"] .olist-table .olist-product-row td,[data-theme="dark"] .olist-table tr.olist-product-row{background:var(--ad-soft);border-top-color:var(--ad-line)}
+[data-theme="dark"] .olist-table .olist-diferente td,[data-theme="dark"] .olist-table tr.olist-diferente{background:#22191a}
+[data-theme="dark"] .decision-card.is-cancelled{background:var(--ad-soft);border-color:var(--ad-line-strong)}
+
+/* Janelas (pedido e produto) */
+[data-theme="dark"] .modal{background:rgba(0,0,0,.65)}
+[data-theme="dark"] .modal-card{background:var(--ad-card);color:var(--ad-ink);box-shadow:0 0 0 1px var(--ad-line),0 30px 80px -30px rgba(0,0,0,.9)}
+[data-theme="dark"] .modal-head,[data-theme="dark"] .product-modal-actions{background:var(--ad-card);border-color:var(--ad-line)}
+[data-theme="dark"] .detail-card{background:var(--ad-soft);border-color:var(--ad-line)}
+[data-theme="dark"] .detail-card p{color:var(--ad-ink-2)}
+[data-theme="dark"] .detail-card a{color:var(--ad-ink)}
+[data-theme="dark"] .detail-card .shipping-method,[data-theme="dark"] .detail-card strong{color:var(--ad-ink)}
+[data-theme="dark"] .order-item{border-bottom-color:var(--ad-line)}
+[data-theme="dark"] .order-item strong,[data-theme="dark"] .total-line{color:var(--ad-ink)!important}
+
+/* Cupons, promoções, SMS, estoque */
+[data-theme="dark"] .benefit-card,[data-theme="dark"] .olist-sync-options,[data-theme="dark"] .sms-webhook-state,[data-theme="dark"] .sms-save-list,[data-theme="dark"] .sms-preview{background:var(--ad-soft);border-color:var(--ad-line)}
+[data-theme="dark"] .sms-preview-stats>div{background:var(--ad-card);border-color:var(--ad-line)}
+[data-theme="dark"] .sms-short{background:#1d1517;border-color:#4a2e33}
+[data-theme="dark"] .sms-copy code,[data-theme="dark"] .sms-steps code{background:var(--ad-soft);border-color:var(--ad-line);color:var(--ad-ink)}
+
+/* Celular */
+@media (max-width:800px){
+  [data-theme="dark"] .app .sidebar{background:#121211;border-bottom-color:var(--ad-line)}
+  [data-theme="dark"] .app .nav-button.active,[data-theme="dark"] .app button.nav-button.active:hover{background:var(--ad-ink);color:var(--ad-on-ink)}
+  [data-theme="dark"] .app .nav-button.active .nav-icon{stroke:var(--ad-on-ink)}
+  [data-theme="dark"] .app .nav-button.active .nav-badge{background:var(--ad-on-ink);color:var(--ad-ink)}
+  [data-theme="dark"] #recentOrders .order-table tr,[data-theme="dark"] #ordersTable .order-table tr,[data-theme="dark"] #analyticsOrders .order-table tr,[data-theme="dark"] #stockTable .table tr,
+  [data-theme="dark"] #recentOrders .order-table tbody tr:hover,[data-theme="dark"] #ordersTable .order-table tbody tr:hover,[data-theme="dark"] #analyticsOrders .order-table tbody tr:hover{background:var(--ad-card);border-color:var(--ad-line)}
+  [data-theme="dark"] #ordersTable.panel,[data-theme="dark"] .dash-recent.panel,[data-theme="dark"] .analytics-orders.panel{background:transparent;border:0}
+  /* Só o ícone do tema no topo do celular (o nome fica para o leitor de tela). */
+  .app .sidebar-bottom .theme-toggle .theme-label{display:none}
+}
