@@ -2967,10 +2967,28 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 3px rgba(0,0,0,.06)}
 .dash-chart:has(.dc-tip:not([hidden])) .pc-label{opacity:0}
 .pace-tip{gap:6px}
 .pace-row{display:grid;grid-template-columns:14px auto;align-items:center;column-gap:8px}
-.pace-row i{grid-row:1/3;width:14px;height:2px;border-radius:2px;background:#fff}
+.pace-row>*:not(i){grid-column:2}
+.pace-row i{grid-row:1;width:14px;height:2px;border-radius:2px;background:#fff}
+.pace-row .pace-net{font-weight:500;color:rgba(255,255,255,.86)}
 .pace-row.is-prev i{background:#8f8f8a}
 .pace-row strong{font:600 14px/1.25 var(--ad-sans)}
 .pace-row small{font-size:11.5px;color:rgba(255,255,255,.68)}
+
+/* Tabela do ritmo: bruto e líquido acumulados nos dois períodos. No celular, um cartão por dia
+   (este período à esquerda, mês anterior à direita), sem rolar para o lado. */
+.pace-table th{text-align:left}
+.pace-table thead tr:first-child th{padding-bottom:4px;border-bottom:0;color:var(--ad-ink-2)}
+.pace-table .pace-prev-head,.pace-table td:nth-child(4){border-left:1px solid var(--ad-line);padding-left:16px}
+@media (max-width:640px){
+  .dash-table .pace-table thead{display:none}
+  .dash-table .pace-table,.dash-table .pace-table tbody{display:block;width:100%;min-width:0}
+  .dash-table .pace-table tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(3,auto);grid-auto-flow:column;column-gap:18px;row-gap:3px;padding:12px 0;border-bottom:1px solid var(--ad-line)}
+  .dash-table .pace-table td{display:flex;justify-content:space-between;gap:8px;min-width:0;padding:0;border:0;white-space:nowrap;font-size:12.5px}
+  .dash-table .pace-table td::before{content:attr(data-label);color:var(--ad-muted)}
+  .dash-table .pace-table td:nth-child(1),.dash-table .pace-table td:nth-child(4){font-weight:600}
+  .dash-table .pace-table td:nth-child(4){padding-left:0;border-left:0}
+  .dash-table .pace-table tbody tr:hover{background:transparent}
+}
 
 /* Colunas em cinza (só o destaque fica preto). */
 .dc-bar.is-muted{fill:#8f8f8a}
