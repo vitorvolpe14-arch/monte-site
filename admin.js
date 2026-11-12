@@ -100,7 +100,7 @@ async function adjustStock(variantId,label,current){const raw=window.prompt(`Aju
 const SHIPPING_SERVICE_NAMES={"1":"PAC","2":"SEDEX","17":"Mini Envios","monte-fortaleza":"Entrega MONTÊ — Fortaleza","monte-regiao-metropolitana":"Entrega MONTÊ — Região Metropolitana"};
 function shippingMethod(o){return String(o.shipping_service_name||"").trim()||SHIPPING_SERVICE_NAMES[String(o.shipping_service_id||"")]||"Não informado"}
 function shippingDays(o){const d=Number(o.shipping_delivery_days);return d>0?`${d} ${d===1?"dia útil":"dias úteis"}`:""}
-function orderTable(list){if(!list.length)return "<p>Nenhum pedido encontrado.</p>";return `<table class="table order-table"><thead><tr><th>PEDIDO</th><th>CLIENTE</th><th>DATA</th><th>TOTAL</th><th>STATUS</th><th></th></tr></thead><tbody>${list.map(o=>`<tr><td><button class="link-button" data-click="openOrder" data-args="${esc(JSON.stringify([o.id]))}">${esc(o.order_code ? "MONTÊ-"+o.order_code : (o.order_nsu||"—"))}</button><span class="order-shipping-method">${esc(shippingMethod(o))}</span></td><td>${esc(o.customer_name||"—")}</td><td>${date(o.created_at)}</td><td>${money(o.total)}${o.infinitepay&&o.status!=="cancelled"?`<small class="order-net">líquido ${money(o.infinitepay.net)}</small>`:""}</td><td><span class="badge ${esc(o.status||"pending")}">${statusLabel(o.status)}</span>${o.approval_status==="pending"&&o.status==="paid"?' <span class="chip chip-presale">ACEITE OU RECUSE</span>':""}${o.status==="cancelled"&&o.refund_status==="pending"?' <span class="chip chip-low">ESTORNO PENDENTE</span>':""}${isTestOrder(o)?' <span class="chip chip-test">TESTE</span>':""}</td><td><button class="secondary small-button" data-click="openOrder" data-args="${esc(JSON.stringify([o.id]))}">DETALHES</button></td></tr>`).join("")}</tbody></table>`}
+function orderTable(list){if(!list.length)return "<p>Nenhum pedido encontrado.</p>";return `<table class="table order-table"><thead><tr><th>PEDIDO</th><th>CLIENTE</th><th>DATA</th><th>TOTAL</th><th>STATUS</th><th></th></tr></thead><tbody>${list.map(o=>`<tr data-click="openOrder" data-args="${esc(JSON.stringify([o.id]))}"><td><button class="link-button" data-click="openOrder" data-args="${esc(JSON.stringify([o.id]))}">${esc(o.order_code ? "MONTÊ-"+o.order_code : (o.order_nsu||"—"))}</button><span class="order-shipping-method">${esc(shippingMethod(o))}</span></td><td>${esc(o.customer_name||"—")}</td><td>${date(o.created_at)}</td><td>${money(o.total)}${o.infinitepay&&o.status!=="cancelled"?`<small class="order-net">líquido ${money(o.infinitepay.net)}</small>`:""}</td><td><span class="badge ${esc(o.status||"pending")}">${statusLabel(o.status)}</span>${o.approval_status==="pending"&&o.status==="paid"?' <span class="chip chip-presale">ACEITE OU RECUSE</span>':""}${o.status==="cancelled"&&o.refund_status==="pending"?' <span class="chip chip-low">ESTORNO PENDENTE</span>':""}${isTestOrder(o)?' <span class="chip chip-test">TESTE</span>':""}</td><td><button class="secondary small-button" data-click="openOrder" data-args="${esc(JSON.stringify([o.id]))}">DETALHES</button></td></tr>`).join("")}</tbody></table>`}
 // Pedidos sem pagamento há mais de 2 dias ficam "expirados" e escondidos por padrão.
 let showExpiredOrders=false,showTestOrders=false;
 // Pedidos de teste (is_test) ficam escondidos; a opção de mostrar aparece quando existe algum.
@@ -276,7 +276,7 @@ function currentProductPayload(images=productImageDraft){return{name:$("productN
 async function persistProductImages(productId){await api("/api/admin/products/"+encodeURIComponent(productId),{method:"PUT",body:JSON.stringify(currentProductPayload(productImageDraft))})}
 async function saveProduct(e){e.preventDefault();$("formError").textContent="";const id=$("productId").value;const payload=currentProductPayload(productImageDraft);if(!payload.name){$("formError").textContent="Informe o nome.";return}try{const endpoint=id?"/api/admin/products/"+encodeURIComponent(id):"/api/admin/products";const d=await api(endpoint,{method:id?"PUT":"POST",body:JSON.stringify(payload)});const pid=d.product.id;$("productId").value=pid;const uploaded=await uploadProductImages(pid);const images=[...productImageDraft,...uploaded];if(uploaded.length){await api("/api/admin/products/"+encodeURIComponent(pid),{method:"PUT",body:JSON.stringify({...payload,images})});productImageDraft=images;productImageFiles=[];renderProductImageManager()}const variants=[...document.querySelectorAll("#variantsList .variant-row")].map(r=>({id:r.dataset.id||null,color:r.querySelector(".v-color").value.trim(),sku:r.querySelector(".v-sku").value.trim()||null,stock:Math.max(0,Number(r.querySelector(".v-stock").value||0)),active:true})).filter(v=>v.color);await api("/api/admin/products/"+encodeURIComponent(pid)+"/variants",{method:"PUT",body:JSON.stringify({variants})});closeProduct();await loadProducts()}catch(e){$("formError").textContent=e.message}}
 function money(v){return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(v||0))}
-function date(v){return v?new Date(v).toLocaleString("pt-BR"):"—"}
+function date(v){return v?new Date(v).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"}):"—"}
 function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 
 async function syncPaidOrderOlist(id){
@@ -673,7 +673,7 @@ function renderPhotoOptimizerInfo(){
   const box=$("optimizePhotosStatus"),btn=$("optimizePhotosButton");if(!box||!btn||btn.dataset.running)return;
   const pending=photosToOptimize(),count=pending.reduce((n,x)=>n+x.urls.length,0);
   box.textContent=count?`${count} foto${count>1?"s":""} de ${pending.length} produto${pending.length>1?"s":""} ainda estão no tamanho original. Otimizar deixa a loja bem mais rápida no celular; a qualidade na tela continua a mesma.`:"Todas as fotos dos produtos já estão otimizadas. As fotos novas são otimizadas automaticamente ao enviar.";
-  btn.hidden=!count;
+  btn.hidden=!count;box.closest(".photo-optimizer")?.classList.toggle("is-idle",!count);
 }
 async function optimizeExistingPhotos(){
   const btn=$("optimizePhotosButton"),box=$("optimizePhotosStatus");
@@ -704,7 +704,7 @@ async function optimizeExistingPhotos(){
     // Recarrega a lista antes de liberar o botão, para o aviso final não ser trocado.
     await loadProducts().catch(()=>{});
     delete btn.dataset.running;btn.disabled=false;
-    box.textContent=message;btn.hidden=!photosToOptimize().length;
+    box.textContent=message;btn.hidden=!photosToOptimize().length;box.closest(".photo-optimizer")?.classList.remove("is-idle");
   }
 }
 (function(){const btn=$("optimizePhotosButton");if(btn)btn.onclick=optimizeExistingPhotos})();

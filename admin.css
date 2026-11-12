@@ -2848,3 +2848,205 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
   .sms-actions button{margin:0}
   .app .sms-campaigns-table td.sms-actions,.app .sms-campaigns-table td:nth-child(5){width:100%;min-width:0}
 }
+
+/* =====================================================
+   MONTÊ ADMIN — MAKEOVER MINIMALISTA (nov/2026)
+   Camada final. Menos tinta e mais respiro: o que pede ação aparece,
+   o que já está resolvido fica discreto.
+   · Menu lateral claro; o preto fica para o item ativo e os botões principais.
+   · Sem sombras, molduras e gradientes: cartões brancos com uma linha fina.
+   · Hierarquia: título da página e dos blocos em Playfair; título dos cartões,
+     números e códigos de pedido em DM Sans.
+   · Sem os sobretítulos (VENDAS, CATÁLOGO...) que repetiam o menu e o topo.
+   · Situação dos pedidos: PAGO e SEPARANDO em destaque (falta fazer);
+     enviado e entregue em tons suaves.
+===================================================== */
+:root{
+  --ad-bg:#f7f7f5;
+  --ad-line:#ebebe8;
+  --ad-line-strong:#d9d9d5;
+  --ad-soft:#fafaf8;
+  --ad-hover:#f2f2ef;
+  --ad-muted:#73736f;
+  --ad-faint:#a6a6a1;
+  --ad-radius:12px;
+  --ad-radius-sm:8px;
+  --ad-shadow-sm:none;
+  --ad-shadow:0 1px 2px rgba(0,0,0,.03);
+}
+
+/* ---------- Botões: sem brilho ao passar o mouse, letras menos espaçadas ---------- */
+.app button,.modal button,#loginForm button{letter-spacing:.1em}
+.app button:not(.secondary):not(.nav-button):not(.link-button):not(.text-button):not(.danger-button):not(.image-remove):not(.remove-variant):not(.stat):not(.subtab):not(.todo-item):not(.dash-period):not(.dash-src):not(.pipeline-step):hover,
+.modal button:not(.secondary):not(.danger-button):not(.image-remove):not(.remove-variant):hover,
+#loginForm button:hover{background:#2b2b2b;box-shadow:none}
+.section-head-actions button,.panel-head button,.panel-head .secondary-link{min-height:40px;padding:0 18px}
+.app .text-button{letter-spacing:.04em}
+
+/* ---------- Campos ---------- */
+input,select{min-height:42px}
+input:focus,select:focus,textarea:focus{box-shadow:0 0 0 3px rgba(0,0,0,.06)}
+
+/* ---------- Menu lateral claro ---------- */
+.app .sidebar{padding:28px 14px 16px;background:#fff;border-right:1px solid var(--ad-line)}
+.sidebar .brand{color:var(--ad-ink);margin:0 12px 30px}
+.sidebar .brand-logo{width:104px}
+.app .sidebar-label{margin:22px 12px 6px;color:var(--ad-faint);letter-spacing:.22em}
+.app .nav-button{min-height:38px;border-radius:8px;color:var(--ad-ink-2);font-size:13.5px}
+.app .nav-button:hover,.app button.nav-button:hover{background:var(--ad-hover);color:var(--ad-ink);box-shadow:none}
+.app .nav-button.active,.app button.nav-button.active:hover{background:var(--ad-hover);color:var(--ad-ink);font-weight:500;box-shadow:none}
+.app .nav-button .nav-icon{opacity:.75}
+.app .nav-button.active .nav-icon,.app .nav-button:hover .nav-icon{opacity:1}
+.nav-badge{background:var(--ad-ink);color:#fff}
+.app .sidebar-bottom{border-top-color:var(--ad-line)}
+.app .sidebar-bottom a,.app .sidebar-bottom button{color:var(--ad-muted)!important}
+.app .sidebar-bottom a:hover,.app .sidebar-bottom button:hover{color:var(--ad-ink)!important;background:var(--ad-hover)!important}
+
+/* ---------- Topo e cabeçalho das seções ---------- */
+.topbar{margin-bottom:30px;padding:16px 0}
+.admin-email{border-color:var(--ad-line);background:transparent}
+.section-head .eyebrow,.dash-block-head .eyebrow{display:none}
+.section-head{align-items:center;margin:0 0 24px}
+.section-head h1{font-size:clamp(28px,2.6vw,34px)}
+.section-desc{margin-top:6px;font-size:13.5px}
+
+/* ---------- Cartões: linha fina, sem sombra ---------- */
+.panel{padding:22px 24px}
+.panel-head{margin:0 0 18px;padding:0;border-bottom:0}
+.panel-head h2,.panel h2{font:600 15.5px/1.3 var(--ad-sans);letter-spacing:-.005em}
+.panel-head .field-help{margin-top:4px}
+.app .notice{padding:12px 16px;border-radius:10px}
+/* "Fotos mais leves" só aparece quando há fotos para otimizar (ou o aviso de quando terminou). */
+.app .photo-optimizer.is-idle{display:none}
+.drawer-plus{width:32px;height:32px;font-size:18px}
+.drawer-title{font:600 15.5px/1.3 var(--ad-sans)}
+.form-drawer-summary{padding:16px 22px}
+
+/* ---------- Visão geral ---------- */
+.welcome{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:28px;padding:30px 32px;border:1px solid var(--ad-line);border-radius:16px;color:var(--ad-ink);background:#fff}
+.welcome::after{display:none}
+.welcome .eyebrow{color:var(--ad-muted);font-size:10px;letter-spacing:.24em}
+.welcome h2{font-size:clamp(30px,3vw,40px)}
+.welcome-copy p:not(.eyebrow){max-width:460px;color:var(--ad-muted);font-size:13.5px;line-height:1.55}
+.welcome-actions{margin-top:22px}
+.app .welcome-actions button{min-height:40px;background:var(--ad-ink);color:#fff}
+.app .welcome-actions button:hover{background:#2b2b2b}
+.app .welcome-actions button.secondary{background:#fff;color:var(--ad-ink);border:1px solid var(--ad-line-strong)}
+.app .welcome-actions button.secondary:hover{background:#fff;color:var(--ad-ink);border-color:var(--ad-ink)}
+.welcome-revenue{align-self:stretch;align-content:center;gap:8px;padding-left:28px;border-left:1px solid var(--ad-line)}
+.welcome-revenue #heroLabel{color:var(--ad-muted);letter-spacing:.2em}
+.welcome-revenue strong{font-size:clamp(34px,3.6vw,48px);color:var(--ad-ink)}
+.welcome-revenue strong.up{color:var(--ad-up)}
+.welcome-revenue strong.down{color:var(--ad-down)}
+.welcome .delta-value.up{color:var(--ad-up)}
+.welcome .delta-value.down{color:var(--ad-down)}
+.welcome .delta-value.flat,.welcome .delta-label,.welcome-revenue small{color:var(--ad-muted)}
+.hero-net{margin:0 0 2px;font-size:14px;color:var(--ad-ink-2)}
+
+/* Precisa da sua atenção: número num círculo vinho, sem a faixa grossa à esquerda. */
+.todo-list{margin:0 0 6px}
+.todo-title{display:flex;align-items:center;gap:8px;letter-spacing:.2em}
+.todo-title::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ad-wine)}
+.app .todo-item{padding:12px 14px;border:1px solid var(--ad-line);border-radius:12px;box-shadow:none}
+.app .todo-item:hover,.app button.todo-item:hover{border-color:var(--ad-line-strong);background:var(--ad-soft);box-shadow:none}
+.todo-item strong{display:grid;place-items:center;flex:none;min-width:32px;height:32px;padding:0 8px;border-radius:999px;background:#f6eef0;color:var(--ad-wine);font:600 14px/1 var(--ad-sans)}
+.todo-item i{color:var(--ad-faint)}
+.todo-empty{border-color:var(--ad-line)}
+
+.dash-block-head{margin:40px 0 16px}
+.dash-block-head h2{font-size:24px}
+.dash-periods,.dash-range{box-shadow:none}
+.kpi{padding:18px 20px}
+.kpi-label{font-size:12.5px;color:var(--ad-muted)}
+.kpi-value{font-size:26px}
+.rank-list{gap:14px}
+.rank-thumb{width:40px;height:40px;border-radius:8px;background:var(--ad-soft)}
+.rank-track{height:6px;background:#f0f0ed}
+.app button.pipeline-step{padding:16px 18px;box-shadow:none}
+.app button.pipeline-step:hover{border-color:var(--ad-line-strong);background:var(--ad-soft);box-shadow:none}
+.pipeline-step strong{font-size:24px}
+.net-step strong{font-size:22px}
+
+/* ---------- Tabelas ---------- */
+.table th{padding:10px 12px;font-size:10.5px;letter-spacing:.1em}
+.table td{padding:14px 12px;border-bottom-color:#f0f0ed}
+.table tbody tr:hover{background:var(--ad-soft)}
+.table .link-button{font-family:var(--ad-sans);font-size:13.5px!important;font-weight:600;letter-spacing:.01em!important}
+/* A linha inteira do pedido abre os detalhes; o botão fica discreto até passar o mouse. */
+.order-table tbody tr[data-click]{cursor:pointer}
+.app .order-table td:last-child .small-button{border-color:transparent;background:transparent;color:var(--ad-muted)}
+.app .order-table tbody tr:hover td:last-child .small-button{border-color:var(--ad-line-strong);color:var(--ad-ink)}
+.order-alert{border-left-width:2px}
+
+/* Situação: falta fazer em destaque; resolvido em tons suaves; ponto colorido para bater o olho. */
+.badge{gap:6px;padding:5px 10px;font-size:10px;font-weight:600;letter-spacing:.08em}
+.badge.paid{background:var(--ad-ink);color:#fff;box-shadow:none}
+.badge.processing{background:#fff;color:var(--ad-ink);box-shadow:inset 0 0 0 1px var(--ad-ink)}
+.badge.shipped{background:#ecece8;color:var(--ad-ink);box-shadow:none}
+.badge.delivered{background:#f1f1ee;color:#5c5c58;box-shadow:none}
+.badge.delivered::before{background:var(--ad-up)}
+.badge.pending{background:transparent;color:var(--ad-muted);box-shadow:inset 0 0 0 1px var(--ad-line-strong)}
+.badge.expired{background:transparent;color:var(--ad-faint);box-shadow:inset 0 0 0 1px var(--ad-line)}
+.badge.cancelled{background:#fbf1f2;color:var(--ad-danger);box-shadow:none}
+.chip{padding:4px 8px;font-size:9px;letter-spacing:.12em}
+
+/* ---------- Produtos ---------- */
+.toolbar input{height:44px;box-shadow:none}
+.admin-product:hover{transform:none;border-color:var(--ad-line-strong);box-shadow:none}
+.admin-product img{background:var(--ad-soft)}
+.admin-product-body{padding:14px 16px 16px}
+.admin-product-body h3{font-size:17px}
+.admin-product-price{font-size:14px}
+.admin-product-link{margin-top:4px;padding-top:0;border-top:0}
+.admin-product-link-text{overflow:hidden;color:var(--ad-muted);font-size:11.5px;white-space:nowrap;text-overflow:ellipsis;word-break:normal}
+.admin-product-actions{padding-top:14px}
+.app .admin-product-actions button{min-height:36px;font-size:10px}
+.app .admin-product-actions .secondary{border-color:var(--ad-line)}
+
+/* ---------- Cupons, promoções e formulários ---------- */
+.app .coupon-code{font-size:17px}
+.promo-name{font:600 17px/1.3 var(--ad-sans);letter-spacing:0}
+.coupon-uses strong{font:600 18px var(--ad-sans)}
+.coupon-card-actions{margin:14px 0}
+.form-block>legend{font:600 15px/1.3 var(--ad-sans)}
+.detail-card{border-color:var(--ad-line)}
+.detail-card h3{font:600 14.5px/1.3 var(--ad-sans)}
+.total-line{font-family:var(--ad-sans);font-weight:600!important;font-size:17px!important}
+.modal{background:rgba(20,20,18,.45)}
+.modal-card{border-radius:16px;box-shadow:0 24px 64px -28px rgba(0,0,0,.35)}
+
+/* ---------- Analytics e SMS: números em DM Sans, como na Visão geral ---------- */
+.analytics-kpi strong,.mini-stats strong{font:600 24px/1.15 var(--ad-sans);letter-spacing:-.02em}
+.analytics-kpi span,.mini-stats span{letter-spacing:.1em}
+.sms-balance{font:600 26px/1.15 var(--ad-sans);letter-spacing:-.02em}
+.sms-messages-head h3{font:600 15px var(--ad-sans)}
+
+/* ---------- Telas médias ---------- */
+@media (max-width:1000px){
+  .welcome{grid-template-columns:1fr;gap:22px}
+  .welcome-revenue{justify-self:stretch;padding:20px 0 0;border-left:0;border-top:1px solid var(--ad-line)}
+}
+
+/* ---------- Celular: topo branco, seção ativa em preto ---------- */
+@media (max-width:800px){
+  .app .sidebar{padding:12px 14px 0;border-right:0;border-bottom:1px solid var(--ad-line);box-shadow:none}
+  .sidebar .brand{margin:0 0 0 2px}
+  .sidebar .brand-logo{width:82px}
+  .app .nav-button{color:var(--ad-ink-2)}
+  .app .nav-button .nav-icon{opacity:1}
+  .app .nav-button.active,.app button.nav-button.active:hover{background:var(--ad-ink);color:#fff}
+  .app .nav-button.active .nav-icon{stroke:#fff}
+  .app .nav-button.active .nav-badge{background:#fff;color:var(--ad-ink)}
+  .topbar{margin-bottom:20px}
+  .section-head{margin-bottom:20px}
+  .section-head h1{font-size:28px}
+  .panel{padding:18px}
+  .welcome{padding:22px 20px;border-radius:14px}
+  .dash-block-head{margin:32px 0 14px}
+  .dash-block-head h2{font-size:22px}
+  .kpi-value{font-size:21px}
+  .app .order-table td:last-child .small-button{border-color:var(--ad-line-strong);color:var(--ad-ink)}
+  /* Os pedidos já viram cartões: sem a caixa em volta (nada de caixa dentro de caixa). */
+  #ordersTable.panel,.dash-recent.panel{padding:0;border:0;background:transparent}
+  #ordersTable .order-alert{margin:0 0 10px}
+}

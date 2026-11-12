@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20261110-sms-motivo">
+<link rel="stylesheet" href="admin.css?v=20261112-minimalista">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -99,7 +99,7 @@
         <div class="welcome-copy">
           <p class="eyebrow" id="welcomeDate">MONTÊ</p>
           <h2 id="welcomeTitle">Olá.</h2>
-          <p>Como a loja está indo: as vendas do site e, se quiser, as de fora do site lançadas na Olist. Os pedidos de teste ficam de fora.</p>
+          <p>Resumo das vendas do site e da Olist. Pedidos de teste não entram nas contas.</p>
           <div class="welcome-actions">
             <button type="button" data-go="orders">VER PEDIDOS</button>
             <button type="button" class="secondary" data-go="products">VER PRODUTOS</button>
@@ -115,6 +115,11 @@
       </div>
 
       <div id="dashboardTodo" class="todo-list" aria-live="polite"></div>
+
+      <div class="dash-block-head">
+        <div><p class="eyebrow">OPERAÇÃO</p><h2>Pedidos do site</h2></div>
+      </div>
+      <div id="dashPipeline" class="pipeline"></div>
 
       <div class="dash-block-head">
         <div><p class="eyebrow">DESEMPENHO</p><h2>Vendas</h2></div>
@@ -150,17 +155,16 @@
       </div>
 
       <div class="dash-block-head">
-        <div><p class="eyebrow">OPERAÇÃO</p><h2>Pedidos do site</h2></div>
+        <div><h2>Últimos pedidos</h2></div>
         <button class="text-button" data-go="orders">Ver todos os pedidos</button>
       </div>
-      <div id="dashPipeline" class="pipeline"></div>
-      <div class="panel"><div class="panel-head"><h2>Últimos pedidos</h2></div><div id="recentOrders" class="table-wrap"></div></div>
+      <div class="panel dash-recent"><div id="recentOrders" class="table-wrap"></div></div>
     </section>
 
     <section id="productsSection" class="section hidden">
       <div class="section-head"><div class="section-head-text"><p class="eyebrow">CATÁLOGO</p><h1>Produtos</h1><p class="section-desc">Fotos, preços, cores e estoque de cada peça da loja.</p></div><div class="section-head-actions"><button id="newProductButton">+ NOVO PRODUTO</button></div></div>
       <div class="toolbar"><input id="productSearch" type="search" placeholder="Buscar por nome ou SKU..." aria-label="Buscar produtos por nome ou SKU"><span id="productsCount" class="toolbar-count" aria-live="polite"></span></div>
-      <div class="photo-optimizer notice"><div><strong>Fotos mais leves</strong><p id="optimizePhotosStatus" class="field-help">Conferindo as fotos…</p></div><button id="optimizePhotosButton" type="button" class="secondary" hidden>OTIMIZAR FOTOS DO SITE</button></div>
+      <div class="photo-optimizer notice is-idle"><div><strong>Fotos mais leves</strong><p id="optimizePhotosStatus" class="field-help">Conferindo as fotos…</p></div><button id="optimizePhotosButton" type="button" class="secondary" hidden>OTIMIZAR FOTOS DO SITE</button></div>
       <div id="olistCleanupBar" class="olist-cleanup-bar notice hidden"><div><strong id="olistCleanupTitle"></strong><span id="olistCleanupInfo" class="field-help"></span></div><div class="olist-cleanup-actions"><label class="olist-filter"><input id="olistOnlyFilter" type="checkbox"> Mostrar só Olist</label><button id="deleteOlistProductsButton" type="button" class="danger-button">EXCLUIR PRODUTOS DA OLIST</button></div></div>
       <div id="productsGrid" class="product-admin-grid"></div>
     </section>
@@ -424,7 +428,7 @@
 <script src="safe-html.js?v=20261007-seguranca"></script>
 <script src="infinitepay-report.js?v=20261108-fatura"></script>
 <script src="dash-compare.js?v=20261105-evolucao"></script>
-<script src="admin.js?v=20261110-sms"></script>
+<script src="admin.js?v=20261112-minimalista"></script>
 <script src="admin-carousel.js?v=20261104-previa-link"></script>
 <script src="sms-text.js?v=20261110-sms-motivo"></script>
 <script src="admin-sms.js?v=20261110-sms-arquivo"></script>
