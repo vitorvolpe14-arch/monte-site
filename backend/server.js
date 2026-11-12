@@ -1629,6 +1629,10 @@ const allowedOrigins = new Set([
 // CSP sem 'unsafe-inline': nenhum script ou estilo dentro do HTML (eventos usam data-click,
 // veja safe-html.js) e cada diretiva definida explicitamente. A mesma política está no
 // arquivo _headers (páginas servidas direto dos assets); as duas precisam ficar iguais.
+// Estatísticas da Cloudflare (Web Analytics): só o endereço fixo do script entra no script-src.
+// A Cloudflare coloca a chamada dela em toda página (beacon.min.js/v<versão>) e essa continua
+// barrada; a loja carrega o endereço fixo depois da permissão de estatísticas (script.js,
+// loadCloudflareAnalytics). Os dados vão para /cdn-cgi/rum, na própria loja ('self').
 const CONTENT_SECURITY_POLICY = [
     "default-src 'self'",
     "base-uri 'self'",
@@ -1636,7 +1640,7 @@ const CONTENT_SECURITY_POLICY = [
     "frame-ancestors 'self'",
     "frame-src 'none'",
     "form-action 'self'",
-    "script-src 'self' https://www.googletagmanager.com",
+    "script-src 'self' https://www.googletagmanager.com https://static.cloudflareinsights.com/beacon.min.js",
     "script-src-attr 'none'",
     "style-src 'self'",
     "font-src 'self'",
@@ -1648,11 +1652,13 @@ const CONTENT_SECURITY_POLICY = [
     "upgrade-insecure-requests"
 ].join("; ");
 
-// Painel: mesma política, sem Google (o painel não usa) e sem poder ser aberto dentro de outra página.
+// Painel: mesma política, sem Google nem Cloudflare (o painel não usa estatísticas) e sem poder
+// ser aberto dentro de outra página.
 const ADMIN_CONTENT_SECURITY_POLICY = CONTENT_SECURITY_POLICY
     .replace(/ https:\/\/(\*|www)\.googletagmanager\.com/g, "")
     .replace(/ https:\/\/\*\.google-analytics\.com/g, "")
     .replace(/ https:\/\/\*\.analytics\.google\.com/g, "")
+    .replace(" https://static.cloudflareinsights.com/beacon.min.js", "")
     .replace("frame-ancestors 'self'", "frame-ancestors 'none'");
 
 function securityHeaders(req, res, next) {
