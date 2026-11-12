@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
-<link rel="stylesheet" href="admin.css?v=20261112-minimalista">
+<link rel="stylesheet" href="admin.css?v=20261112-visitas">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -330,7 +330,7 @@
     <section id="analyticsSection" class="section hidden">
       <div class="section-head"><div class="section-head-text"><p class="eyebrow">PAINEL</p><h1>Analytics &amp; Financeiro</h1><p class="section-desc">Visitas, vendas e funil de compra no período escolhido.</p></div><div class="section-head-actions analytics-toolbar"><select id="analyticsDays" aria-label="Período"><option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option></select><button id="refreshAnalytics" class="secondary">ATUALIZAR</button></div></div>
       <div id="analyticsError" class="error"></div><div id="analyticsKpis" class="analytics-kpis"></div>
-      <div class="analytics-grid"><div class="panel"><div class="panel-head"><h2>Visitas e faturamento</h2></div><div id="analyticsChart" class="analytics-chart"></div></div><div class="panel"><div class="panel-head"><h2>Funil de compra</h2></div><div id="analyticsFunnel" class="analytics-funnel"></div></div></div>
+      <div class="analytics-grid"><div class="panel analytics-visits"><div class="panel-head"><div><h2>Visitas por dia</h2><p id="analyticsChartHint" class="field-help"></p></div></div><div id="analyticsChart" class="dash-chart" tabindex="0" aria-describedby="analyticsChartHint"></div><details class="help-more dash-table"><summary>Ver em tabela</summary><div id="analyticsVisitsTable" class="table-wrap"></div></details></div><div class="panel"><div class="panel-head"><h2>Funil de compra</h2></div><div id="analyticsFunnel" class="analytics-funnel"></div></div></div>
       <div class="analytics-grid"><div class="panel"><div class="panel-head"><h2>Abandono de carrinho</h2></div><div id="analyticsCarts"></div></div><div class="panel"><div class="panel-head"><h2>Formas de pagamento</h2></div><div id="analyticsPayments"></div></div></div>
       <div class="analytics-grid"><div class="panel"><div class="panel-head"><h2>Produtos mais vendidos</h2></div><div id="analyticsTopProducts"></div></div><div class="panel"><div class="panel-head"><h2>Pedidos do período</h2></div><div id="analyticsOrders"></div></div></div>
       <div class="panel"><div class="panel-head"><h2>Carrinhos recentes</h2></div><div id="analyticsRecentCarts"></div></div>
@@ -428,7 +428,7 @@
 <script src="safe-html.js?v=20261007-seguranca"></script>
 <script src="infinitepay-report.js?v=20261108-fatura"></script>
 <script src="dash-compare.js?v=20261105-evolucao"></script>
-<script src="admin.js?v=20261112-minimalista"></script>
+<script src="admin.js?v=20261112-visitas"></script>
 <script src="admin-carousel.js?v=20261104-previa-link"></script>
 <script src="sms-text.js?v=20261110-sms-motivo"></script>
 <script src="admin-sms.js?v=20261110-sms-arquivo"></script>
