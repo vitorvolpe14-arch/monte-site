@@ -3219,3 +3219,35 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 3px rgba(0,0,0,.06)}
   /* Só o ícone do tema no topo do celular (o nome fica para o leitor de tela). */
   .app .sidebar-bottom .theme-toggle .theme-label{display:none}
 }
+
+/* =====================================================
+   TEMA ESCURO — MAIS CONTRASTE (nov/2026)
+   Uma camada antiga do celular pintava de branco as opções de marcar, as linhas de
+   cor/SKU/estoque e a barra de botões das janelas; e o navegador desenhava as caixinhas
+   desmarcadas como quadrados pretos, quase sem borda. Aqui tudo fica no escuro e a
+   caixinha é desenhada pelo painel: borda clara (6:1 no cartão) e, marcada, fundo claro
+   com o "✓" escuro.
+===================================================== */
+[data-theme="dark"] input[type="checkbox"]{-webkit-appearance:none;appearance:none;display:inline-grid;place-content:center;flex:none;width:18px;height:18px;min-height:0;margin:0;padding:0;border:1.5px solid #a3a39e;border-radius:5px;background:#121211;cursor:pointer;box-shadow:none}
+[data-theme="dark"] input[type="checkbox"]:checked{border-color:var(--ad-ink);background:var(--ad-ink) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%230e0e0d' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/13px 13px no-repeat}
+[data-theme="dark"] input[type="checkbox"]:focus-visible{outline:2px solid var(--ad-ink);outline-offset:2px}
+[data-theme="dark"] input[type="checkbox"]:disabled{opacity:.5;cursor:default}
+[data-theme="dark"] .checks label,[data-theme="dark"] .sku-toggle,[data-theme="dark"] .olist-filter,[data-theme="dark"] .orders-expired-toggle,[data-theme="dark"] .benefit-toggle{color:var(--ad-ink)}
+@media (max-width:800px){
+  [data-theme="dark"] .checks label{background:var(--ad-soft);border-color:var(--ad-line-strong)}
+  [data-theme="dark"] .variant-row{background:var(--ad-soft);border-color:var(--ad-line)}
+  [data-theme="dark"] .variant-row-head{background:transparent;border-color:transparent;color:var(--ad-muted)}
+  [data-theme="dark"] .modal-actions{background:var(--ad-card);border-color:var(--ad-line)}
+}
+/* Tons do escuro com mais contraste: texto de apoio 7,5:1, texto secundário 12:1, bordas de campos e
+   botões 3,3:1 (o mínimo para enxergar o contorno é 3:1), texto de exemplo dos campos 5,8:1. */
+:root[data-theme="dark"]{--ad-ink-2:#d6d6d1;--ad-muted:#a8a8a2;--ad-faint:#8f8f8a;--ad-line:#30302d;--ad-line-strong:#6a6a64}
+[data-theme="dark"] input:hover,[data-theme="dark"] select:hover,[data-theme="dark"] textarea:hover{border-color:#8f8f8a}
+[data-theme="dark"] input::placeholder,[data-theme="dark"] textarea::placeholder{color:#8f8f8a}
+/* Etiqueta de pré-venda (e "aceite ou recuse"): vinho escuro com letra branca (7,8:1). */
+[data-theme="dark"] .chip.chip-presale{background:#8c3347;color:#fff}
+[data-theme="dark"] .badge.expired{color:var(--ad-muted);box-shadow:inset 0 0 0 1px var(--ad-line-strong)}
+[data-theme="dark"] .order-item span{color:var(--ad-muted)}
+/* Tema claro com o mesmo cuidado: texto de apoio 5,4:1 e o mais fraco 4,6:1 no fundo da página. */
+:root{--ad-muted:#666662;--ad-faint:#71716d}
+.order-item span{color:var(--ad-muted)}
