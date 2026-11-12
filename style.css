@@ -6660,7 +6660,7 @@ html.intro-skipped .header { animation-delay: .5s; }
     position: relative;
     padding-top: 46px;
     perspective: 900px;
-    filter: drop-shadow(0 18px 22px rgba(20, 8, 12, .16)) drop-shadow(0 2px 3px rgba(20, 8, 12, .1));
+    filter: drop-shadow(0 14px 18px rgba(20, 8, 12, .1)) drop-shadow(0 1px 2px rgba(20, 8, 12, .08));
 }
 
 .order-note-cord {
@@ -6835,10 +6835,24 @@ html.intro-skipped .header { animation-delay: .5s; }
     color: #8a8178;
 }
 
+/* Valores da compra como num recibo: uma linha para cada um, nome à esquerda e valor à direita. */
 .order-note-sum {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 9px;
     padding-top: 14px;
     border-top: 1px dashed rgba(27, 23, 22, .28);
 }
+
+.order-note-sum > div {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+}
+
+.order-note-sum > div[hidden] { display: none; }
+.order-note-sum dt { flex: none; margin: 0; }
+.order-note-sum dd { text-align: right; }
 
 .order-note-total {
     display: flex;
@@ -6877,46 +6891,31 @@ html.intro-skipped .header { animation-delay: .5s; }
 }
 
 /* =====================================================
-   CHECKOUT MONTÊ — sacola em etapas (2026)
-   Etapas numeradas com progresso, campos com rótulo
-   flutuante, cartões de entrega e pagamento, incentivo
-   do Pix e barra fixa com total e botão de finalizar.
+   CHECKOUT MONTÊ — sacola em etapas (versão limpa, nov/2026)
+   Uma superfície só: tudo sobre o branco, separado por fio e
+   espaço em vez de cartões dentro de cartões. O bege areia fica
+   nos detalhes e o único botão forte é o FINALIZAR COMPRA; os
+   outros são discretos. Entrega e pagamento usam a mesma linha
+   de escolha, os benefícios (Pix, presente, frete grátis) ficam
+   juntos num bloco só e os preços alinham na mesma coluna.
 ===================================================== */
 
 #cartOverlay {
     --co-ink: #0d0d0d;
-    --co-muted: #8a847e;
-    --co-line: #ece8e2;
-    --co-field: #e2ddd6;
-    --co-soft: #f7f5f2;
-    /* Bege areia da paleta MONTÊ no lugar do cinza da campanha.
-       --co-accent: bege escuro (#867251, o --areia-texto) para detalhes pequenos com
-         branco por cima (ícones, selos, barras de progresso) e textos de destaque.
-       --co-accent-soft: bege areia (#d6ccbb, o --areia) para as superfícies grandes
-         (barra do total e botões de vidro), sempre com texto preto. */
+    --co-text: #333;
+    /* Os cinzas são os do site: --gray (#f5f5f3) nos fundos (bloco dos benefícios, avisos e
+       a opção escolhida), --border (#ddddda) nas bordas dos campos e o #777 dos textos de apoio. */
+    --co-muted: #777;
+    --co-line: #ecece9;
+    --co-field: var(--border, #ddddda);
+    --co-soft: var(--gray, #f5f5f3);
+    /* Bege areia da paleta MONTÊ, só nos detalhes: --co-accent (#867251, o --areia-texto) em
+       textos e traços; --co-accent-soft (#d6ccbb, o --areia) nos selos, com letra preta. */
     --co-accent: #867251;
     --co-accent-deep: #867251;
     --co-accent-soft: #d6ccbb;
-    /* Vidro líquido dos botões: aro de luz mais forte em cima e embaixo, sombra interna
-       no alto, brilho de refração na base e sombra projetada. Sobre o branco o próprio
-       botão carrega o bege; o Finalizar compra, na barra bege, é preto. */
-    --co-lg-rim: linear-gradient(180deg, rgba(255, 255, 255, .95), rgba(255, 255, 255, .3) 26%, rgba(255, 255, 255, .18) 60%, #fff);
-    --co-lg-clear:
-        radial-gradient(80% 60% at 50% 100%, rgba(255, 255, 255, .34), rgba(255, 255, 255, 0) 72%),
-        linear-gradient(180deg, rgba(0, 0, 0, .05), rgba(255, 255, 255, .06) 45%, rgba(255, 255, 255, .14));
-    /* Sobre o branco o botão é o próprio bege areia. */
-    --co-lg-tinted:
-        radial-gradient(80% 60% at 50% 100%, rgba(255, 255, 255, .34), rgba(255, 255, 255, 0) 72%),
-        var(--co-accent-soft);
-    --co-lg-shadow:
-        inset 0 10px 16px -10px rgba(0, 0, 0, .22),
-        inset 0 -8px 14px -8px rgba(255, 255, 255, .6),
-        0 0 0 1px rgba(134, 114, 81, .18),
-        0 14px 24px -12px rgba(60, 48, 30, .34);
-    --co-lg-blur: blur(10px) saturate(150%);
-    /* Cabeçalho e barra do total: placas de vidro sobre o conteúdo que rola. */
-    --co-glass-surface: rgba(255, 255, 255, .58);
-    --co-glass-surface-blur: blur(24px) saturate(180%);
+    /* Margem lateral do painel (menor no celular). */
+    --co-pad: 28px;
     background: rgba(12, 10, 9, .46);
     -webkit-backdrop-filter: blur(3px);
     backdrop-filter: blur(3px);
@@ -6927,34 +6926,25 @@ html.intro-skipped .header { animation-delay: .5s; }
     background: #fff;
     font-family: "DM Sans", sans-serif;
     color: var(--co-ink);
-    box-shadow: -30px 0 60px -30px rgba(0, 0, 0, .4);
+    box-shadow: -24px 0 48px -32px rgba(0, 0, 0, .35);
     transform: translateX(48px);
     transition: transform .6s cubic-bezier(.2, .8, .2, 1);
 }
 
 #cartOverlay.active .cart { transform: none; }
 
-/* Cabeçalho */
+/* Cabeçalho: título, fechar e as etapas. Branco quase opaco: o conteúdo que rola por
+   baixo não aparece atrás do texto. */
 #cartOverlay .cart-header {
     display: grid;
     grid-template-columns: 1fr auto;
     align-items: center;
-    row-gap: 18px;
-    padding: 22px 26px 16px;
-    border-bottom: 1px solid rgba(134, 114, 81, .16);
-    /* Vidro: as peças passam desfocadas por baixo do cabeçalho fixo. Mais denso embaixo:
-       perto da borda o desfoque espelha o conteúdo e ele brigaria com as etapas. */
-    background: linear-gradient(180deg, var(--co-glass-surface), rgba(255, 255, 255, .72) 50%, rgba(255, 255, 255, .94) 82%);
-    -webkit-backdrop-filter: var(--co-glass-surface-blur);
-    backdrop-filter: var(--co-glass-surface-blur);
-    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, .6);
-}
-
-#cartOverlay .cart-kicker {
-    margin: 0 0 6px;
-    font-size: 9px;
-    letter-spacing: .34em;
-    color: var(--co-accent-deep);
+    row-gap: 16px;
+    padding: 18px var(--co-pad) 14px;
+    border-bottom: 1px solid var(--co-line);
+    background: rgba(255, 255, 255, .95);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
 }
 
 #cartOverlay .cart-header h2 {
@@ -6962,18 +6952,19 @@ html.intro-skipped .header { animation-delay: .5s; }
     align-items: center;
     gap: 10px;
     margin: 0;
-    font: 400 28px/1 "Playfair Display", serif;
+    font: 400 24px/1.1 "Playfair Display", serif;
 }
 
 .cart-header-count {
     display: inline-grid;
     place-items: center;
-    min-width: 24px;
-    height: 24px;
-    padding: 0 7px;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    box-sizing: border-box;
     border-radius: 999px;
-    background: var(--co-ink);
-    color: #fff;
+    background: var(--co-accent-soft);
+    color: var(--co-ink);
     font: 600 11px/1 "DM Sans", sans-serif;
 }
 
@@ -6982,14 +6973,18 @@ html.intro-skipped .header { animation-delay: .5s; }
     place-items: center;
     width: 40px;
     height: 40px;
+    margin: -6px -10px -6px 0;
     padding: 0;
+    border: 0;
     border-radius: 50%;
+    background: none;
+    color: var(--co-ink);
     cursor: pointer;
-    transition: transform .35s ease, filter .25s ease;
+    transition: background .2s ease;
 }
 
-#cartOverlay .cart-close svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; }
-#cartOverlay .cart-close:hover { transform: rotate(90deg); }
+#cartOverlay .cart-close svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.4; }
+#cartOverlay .cart-close:hover { background: var(--co-soft); }
 
 /* Etapas */
 .checkout-steps {
@@ -7007,7 +7002,7 @@ html.intro-skipped .header { animation-delay: .5s; }
 .checkout-steps::after {
     content: "";
     position: absolute;
-    top: 6px;
+    top: 5px;
     left: 12.5%;
     height: 1px;
     background: var(--co-field);
@@ -7033,7 +7028,7 @@ html.intro-skipped .header { animation-delay: .5s; }
     border: 0;
     background: none;
     color: var(--co-muted);
-    font: 500 9.5px/1 "DM Sans", sans-serif;
+    font: 500 9px/1 "DM Sans", sans-serif;
     letter-spacing: .16em;
     text-transform: uppercase;
     cursor: pointer;
@@ -7041,12 +7036,13 @@ html.intro-skipped .header { animation-delay: .5s; }
 
 .checkout-steps i {
     position: relative;
-    width: 13px;
-    height: 13px;
-    border: 1px solid #c9c3bc;
+    width: 11px;
+    height: 11px;
+    box-sizing: border-box;
+    border: 1px solid #c9c9c5;
     border-radius: 50%;
     background: #fff;
-    transition: background .3s ease, border-color .3s ease, transform .3s ease;
+    transition: background .3s ease, border-color .3s ease;
 }
 
 .checkout-steps .is-done button { color: var(--co-ink); }
@@ -7055,32 +7051,30 @@ html.intro-skipped .header { animation-delay: .5s; }
 .checkout-steps .is-done i::after {
     content: "";
     position: absolute;
-    left: 3.5px;
-    top: 2.5px;
-    width: 5px;
-    height: 3px;
-    border-left: 1.4px solid #fff;
-    border-bottom: 1.4px solid #fff;
+    left: 2px;
+    top: 2px;
+    width: 4px;
+    height: 2px;
+    border-left: 1.2px solid #fff;
+    border-bottom: 1.2px solid #fff;
     transform: rotate(-45deg);
 }
 
 .checkout-steps .is-current button { color: var(--co-accent-deep); }
+.checkout-steps .is-current i { border: 3px solid var(--co-accent); }
 
-.checkout-steps .is-current i {
-    border: 3.5px solid var(--co-accent);
-    animation: coPulse 1.8s ease-out infinite;
-}
-
-/* Itens */
-#cartOverlay #cartItems { padding: 6px 26px 0; }
+/* Itens: foto, nome, cor, quantidade e preço. O preço fica na borda direita, na mesma
+   coluna do subtotal; o × de remover fica no canto, acima dele. */
+#cartOverlay #cartItems { padding: 2px var(--co-pad) 0; }
 
 #cartOverlay .cart-item {
+    position: relative;
     display: grid;
-    grid-template-columns: 84px minmax(0, 1fr) auto;
+    grid-template-columns: 76px minmax(0, 1fr);
     align-items: start;
     gap: 16px;
     margin: 0;
-    padding: 18px 0;
+    padding: 20px 0;
     border-bottom: 1px solid var(--co-line);
     animation: coRise .55s cubic-bezier(.2, .8, .2, 1) both;
     animation-delay: calc(var(--i, 0) * 70ms);
@@ -7089,45 +7083,42 @@ html.intro-skipped .header { animation-delay: .5s; }
 .cart-item-media {
     display: grid;
     place-items: center;
-    width: 84px;
-    height: 104px;
+    width: 76px;
+    height: 94px;
     overflow: hidden;
-    border-radius: 12px;
-    background: var(--co-soft);
+    border-radius: 10px;
 }
 
 #cartOverlay .cart-item img {
     width: 100%;
     height: 100%;
+    max-height: none;
     padding: 8px;
     box-sizing: border-box;
     object-fit: contain;
-    transition: transform .6s cubic-bezier(.2, .8, .2, 1);
 }
 
-#cartOverlay .cart-item:hover img { transform: scale(1.06); }
-
 #cartOverlay .cart-item-name {
-    margin: 2px 0 5px;
-    font: 400 18px/1.2 "Playfair Display", serif;
+    margin: 1px 0 5px;
+    padding-right: 34px;
+    font: 400 17px/1.25 "Playfair Display", serif;
 }
 
 .cart-item-variant {
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 11px;
-    letter-spacing: .06em;
+    font-size: 12px;
     color: var(--co-muted);
 }
 
 .cart-item-variant::before {
     content: "";
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: currentColor;
-    opacity: .5;
+    opacity: .45;
 }
 
 .cart-item-row {
@@ -7135,14 +7126,17 @@ html.intro-skipped .header { animation-delay: .5s; }
     justify-content: space-between;
     align-items: center;
     gap: 12px;
-    margin-top: 16px;
+    margin-top: 14px;
 }
 
+/* Quantidade: contorno fino, sem volume. */
 #cartOverlay .cart-quantity {
     display: inline-flex;
     align-items: center;
     margin: 0;
+    border: 1px solid var(--co-field);
     border-radius: 999px;
+    background: #fff;
 }
 
 #cartOverlay .cart-quantity button {
@@ -7152,14 +7146,15 @@ html.intro-skipped .header { animation-delay: .5s; }
     border: 0;
     border-radius: 50%;
     background: none;
-    color: inherit;
+    color: var(--co-ink);
     font-size: 15px;
+    line-height: 1;
     cursor: pointer;
     transition: background .2s ease;
 }
 
-#cartOverlay .cart-quantity button:hover { background: rgba(255, 255, 255, .16); }
-#cartOverlay .cart-quantity span { width: 22px; font-size: 12px; font-weight: 500; text-align: center; }
+#cartOverlay .cart-quantity button:hover { background: var(--co-soft); }
+#cartOverlay .cart-quantity span { width: 20px; font-size: 12.5px; font-weight: 500; text-align: center; }
 
 #cartOverlay .cart-item-price {
     font-size: 14px;
@@ -7168,13 +7163,16 @@ html.intro-skipped .header { animation-delay: .5s; }
     white-space: nowrap;
 }
 
-#cartOverlay .cart-item-price small { display: block; margin-top: 3px; font-size: 10px; font-weight: 400; color: var(--co-muted); }
+#cartOverlay .cart-item-price small { display: block; margin-top: 3px; font-size: 10.5px; font-weight: 400; color: var(--co-muted); }
 
 #cartOverlay .cart-item-remove {
+    position: absolute;
+    top: 14px;
+    right: -9px;
     display: grid;
     place-items: center;
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     padding: 0;
     border: 0;
     border-radius: 50%;
@@ -7184,128 +7182,124 @@ html.intro-skipped .header { animation-delay: .5s; }
     transition: background .2s ease, color .2s ease;
 }
 
-#cartOverlay .cart-item-remove svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; }
-#cartOverlay .cart-item-remove:hover { background: rgba(214, 204, 187, .45); color: var(--co-ink); }
+#cartOverlay .cart-item-remove svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+#cartOverlay .cart-item-remove:hover { background: var(--co-soft); color: var(--co-ink); }
 
 /* Sacola vazia */
 #cartOverlay .empty-cart { padding: 72px 24px 48px; text-align: center; color: var(--co-ink); }
-#cartOverlay .empty-cart svg { width: 58px; height: 58px; margin-bottom: 18px; fill: none; stroke: var(--co-ink); stroke-width: 1.1; }
-.empty-cart-title { margin: 0 0 8px; font: 400 25px/1.2 "Playfair Display", serif; }
+#cartOverlay .empty-cart svg { width: 52px; height: 52px; margin-bottom: 18px; fill: none; stroke: var(--co-ink); stroke-width: 1; }
+.empty-cart-title { margin: 0 0 8px; font: 400 24px/1.2 "Playfair Display", serif; }
 .empty-cart-text { margin: 0 0 26px; font-size: 13px; color: var(--co-muted); }
 
 .empty-cart-button {
-    padding: 16px 30px;
+    padding: 17px 32px;
+    border: 0;
     border-radius: 999px;
+    background: var(--co-ink);
+    color: #fff;
     font: 500 10px/1 "DM Sans", sans-serif;
     letter-spacing: .22em;
     cursor: pointer;
+    transition: background .2s ease;
 }
+
+.empty-cart-button:hover { background: #2b2523; }
 
 #cartOverlay .cart.is-empty .checkout-steps,
 #cartOverlay .cart.is-empty .cart-footer,
 #cartOverlay .cart.is-empty .checkout-bar { display: none !important; }
 
-/* Subtotal e incentivo do Pix */
-#cartOverlay .cart-footer { padding: 0 26px; border-top: 0; }
+/* Subtotal */
+#cartOverlay .cart-footer { padding: 0 var(--co-pad); border-top: 0; }
 
 #cartOverlay .cart-subtotal {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    margin: 16px 0 14px;
+    margin: 18px 0;
     font-size: 10px;
-    letter-spacing: .22em;
+    letter-spacing: .2em;
     text-transform: uppercase;
     color: var(--co-muted);
 }
 
 #cartOverlay .cart-subtotal strong { font: 500 15px/1 "DM Sans", sans-serif; letter-spacing: 0; color: var(--co-ink); }
 
-.pix-perk {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 6px;
-    padding: 13px 14px;
-    border: 1px solid #ebe5dc;
+/* Benefícios da compra (Pix, presente da promoção e frete grátis): um bloco só, uma linha
+   para cada um, separadas por fio. Sem benefício para mostrar, o bloco não ocupa espaço. */
+.cart-benefits {
+    padding: 0 16px;
     border-radius: 14px;
-    background: linear-gradient(120deg, #f4efe7, #fbf9f6);
+    background: var(--co-soft);
 }
 
-.pix-perk[hidden],
-.pix-perk-button[hidden] { display: none; }
+.cart-benefits > :not([hidden]) ~ :not([hidden]) { border-top: 1px solid #e3e3df; }
 
-.pix-perk-icon {
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    background: var(--co-accent);
-}
-
-.pix-perk-icon::before {
-    content: "";
-    width: 9px;
-    height: 9px;
-    border: 1.5px solid #fff;
-    transform: rotate(45deg);
-}
-
-.pix-perk p { flex: 1; margin: 0; font-size: 12.5px; line-height: 1.45; }
-.pix-perk strong { color: var(--co-accent-deep); font-weight: 600; }
-
-.pix-perk-button {
-    padding: 9px 14px;
-    border-radius: 999px;
-    font: 600 9.5px/1 "DM Sans", sans-serif;
-    letter-spacing: .16em;
-    cursor: pointer;
-}
-
-/* Frete grátis em Fortaleza e região a partir de R$ 599: quanto falta, com barra de progresso. */
+.pix-perk,
 .free-shipping-perk {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-bottom: 6px;
-    padding: 12px 14px;
-    border: 1px solid var(--co-line, #ece8e2);
-    border-radius: 14px;
-    background: #fcfaf8;
+    padding: 13px 0;
 }
 
+.pix-perk[hidden],
+.pix-perk-button[hidden],
 .free-shipping-perk[hidden] { display: none; }
 
+.pix-perk-icon,
 .free-shipping-perk-icon {
     flex: 0 0 auto;
     display: grid;
     place-items: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    background: var(--co-ink, #0d0d0d);
+    width: 20px;
+    height: 20px;
+}
+
+.pix-perk-icon::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border: 1.4px solid var(--co-accent);
+    transform: rotate(45deg);
 }
 
 .free-shipping-perk-icon svg {
-    width: 17px;
-    height: 17px;
+    width: 19px;
+    height: 19px;
     fill: none;
-    stroke: #fff;
-    stroke-width: 1.5;
+    stroke: var(--co-accent);
+    stroke-width: 1.4;
     stroke-linejoin: round;
 }
 
+.pix-perk p,
+.free-shipping-perk p { flex: 1; margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--co-text); }
+.pix-perk strong,
+.free-shipping-perk strong { color: var(--co-ink); font-weight: 600; }
+
+.pix-perk-button {
+    flex: none;
+    padding: 6px 0;
+    border: 0;
+    background: none;
+    color: var(--co-ink);
+    font: 600 9.5px/1 "DM Sans", sans-serif;
+    letter-spacing: .16em;
+    text-decoration: underline;
+    text-underline-offset: 4px;
+    cursor: pointer;
+}
+
+/* Frete grátis em Fortaleza e região: quanto falta, com uma barra fina. Ganhou: só o aviso. */
 .free-shipping-perk-body { flex: 1; min-width: 0; }
-.free-shipping-perk p { margin: 0 0 7px; font-size: 12.5px; line-height: 1.45; }
-.free-shipping-perk strong { color: var(--co-ink, #0d0d0d); font-weight: 600; }
+.free-shipping-perk-body p { margin: 0 0 8px; }
 
 .free-shipping-perk-bar {
     display: block;
-    height: 4px;
+    height: 2px;
     border-radius: 999px;
-    background: #ece8e2;
+    background: #e0e0dc;
     overflow: hidden;
 }
 
@@ -7314,13 +7308,12 @@ html.intro-skipped .header { animation-delay: .5s; }
     width: 0;
     height: 100%;
     border-radius: inherit;
-    background: var(--co-accent, #867251);
+    background: var(--co-accent);
     transition: width .5s ease;
 }
 
-.free-shipping-perk.is-active { border-color: #d9e8dc; background: #f3f8f4; }
-.free-shipping-perk.is-active .free-shipping-perk-icon { background: #2f6b45; }
-.free-shipping-perk.is-active .free-shipping-perk-bar i { background: #2f6b45; }
+.free-shipping-perk.is-active .free-shipping-perk-body p { margin: 0; }
+.free-shipping-perk.is-active .free-shipping-perk-bar { display: none; }
 
 /* "Você quis dizer …@gmail.com?" embaixo do e-mail do checkout. */
 .email-suggestion { grid-column: 1 / -1; margin: -2px 2px 2px; font-size: 12px; line-height: 1.5; color: var(--co-ink, #0d0d0d); }
@@ -7337,80 +7330,54 @@ html.intro-skipped .header { animation-delay: .5s; }
     cursor: pointer;
 }
 
-/* Opção de frete grátis: preço original riscado. */
-.shipping-option-price s { margin-right: 4px; color: var(--co-muted, #8a847e); font-weight: 400; }
-.shipping-option.is-free .shipping-option-price { color: #2f6b45; }
-
-/* Etapas do formulário */
+/* Etapas do formulário: sem cartão, só o título e um fio entre uma e outra. */
 #cartOverlay .checkout-form { margin: 0; padding: 0 0 8px; border-top: 0; }
 
-.checkout-step {
-    padding: 24px 0 26px;
-    border-top: 1px solid var(--co-line);
-}
-
-/* Cada etapa num cartão bege bem claro; campos, opções de frete e de pagamento, em
-   branco, saltam por cima. A margem negativa mantém os campos na mesma largura. */
 #cartOverlay .checkout-step {
-    margin: 12px -12px 0;
-    padding: 20px 12px 22px;
-    border: 1px solid #ede6db;
-    border-radius: 18px;
-    background: #f9f6f1;
+    margin: 0;
+    padding: 30px 0;
+    border: 0;
+    border-top: 1px solid var(--co-line);
+    border-radius: 0;
+    background: none;
 }
 
-#cartOverlay .checkout-step:first-child { margin-top: 18px; }
+/* A primeira vem logo depois do bloco dos benefícios: sem fio. */
+#cartOverlay .checkout-step:first-child { padding-top: 28px; border-top: 0; }
 #cartOverlay.active .checkout-step { animation: coRise .6s cubic-bezier(.2, .8, .2, 1) both; }
 #cartOverlay.active #stepDelivery { animation-delay: .08s; }
 #cartOverlay.active #stepPayment { animation-delay: .16s; }
 
-.checkout-step-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.checkout-step-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; }
 
+/* Número da etapa: só o algarismo, em bege. */
 .checkout-step-num {
-    display: grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
-    /* Número da etapa preenchido de bege; vira preto quando a etapa está completa. */
-    border-radius: 50%;
-    background: var(--co-accent-soft, #d6ccbb);
-    font: 400 12px/1 "Playfair Display", serif;
-    transition: background .35s ease, color .35s ease;
+    font: 500 11px/1 "DM Sans", sans-serif;
+    letter-spacing: .14em;
+    color: var(--co-accent);
 }
 
 #cartOverlay .checkout-step-head h3 {
     margin: 0;
-    font: 400 22px/1 "Playfair Display", serif;
+    font: 400 22px/1.1 "Playfair Display", serif;
     letter-spacing: 0;
     text-transform: none;
 }
 
+/* Etapa completa: um ✓ fino à direita do título. */
 .checkout-step-check {
-    position: relative;
+    align-self: center;
     margin-left: auto;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: var(--co-ink);
+    width: 11px;
+    height: 6px;
+    border-left: 1.5px solid var(--co-ink);
+    border-bottom: 1.5px solid var(--co-ink);
     opacity: 0;
-    transform: scale(.4);
-    transition: opacity .35s ease, transform .45s cubic-bezier(.3, 1.6, .5, 1);
+    transform: translateY(-2px) rotate(-45deg) scale(.5);
+    transition: opacity .3s ease, transform .4s cubic-bezier(.3, 1.6, .5, 1);
 }
 
-.checkout-step-check::after {
-    content: "";
-    position: absolute;
-    left: 6.5px;
-    top: 6.5px;
-    width: 8px;
-    height: 4px;
-    border-left: 1.5px solid #fff;
-    border-bottom: 1.5px solid #fff;
-    transform: rotate(-45deg);
-}
-
-.checkout-step.is-complete .checkout-step-num { background: var(--co-ink); color: #fff; }
-.checkout-step.is-complete .checkout-step-check { opacity: 1; transform: none; }
+.checkout-step.is-complete .checkout-step-check { opacity: 1; transform: translateY(-2px) rotate(-45deg); }
 
 /* Campos com rótulo flutuante */
 .field-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
@@ -7421,12 +7388,12 @@ html.intro-skipped .header { animation-delay: .5s; }
 
 #cartOverlay .field input {
     width: 100%;
-    height: 54px;
+    height: 52px;
     margin: 0;
-    padding: 22px 38px 7px 14px;
+    padding: 21px 36px 6px 14px;
     box-sizing: border-box;
     border: 1px solid var(--co-field);
-    border-radius: 12px;
+    border-radius: 10px;
     background: #fff;
     color: var(--co-ink);
     font: 400 14px/1.2 "DM Sans", sans-serif;
@@ -7435,8 +7402,8 @@ html.intro-skipped .header { animation-delay: .5s; }
     transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
 }
 
-#cartOverlay .field input:hover { border-color: #cbc5bd; }
-#cartOverlay .field input:focus { outline: none; border-color: var(--co-ink); box-shadow: 0 0 0 4px rgba(13, 13, 13, .06); }
+#cartOverlay .field input:hover { border-color: #c4c4c0; }
+#cartOverlay .field input:focus { outline: none; border-color: var(--co-ink); box-shadow: 0 0 0 3px rgba(13, 13, 13, .06); }
 #cartOverlay .field input:-webkit-autofill { -webkit-box-shadow: 0 0 0 100px #fff inset; }
 
 .field > span {
@@ -7445,7 +7412,7 @@ html.intro-skipped .header { animation-delay: .5s; }
     top: 18px;
     max-width: calc(100% - 44px);
     overflow: hidden;
-    color: #8f8983;
+    color: #8a8a87;
     font-size: 13.5px;
     line-height: 1.2;
     white-space: nowrap;
@@ -7458,23 +7425,27 @@ html.intro-skipped .header { animation-delay: .5s; }
 .field input:focus + span,
 .field input:not(:placeholder-shown) + span {
     transform: translateY(-10px) scale(.76);
-    color: #6f6a64;
+    color: #6b6b68;
 }
 
+/* Campo estreito (Número, UF): o rótulo usa quase toda a largura, para não ser cortado em telas pequenas. */
+.field.field-short > span { max-width: calc(100% - 26px); }
+
+/* Campo conferido: ✓ pequeno e claro, para dez campos certos não virarem dez marcas pretas. */
 .field.is-valid::after {
     content: "";
     position: absolute;
-    right: 16px;
+    right: 15px;
     top: 50%;
-    width: 9px;
-    height: 4.5px;
-    border-left: 1.6px solid var(--co-ink);
-    border-bottom: 1.6px solid var(--co-ink);
+    width: 8px;
+    height: 4px;
+    border-left: 1.4px solid #b4b4b0;
+    border-bottom: 1.4px solid #b4b4b0;
     transform: translateY(-75%) rotate(-45deg);
     animation: coPop .3s ease both;
 }
 
-#cartOverlay .field.is-invalid input { border-color: var(--co-accent); background: #fbf9f6; box-shadow: 0 0 0 4px rgba(134, 114, 81, .14); }
+#cartOverlay .field.is-invalid input { border-color: var(--co-accent); background: #fbfbf9; box-shadow: 0 0 0 3px rgba(134, 114, 81, .14); }
 .field.is-invalid > span { color: var(--co-accent-deep); }
 .field.is-invalid { animation: coShake .35s ease; }
 
@@ -7483,38 +7454,73 @@ html.intro-skipped .header { animation-delay: .5s; }
     align-self: center;
     justify-self: start;
     padding-left: 6px;
-    color: var(--co-ink);
+    color: var(--co-text);
     font-size: 12px;
     text-decoration: underline;
-    text-underline-offset: 3px;
+    text-decoration-color: #c9c9c5;
+    text-underline-offset: 4px;
 }
+
+.cep-help:hover { color: var(--co-ink); text-decoration-color: currentColor; }
 
 .field-hint { margin: 12px 2px 0; font-size: 11.5px; line-height: 1.5; color: var(--co-muted); }
 
+/* Avisos dentro do checkout (pré-venda na entrega, Sale sem troca no pagamento). */
+#cartOverlay .presale-delivery-notice,
+#cartOverlay .sale-exchange-notice {
+    margin: 0 0 14px;
+    padding: 12px 14px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--co-soft);
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--co-text);
+}
+
+#cartOverlay .presale-delivery-notice { margin: 14px 0 0; }
+
+#cartOverlay .presale-delivery-notice strong,
+#cartOverlay .sale-exchange-notice strong {
+    display: block;
+    margin-bottom: 1px;
+    color: var(--co-ink);
+    font-weight: 600;
+    letter-spacing: 0;
+}
+
+#cartOverlay .sale-exchange-notice small { display: block; margin-top: 3px; font-size: 11.5px; color: var(--co-muted); }
+
 /* Cupom de desconto (etapa de pagamento) */
-.coupon-box { margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--co-line); }
-.coupon-row { display: flex; gap: 10px; align-items: stretch; }
+.coupon-box { margin-top: 20px; padding-top: 0; border-top: 0; }
+.coupon-row { display: flex; gap: 8px; align-items: stretch; }
 .coupon-row .coupon-field { flex: 1; min-width: 0; }
 #cartOverlay .coupon-field input { text-transform: uppercase; letter-spacing: .06em; }
 #cartOverlay .coupon-field input[readonly] { background: var(--co-soft); }
+
 .coupon-apply {
     flex: none;
-    min-width: 104px;
-    height: 54px;
+    min-width: 100px;
+    height: 52px;
     padding: 0 18px;
-    border-radius: 999px;
-    font: 500 11.5px/1 "DM Sans", sans-serif;
-    letter-spacing: .14em;
+    border: 1px solid #c4c4c0;
+    border-radius: 10px;
+    background: #fff;
+    color: var(--co-ink);
+    font: 500 10.5px/1 "DM Sans", sans-serif;
+    letter-spacing: .16em;
     cursor: pointer;
-    transition: filter .2s ease, opacity .2s ease;
+    transition: border-color .2s ease, opacity .2s ease;
 }
+
+.coupon-apply:hover { border-color: var(--co-ink); }
 .coupon-apply:disabled { opacity: .6; cursor: wait; }
 .coupon-status { min-height: 0; margin: 8px 2px 0; font-size: 12px; line-height: 1.5; color: var(--co-ink); }
 .coupon-status:empty { display: none; }
 .coupon-status.is-error { color: var(--co-accent-deep); }
 
 /* Frete */
-#cartOverlay .shipping-result { display: block; margin-top: 20px; padding: 0; border: 0; }
+#cartOverlay .shipping-result { display: block; margin-top: 22px; padding: 0; border: 0; }
 
 #cartOverlay .shipping-result-head {
     display: flex;
@@ -7522,7 +7528,7 @@ html.intro-skipped .header { animation-delay: .5s; }
     align-items: baseline;
     margin-bottom: 10px;
     font-size: 10px;
-    letter-spacing: .22em;
+    letter-spacing: .2em;
     text-transform: uppercase;
     color: var(--co-muted);
 }
@@ -7534,28 +7540,51 @@ html.intro-skipped .header { animation-delay: .5s; }
 #cartOverlay .shipping-options:empty::before {
     content: "Digite o CEP para ver prazos e valores de entrega.";
     display: block;
-    padding: 18px 16px;
-    border: 1px dashed #d9d3cc;
-    border-radius: 12px;
+    padding: 15px 16px;
+    border-radius: 10px;
+    background: var(--co-soft);
     color: var(--co-muted);
     font-size: 12px;
     text-align: center;
 }
 
-#cartOverlay .shipping-option {
+/* Linha de escolha: a mesma para a entrega e para a forma de pagamento. */
+#cartOverlay .payment-methods {
     display: grid;
-    grid-template-columns: 20px minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 12px;
-    padding: 15px 16px;
-    border: 1px solid var(--co-field);
-    border-radius: 12px;
-    background: #fff;
-    cursor: pointer;
-    transition: border-color .25s ease, box-shadow .25s ease;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    border: 0;
 }
 
-#cartOverlay .shipping-option input {
+#cartOverlay .shipping-option,
+#cartOverlay .payment-option {
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 11px;
+    min-height: 0;
+    margin: 0;
+    padding: 14px;
+    border: 1px solid var(--co-field);
+    border-radius: 10px;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color .2s ease, background .2s ease;
+}
+
+#cartOverlay .shipping-option:hover,
+#cartOverlay .payment-option:hover { border-color: #c4c4c0; }
+
+#cartOverlay .shipping-option.selected,
+#cartOverlay .payment-option.selected { border-color: var(--co-ink); background: var(--co-soft); }
+
+#cartOverlay .shipping-option input,
+#cartOverlay .payment-option input {
+    position: static;
+    flex: none;
     display: grid;
     place-items: center;
     width: 18px;
@@ -7563,121 +7592,74 @@ html.intro-skipped .header { animation-delay: .5s; }
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    border: 1.5px solid #bdb7b0;
+    border: 1.5px solid #bbbbb7;
     border-radius: 50%;
+    background: #fff;
+    opacity: 1;
+    pointer-events: auto;
+    cursor: pointer;
     -webkit-appearance: none;
     appearance: none;
     transition: border-color .2s ease, background .2s ease, box-shadow .2s ease;
 }
 
-#cartOverlay .shipping-option input:checked { border-color: var(--co-ink); background: var(--co-ink); box-shadow: inset 0 0 0 3.5px #fff; }
-#cartOverlay .shipping-option.selected { border-color: var(--co-ink); box-shadow: 0 12px 26px -20px rgba(0, 0, 0, .55); }
-#cartOverlay .shipping-option-info strong { font-size: 13px; font-weight: 500; letter-spacing: 0; }
-#cartOverlay .shipping-option-info small { margin-top: 2px; font-size: 11px; color: var(--co-muted); }
-#cartOverlay .shipping-option-price { font-size: 13px; font-weight: 600; }
+/* Anel de foco só para quem navega pelo teclado, em volta da bolinha. */
+#cartOverlay .shipping-option input:focus,
+#cartOverlay .payment-option input:focus { outline: none; }
+#cartOverlay .shipping-option input:focus-visible,
+#cartOverlay .payment-option input:focus-visible { outline: 2px solid var(--co-ink); outline-offset: 3px; }
+
+#cartOverlay .shipping-option input:checked,
+#cartOverlay .payment-option input:checked { border-color: var(--co-ink); background: var(--co-ink); box-shadow: inset 0 0 0 3.5px #fff; }
+
+#cartOverlay .shipping-option-info,
+#cartOverlay .payment-option-content { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; overflow: visible; }
+
+#cartOverlay .shipping-option-info strong,
+#cartOverlay .payment-option-content strong { font: 500 13.5px/1.3 "DM Sans", sans-serif; letter-spacing: 0; }
+
+#cartOverlay .shipping-option-info small,
+#cartOverlay .payment-option-content small { margin: 0; font-size: 12px; line-height: 1.35; color: var(--co-muted); }
+
+#cartOverlay .shipping-option-price { flex: none; font-size: 13px; font-weight: 500; white-space: nowrap; }
+
+/* Opção de frete grátis: preço original riscado. */
+.shipping-option-price s { margin-right: 4px; color: var(--co-muted, #777); font-weight: 400; }
+.shipping-option.is-free .shipping-option-price { color: #2f6b45; }
 
 #cartOverlay .shipping-loading,
-#cartOverlay .shipping-error { padding: 18px 16px; border-radius: 12px; background: var(--co-soft); font-size: 12px; text-align: center; }
+#cartOverlay .shipping-error { padding: 15px 16px; border-radius: 10px; background: var(--co-soft); color: var(--co-muted); font-size: 12px; text-align: center; }
 
 #cartOverlay .shipping-loading {
-    background: linear-gradient(90deg, var(--co-soft) 25%, #efebe6 50%, var(--co-soft) 75%) 0 0 / 200% 100%;
+    background: linear-gradient(90deg, var(--co-soft) 25%, #ecece9 50%, var(--co-soft) 75%) 0 0 / 200% 100%;
     animation: coShimmer 1.2s linear infinite;
 }
 
-#cartOverlay .shipping-error { color: var(--co-accent-deep); background: #f7f4ef; }
+#cartOverlay .shipping-error { color: var(--co-accent-deep); }
 
-/* Pagamento */
-#cartOverlay .payment-methods {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin: 0;
-    padding: 0;
-    border: 0;
-}
-
-#cartOverlay .payment-option {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-    min-height: 124px;
-    margin: 0;
-    padding: 16px;
-    border: 1px solid var(--co-field);
-    border-radius: 14px;
-    background: #fff;
-    cursor: pointer;
-    transition: border-color .25s ease, box-shadow .3s ease, transform .3s ease;
-}
-
-#cartOverlay .payment-option input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
-#cartOverlay .payment-option:hover { border-color: #cbc5bd; }
-#cartOverlay .payment-option:focus-within { outline: 2px solid var(--co-ink); outline-offset: 2px; }
-
-#cartOverlay .payment-option.selected {
-    border-color: var(--co-ink);
-    background: #fff;
-    box-shadow: 0 16px 30px -22px rgba(0, 0, 0, .6);
-    transform: translateY(-2px);
-}
-
-.payment-option-icon {
-    display: grid;
-    place-items: center;
-    width: 38px;
-    height: 38px;
-    border-radius: 11px;
-    background: var(--co-soft);
-    transition: background .3s ease;
-}
-
-.payment-option-icon svg { width: 19px; height: 19px; fill: none; stroke: var(--co-ink); stroke-width: 1.5; transition: stroke .3s ease; }
-#cartOverlay .payment-option.selected .payment-option-icon { background: var(--co-ink); }
-#cartOverlay .payment-option.selected .payment-option-icon svg { stroke: #fff; }
-
-#cartOverlay .payment-option-content { display: flex; flex-direction: column; gap: 4px; }
-#cartOverlay .payment-option-content strong { font: 500 14px/1.2 "DM Sans", sans-serif; letter-spacing: 0; }
-#cartOverlay .payment-option-content small { font-size: 11px; line-height: 1.35; color: var(--co-muted); }
-
-#cartOverlay .payment-option::after {
-    content: "";
-    position: absolute;
-    right: 14px;
-    bottom: 14px;
-    width: 16px;
-    height: 16px;
-    border: 1.5px solid #c9c3bc;
-    border-radius: 50%;
-    transition: border-color .2s ease, background .2s ease, box-shadow .2s ease;
-}
-
-#cartOverlay .payment-option.selected::after { border-color: var(--co-ink); background: var(--co-ink); box-shadow: inset 0 0 0 3px #fff; }
-
+/* Selo do desconto do Pix, na ponta da linha. */
 .payment-option-badge {
-    position: absolute;
-    top: 14px;
-    right: 14px;
-    padding: 5px 8px;
+    flex: none;
+    padding: 5px 9px;
     border-radius: 999px;
-    background: var(--co-accent);
-    color: #fff;
+    background: var(--co-accent-soft);
+    color: var(--co-ink);
     font: 600 9px/1 "DM Sans", sans-serif;
     font-style: normal;
-    letter-spacing: .14em;
+    letter-spacing: .12em;
+    white-space: nowrap;
 }
 
 /* Nota, garantias e continuar comprando */
-#cartOverlay .order-note { margin: 4px 0 8px; padding-top: 24px; border-top: 1px solid var(--co-line); }
+#cartOverlay .order-note { margin: 0 0 8px; padding-top: 30px; border-top: 1px solid var(--co-line); }
 
 .checkout-trust {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 8px;
-    margin: 26px 0 0;
-    padding: 18px 0 0;
-    border-top: 1px solid var(--co-line);
+    margin: 30px 0 0;
+    padding: 0;
+    border-top: 0;
     list-style: none;
 }
 
@@ -7691,45 +7673,62 @@ html.intro-skipped .header { animation-delay: .5s; }
     text-align: center;
 }
 
-.checkout-trust svg { width: 20px; height: 20px; fill: none; stroke: var(--co-ink); stroke-width: 1.4; }
+.checkout-trust svg { width: 18px; height: 18px; fill: none; stroke: var(--co-accent); stroke-width: 1.3; }
 
+/* Continuar comprando: um link, não um botão. */
 #cartOverlay .continue-shopping {
     display: block;
     width: auto;
-    margin: 18px auto 0;
-    padding: 14px 26px;
-    border-radius: 999px;
+    margin: 22px auto 0;
+    padding: 10px 6px;
+    border: 0;
+    background: none;
+    color: var(--co-ink);
     font: 500 10px/1 "DM Sans", sans-serif;
     letter-spacing: .2em;
     text-transform: uppercase;
+    text-decoration: underline;
+    text-decoration-color: #c9c9c5;
+    text-underline-offset: 6px;
     cursor: pointer;
+    transition: text-decoration-color .2s ease;
 }
 
-/* Barra fixa: total e finalizar */
+#cartOverlay .continue-shopping:hover { text-decoration-color: currentColor; }
+
+/* Barra fixa: total à esquerda e o único botão forte do checkout à direita. */
 #cartOverlay .checkout-bar {
     position: sticky;
     bottom: 0;
     z-index: 12;
     display: flex;
     align-items: center;
-    gap: 16px;
-    margin-top: 22px;
-    padding: 14px 26px calc(14px + env(safe-area-inset-bottom, 0px));
-    border-top: 1px solid rgba(255, 255, 255, .35);
-    /* Cantos de cima arredondados: a barra sobe como uma folha sobre a sacola. */
-    border-radius: 20px 20px 0 0;
-    /* Placa no bege areia, com o total em preto e o Finalizar compra preto ao lado. */
-    background: var(--co-accent-soft);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), 0 -18px 30px -24px rgba(60, 48, 30, .3);
+    gap: 18px;
+    margin-top: 28px;
+    padding: 14px var(--co-pad) calc(14px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--co-line);
+    background: rgba(255, 255, 255, .96);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    box-shadow: 0 -14px 28px -24px rgba(0, 0, 0, .22);
 }
 
-#cartOverlay .checkout-bar-total span,
-#cartOverlay .checkout-bar-total small { color: #4a443c; }
-
 .checkout-bar-total { display: flex; flex-direction: column; flex: 0 1 auto; min-width: 0; max-width: 50%; }
-.checkout-bar-total span { font-size: 9.5px; letter-spacing: .24em; text-transform: uppercase; color: var(--co-muted); }
-#cartOverlay .checkout-bar-total strong { display: inline-block; margin: 3px 0 2px; color: var(--co-ink); font: 400 26px/1.1 "Playfair Display", serif; white-space: nowrap; transform-origin: left center; }
-.checkout-bar-total small { overflow: hidden; color: var(--co-muted); font-size: 10.5px; white-space: nowrap; text-overflow: ellipsis; }
+.checkout-bar-total span { font-size: 9.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--co-muted); }
+#cartOverlay .checkout-bar-total strong { display: inline-block; margin: 3px 0 2px; color: var(--co-ink); font: 400 25px/1.1 "Playfair Display", serif; white-space: nowrap; transform-origin: left center; }
+
+/* O que entra no total (desconto do Pix, cupom, frete): até duas linhas, sem cortar o texto. */
+.checkout-bar-total small {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    color: var(--co-muted);
+    font-size: 10.5px;
+    line-height: 1.35;
+}
+
 #checkoutTotal.is-bumping { animation: coBump .45s ease; }
 
 #cartOverlay .checkout-button {
@@ -7739,14 +7738,17 @@ html.intro-skipped .header { animation-delay: .5s; }
     align-items: center;
     justify-content: center;
     gap: 10px;
-    min-height: 56px;
+    min-height: 54px;
     margin: 0;
     padding: 0 20px;
+    border: 0;
     border-radius: 999px;
+    background: var(--co-ink);
+    color: #fff;
     font: 500 10.5px/1 "DM Sans", sans-serif;
     letter-spacing: .2em;
     cursor: pointer;
-    transition: filter .25s ease, transform .2s ease;
+    transition: background .2s ease, transform .2s ease;
 }
 
 #cartOverlay .checkout-button::before {
@@ -7758,61 +7760,7 @@ html.intro-skipped .header { animation-delay: .5s; }
     mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'%3E%3Crect x='5' y='10.5' width='14' height='10' rx='2'/%3E%3Cpath d='M8 10.5V8a4 4 0 0 1 8 0v2.5'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
-/* Vidro líquido: pele comum dos botões do checkout. O aro de luz é um anel recortado
-   com máscara (no Finalizar compra fica no ::after, porque o ::before é o cadeado). */
-#cartOverlay .cart-close,
-#cartOverlay .cart-quantity,
-#cartOverlay .pix-perk-button,
-#cartOverlay .coupon-apply,
-#cartOverlay .empty-cart-button,
-#cartOverlay .continue-shopping,
-#cartOverlay .checkout-button {
-    position: relative;
-    border: 0;
-    background: var(--co-lg-tinted);
-    color: var(--co-ink);
-    text-shadow: 0 1px 0 rgba(255, 255, 255, .35);
-    box-shadow: var(--co-lg-shadow);
-    -webkit-backdrop-filter: var(--co-lg-blur);
-    backdrop-filter: var(--co-lg-blur);
-}
-
-/* Finalizar compra: preto com letra branca, como o COMPRAR AGORA da janela da bolsa. */
-#cartOverlay .checkout-button {
-    background:
-        radial-gradient(80% 60% at 50% 100%, rgba(255, 255, 255, .14), rgba(255, 255, 255, 0) 72%),
-        var(--co-ink);
-    color: #fff;
-    text-shadow: none;
-}
-
-#cartOverlay .checkout-button::after { opacity: .35; }
-
-#cartOverlay .cart-close::before,
-#cartOverlay .cart-quantity::before,
-#cartOverlay .pix-perk-button::before,
-#cartOverlay .coupon-apply::before,
-#cartOverlay .empty-cart-button::before,
-#cartOverlay .continue-shopping::before,
-#cartOverlay .checkout-button::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    padding: 1.6px;
-    border-radius: inherit;
-    background: var(--co-lg-rim);
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
-    pointer-events: none;
-}
-
-#cartOverlay .cart-close:hover,
-#cartOverlay .pix-perk-button:hover,
-#cartOverlay .coupon-apply:hover,
-#cartOverlay .empty-cart-button:hover,
-#cartOverlay .continue-shopping:hover,
-#cartOverlay .checkout-button:hover { filter: brightness(1.08); }
+#cartOverlay .checkout-button:hover { background: #2b2523; }
 #cartOverlay .checkout-button:active { transform: scale(.98); }
 #cartOverlay .checkout-button:disabled { opacity: .75; cursor: wait; }
 
@@ -7831,33 +7779,31 @@ body.cart-open .toast { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); 
 @keyframes coShake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 @keyframes coBump { 40% { transform: scale(1.07); } }
 @keyframes coShimmer { to { background-position: -200% 0; } }
-@keyframes coPulse { 0% { box-shadow: 0 0 0 0 rgba(134, 114, 81, .4); } 100% { box-shadow: 0 0 0 8px rgba(134, 114, 81, 0); } }
 
 @media (max-width: 600px) {
-    #cartOverlay .cart-header { padding: 16px 18px 14px; row-gap: 16px; }
-    #cartOverlay .cart-header h2 { font-size: 25px; }
-    #cartOverlay #cartItems,
-    #cartOverlay .cart-footer { padding-left: 18px; padding-right: 18px; }
+    #cartOverlay { --co-pad: 20px; }
+    #cartOverlay .cart-header { padding-top: 14px; padding-bottom: 12px; row-gap: 14px; }
+    #cartOverlay .cart-header h2 { font-size: 22px; }
     #cartOverlay .cart-footer { padding-bottom: 0; }
-    #cartOverlay .checkout-step { margin-left: -10px; margin-right: -10px; padding: 18px 10px 20px; }
-    #cartOverlay .cart-item { grid-template-columns: 72px minmax(0, 1fr) auto; gap: 12px; }
+    #cartOverlay .cart-item { grid-template-columns: 72px minmax(0, 1fr); gap: 14px; padding: 18px 0; }
     .cart-item-media { width: 72px; height: 90px; }
-    #cartOverlay .cart-item img { width: 100%; height: 100%; }
     #cartOverlay .cart-item-name { font-size: 16px; }
+    #cartOverlay .checkout-step { padding: 28px 0; }
+    #cartOverlay .checkout-step:first-child { padding-top: 26px; }
+    #cartOverlay .checkout-step-head h3 { font-size: 21px; }
+    /* 16px: o iPhone não aproxima a tela ao tocar no campo. */
     #cartOverlay .field input { font-size: 16px; }
-    #cartOverlay .payment-option { min-height: 118px; padding: 14px; }
-    #cartOverlay .checkout-bar { gap: 12px; padding-left: 18px; padding-right: 18px; }
-    .checkout-bar-total { max-width: 44%; }
+    #cartOverlay .checkout-bar { gap: 14px; padding-top: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+    .checkout-bar-total { max-width: 46%; }
     #cartOverlay .checkout-bar-total strong { font-size: 22px; }
     .checkout-bar-total small { font-size: 10px; }
-    #cartOverlay .checkout-button { min-height: 52px; padding: 0 12px; gap: 8px; font-size: 10px; letter-spacing: .1em; white-space: nowrap; }
+    #cartOverlay .checkout-button { min-height: 52px; padding: 0 12px; gap: 8px; font-size: 10px; letter-spacing: .12em; white-space: nowrap; }
 }
 
 @media (prefers-reduced-motion: reduce) {
     #cartOverlay .cart,
     #cartOverlay .cart-item,
     #cartOverlay.active .checkout-step,
-    .checkout-steps .is-current i,
     #checkoutTotal.is-bumping { animation: none; transition: none; }
     #cartOverlay .cart { transform: none; }
 }
@@ -8117,8 +8063,7 @@ html.catalog-pending .footer {
     color: var(--areia-texto);
 }
 
-.modal-presale-notice,
-.presale-delivery-notice {
+.modal-presale-notice {
     margin: 14px 0 0;
     padding: 12px 14px;
     background: #f6efe8;
@@ -8128,59 +8073,25 @@ html.catalog-pending .footer {
     color: #3d3a36;
 }
 
-.modal-presale-notice strong,
-.presale-delivery-notice strong {
+.modal-presale-notice strong {
     display: block;
     margin-bottom: 2px;
     color: var(--areia-texto);
     letter-spacing: .04em;
 }
 
+/* Os avisos da sacola (pré-venda na entrega, Sale sem troca no pagamento) têm o visual no
+   bloco CHECKOUT MONTÊ; aqui só o que os esconde. */
 .modal-presale-notice[hidden],
-.presale-delivery-notice[hidden] {
-    display: none;
-}
-
-.presale-delivery-notice {
-    margin: 4px 0 16px;
-}
-
-/* Na sacola, o aviso de pré-venda segue o bege do checkout. */
-#cartOverlay .presale-delivery-notice { border-left-color: var(--co-accent-soft); background: #f7f4ef; }
-#cartOverlay .presale-delivery-notice strong { color: var(--co-accent-deep); }
-
-/* Peças da Sale não têm troca: aviso no pagamento e etiqueta na peça, no bege do checkout. */
-.sale-exchange-notice {
-    margin: 4px 0 16px;
-    padding: 12px 14px;
-    background: #f7f4ef;
-    border-left: 3px solid var(--co-accent-soft, #d6ccbb);
-    font-size: 13px;
-    line-height: 1.55;
-    color: #3d3a36;
-}
-
-.sale-exchange-notice strong {
-    display: block;
-    margin-bottom: 2px;
-    color: var(--co-accent-deep, #867251);
-    letter-spacing: .04em;
-}
-
-.sale-exchange-notice small {
-    display: block;
-    margin-top: 4px;
-    font-size: 11.5px;
-    color: #6b665f;
-}
-
+.presale-delivery-notice[hidden],
 .sale-exchange-notice[hidden] {
     display: none;
 }
 
+/* Etiqueta embaixo do nome da peça na sacola: pré-venda e Sale (sem troca). */
 .cart-item-sale,
 .cart-item-presale {
-    margin-top: 4px;
+    margin-top: 5px;
     font-size: 11px;
     letter-spacing: .02em;
     color: var(--co-accent-deep, #867251);
@@ -8280,47 +8191,41 @@ html.catalog-pending .footer {
     }
 }
 
-.gift-perk {
-    margin-bottom: 8px;
-    padding: 14px 14px 12px;
-    border: 1px solid var(--co-line, #ece8e2);
-    border-radius: 14px;
-    background: #fcfaf8;
-}
+/* O presente é uma das linhas do bloco dos benefícios da sacola (.cart-benefits, no bloco
+   CHECKOUT MONTÊ): sem moldura própria, com o mesmo ícone de traço do Pix e do frete. */
+.gift-perk { padding: 14px 0; }
 .gift-perk[hidden], .gift-picker[hidden], .cart-gift-line[hidden] { display: none; }
-.gift-perk.is-active { border-color: #e6ddcf; background: #f7f4ef; }
 
 .gift-perk-head { display: flex; align-items: center; gap: 12px; }
 .gift-perk-icon {
     flex: 0 0 auto;
     display: grid;
     place-items: center;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: var(--co-accent, #867251);
+    width: 20px;
+    height: 20px;
 }
-.gift-perk-icon svg { width: 17px; height: 17px; fill: none; stroke: #fff; stroke-width: 1.4; stroke-linejoin: round; }
+.gift-perk-icon svg { width: 19px; height: 19px; fill: none; stroke: var(--co-accent, #867251); stroke-width: 1.4; stroke-linejoin: round; }
 .gift-perk-copy { min-width: 0; }
-.gift-perk p { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--co-ink, #0d0d0d); }
-.gift-perk p strong { font-weight: 600; }
+.gift-perk p { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--co-text, #3d3a36); }
+.gift-perk p strong { font-weight: 600; color: var(--co-ink, #0d0d0d); }
 
-/* Escada: barra com os degraus do cinto e do frete grátis. */
-.gift-ladder { position: relative; height: 38px; margin: 12px 4px 0; }
-.gift-ladder-bar { position: absolute; left: 0; right: 0; top: 6px; height: 4px; border-radius: 999px; background: #ece8e2; overflow: hidden; }
+/* Escada: barra fina com os degraus do presente e do frete grátis. */
+.gift-ladder { position: relative; height: 36px; margin: 12px 4px 0; }
+.gift-ladder-bar { position: absolute; left: 0; right: 0; top: 6px; height: 2px; border-radius: 999px; background: #e0e0dc; overflow: hidden; }
 .gift-ladder-bar i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--co-accent, #867251); transition: width .5s ease; }
 .gift-ladder-step { position: absolute; top: 0; display: grid; justify-items: center; transform: translateX(-50%); }
 .gift-ladder-step.is-last { left: 100%; transform: translateX(-100%); justify-items: end; }
-.gift-ladder-step b { width: 16px; height: 16px; box-sizing: border-box; border: 2px solid #d8d2ca; border-radius: 50%; background: #fff; transition: background .3s ease, border-color .3s ease; }
-.gift-ladder-step.is-done b { border-color: var(--co-accent, #867251); background: var(--co-accent, #867251); box-shadow: inset 0 0 0 3px #fff; }
-.gift-ladder-step small { margin-top: 3px; font-size: 9.5px; line-height: 1.2; text-align: center; color: var(--co-muted, #8a847e); white-space: nowrap; }
+.gift-ladder-step b { width: 14px; height: 14px; box-sizing: border-box; border: 1.5px solid #cfcfcb; border-radius: 50%; background: #fff; transition: background .3s ease, border-color .3s ease; }
+.gift-ladder-step.is-done b { border-color: var(--co-accent, #867251); background: var(--co-accent, #867251); box-shadow: inset 0 0 0 2.5px #fff; }
+.gift-ladder-step small { margin-top: 4px; font-size: 9.5px; line-height: 1.2; text-align: center; color: var(--co-muted, #8a847e); white-space: nowrap; }
 .gift-ladder-step.is-last small { text-align: right; }
 .gift-ladder-step.is-done small { color: var(--co-ink, #0d0d0d); font-weight: 600; }
 
 /* Escolha do presente: cards iguais aos da loja; as cores aparecem ao tocar no modelo. */
-.gift-picker { margin-top: 12px; padding-top: 12px; border-top: 1px dashed #e0e0e0; }
+.gift-picker { margin-top: 14px; padding-top: 14px; border-top: 1px solid #e3e3df; }
 .gift-picker-title { margin: 0; font: 400 17px/1.2 "Playfair Display", Georgia, serif; color: var(--co-ink, #0d0d0d); }
-.gift-picker-hint { margin: 4px 0 12px; font-size: 11.5px; color: var(--co-muted, #8a847e); }
+.gift-perk .gift-picker-hint { margin: 4px 0 12px; font-size: 11.5px; color: var(--co-muted, #8a847e); }
+.gift-perk .gift-picker-hint strong { color: var(--co-ink, #0d0d0d); }
 .gift-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 10px; }
 .gift-dots { display: none; }
 /* No celular os cards viram carrossel: desliza para o lado e o próximo card aparece na borda. */
@@ -8328,12 +8233,12 @@ html.catalog-pending .footer {
     .gift-options {
         display: flex;
         gap: 10px;
-        margin: 0 -14px;
-        padding: 0 14px 4px;
+        margin: 0 -16px;
+        padding: 0 16px 4px;
         overflow-x: auto;
         overscroll-behavior-x: contain;
         scroll-snap-type: x mandatory;
-        scroll-padding: 0 14px;
+        scroll-padding: 0 16px;
         scrollbar-width: none;
         -webkit-overflow-scrolling: touch;
     }
@@ -8378,7 +8283,7 @@ html.catalog-pending .footer {
     border-radius: 50%;
     background: var(--co-accent, #867251) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12.5l4 4 8-9' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 14px no-repeat;
 }
-.gift-colors { margin-top: 14px; padding: 12px; border-radius: 12px; background: #fff; box-shadow: inset 0 0 0 1px var(--co-line, #ece8e2); }
+.gift-colors { margin-top: 14px; padding: 12px; border-radius: 10px; background: #fff; box-shadow: inset 0 0 0 1px #e3e3df; }
 .gift-colors[hidden] { display: none; }
 .gift-colors-title { margin: 0; font-size: 12px; font-weight: 600; color: var(--co-ink, #0d0d0d); }
 .gift-colors .variant-options { margin-top: 8px; }
@@ -8386,9 +8291,8 @@ html.catalog-pending .footer {
 .cart-gift-item .cart-item-price s { margin-right: 3px; color: var(--co-muted, #8a847e); font-weight: 400; }
 
 /* O presente aparece na sacola, logo abaixo das peças. */
-#cartOverlay #cartGiftLine { padding: 0 26px; }
-@media (max-width: 600px) { #cartOverlay #cartGiftLine { padding: 0 18px; } }
-.cart-gift-tag { display: inline-block; margin-bottom: 4px; padding: 2px 8px; border-radius: 999px; background: var(--co-accent, #867251); color: #fff; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
+#cartOverlay #cartGiftLine { padding: 0 var(--co-pad); }
+.cart-gift-tag { display: inline-block; margin-bottom: 5px; padding: 3px 8px; border-radius: 999px; background: var(--co-accent-soft, #d6ccbb); color: var(--co-ink, #0d0d0d); font-size: 9px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
 .cart-gift-qty { font-size: 11px; color: var(--co-muted, #8a847e); }
 #cartOverlay .cart-gift-item .cart-item-price { color: var(--co-accent-deep, #867251); }
 
@@ -8396,7 +8300,7 @@ html.catalog-pending .footer {
 [data-benefit-show][hidden] { display: none !important; }
 
 /* Regra da promoção para o presente (ex.: sem troca de brinde): aviso discreto. */
-.gift-terms { margin: -6px 0 12px; font-size: 10.5px; line-height: 1.4; color: #a39d97; }
+.gift-perk .gift-terms { margin: -6px 0 12px; font-size: 10.5px; line-height: 1.4; color: #a39d97; }
 .gift-terms[hidden] { display: none; }
 .cart-gift-terms { margin: 1px 0 3px; font-size: 10.5px; line-height: 1.35; color: #a39d97; }
 

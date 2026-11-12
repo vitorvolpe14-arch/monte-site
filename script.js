@@ -2431,7 +2431,8 @@ function renderShippingOptions() {
         label.dataset.optionId = String(option.id);
         const min = Number(option.delivery_min_days || 0);
         const max = Number(option.delivery_max_days || 0);
-        const carrierDays = min && max && min !== max ? `${min} a ${max} dias úteis` : (max || option.delivery_days) ? `${max || option.delivery_days} dias úteis` : "Prazo informado";
+        const businessDays = count => Number(count) === 1 ? "1 dia útil" : `${count} dias úteis`;
+        const carrierDays = min && max && min !== max ? `${min} a ${max} dias úteis` : (max || option.delivery_days) ? businessDays(max || option.delivery_days) : "Prazo informado";
         // Bolsa em pré-venda: ela ainda vai chegar, então a entrega é em 10 dias úteis
         // (ou no prazo da transportadora, se for maior).
         const days = cartHasPresale() ? `Pré-venda: entrega em ${Math.max(PRESALE_MIN_BUSINESS_DAYS, max || Number(option.delivery_days) || 0)} dias úteis` : carrierDays;
@@ -3881,6 +3882,7 @@ function renderCheckoutNote(summary) {
         currentGifts().forEach(gift => appendHTML(itemsBox, `<div class="order-note-item"><span>${escapeHTML(gift.product.name)}</span><span>Presente</span><small>${escapeHTML(gift.color || "Cor única")} · 1 un.${gift.promotion.terms_text ? " · " + escapeHTML(gift.promotion.terms_text) : ""}</small></div>`));
     }
 
+    setNoteText("noteSubtotal", cart.length ? formatPrice(totals.subtotal) : "");
     setNoteText("noteShipping", selectedShippingOption ? `${selectedShippingOption.name} · ${shippingPriceLabel(selectedShippingOption)}` : "");
     const discountRow = document.getElementById("noteDiscountRow");
     if (discountRow) discountRow.hidden = !(totals.pixDiscount > 0);
@@ -4136,10 +4138,14 @@ function renderCheckoutExtras({ subtotal, shipping, pixDiscount, couponDiscount 
         if (freePerkFill) freePerkFill.style.width = Math.min(100, subtotal / FREE_SHIPPING_MIN * 100).toFixed(1) + "%";
     }
 
+    // Barra do total: o rótulo diz quando o valor já é o do Pix; a linha de baixo, curta, diz o
+    // que mais entra nele (cupom, presente e frete). O desconto do Pix em reais aparece no bloco
+    // dos benefícios e na nota.
+    const totalLabel = document.getElementById("checkoutTotalLabel");
+    if (totalLabel) totalLabel.textContent = pixDiscount > 0 ? "Total no Pix" : "Total";
     const hint = document.getElementById("checkoutBarHint");
     if (hint) {
         const parts = [];
-        if (pixDiscount > 0) parts.push(`${formatPrice(pixDiscount)} de desconto no Pix`);
         if (couponDiscount > 0) parts.push(`cupom -${formatPrice(couponDiscount)}`);
         const giftsIncluded = currentGifts(subtotal).length;
         if (giftsIncluded) parts.push(giftsIncluded > 1 ? giftsIncluded + " presentes inclusos" : "presente incluso");
