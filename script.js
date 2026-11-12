@@ -1516,6 +1516,7 @@ function updateCart() {
 
                 ${item.variant_color ? `<div class="cart-item-variant">${escapeHTML(colorLabel(item.variant_color, item.name))}</div>` : ""}
                 ${item.presale ? '<div class="cart-item-presale">Pré-venda · entrega em 10 dias úteis</div>' : ""}
+                ${item.sale ? '<div class="cart-item-sale">Sale · sem troca</div>' : ""}
 
                 <div class="cart-item-row">
 
@@ -1551,6 +1552,9 @@ function updateCart() {
 
     const headerCount = document.getElementById("cartHeaderCount");
     if (headerCount) headerCount.textContent = cartQuantity;
+
+    // Peças da Sale não têm troca: o aviso no pagamento aparece só com uma delas na sacola.
+    document.getElementById("saleExchangeNotice")?.toggleAttribute("hidden", !cart.some(item => item.sale));
 
 
     count.textContent =
