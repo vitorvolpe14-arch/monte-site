@@ -15,7 +15,7 @@ const SmsText = require("../sms-text.js");
 const { MobizonError, createMobizonClient, messageStatus, failureLabel, validWebhookSignature } = require("./mobizon-sms.js");
 // Contagem anônima de visitas (todas as visitantes, sem cookies e sem código de identificação).
 const { anonymousHits, anonymousSeries, storeDay } = require("./anonymous-visits.js");
-const { CART_CONTACT_RETENTION_MS, brazilMobileDigits, formatBrazilMobile, cartSnapshotPlan, abandonedCartMessages } = require("./cart-reminder.js");
+const { CART_CONTACT_RETENTION_MS, CART_REMINDER_OPTOUT_PREFIX, brazilMobileDigits, formatBrazilMobile, reminderEmail, cartReminderEmailHash, cartReminderOptOutKey, cartSnapshotPlan, abandonedCartEmail } = require("./cart-reminder.js");
 // Os totais por dia da contagem anônima ficam 25 meses (comparar com o mesmo mês do ano anterior).
 const ANON_RETENTION_MS = 761 * 24 * 60 * 60 * 1000;
 
@@ -2181,9 +2181,9 @@ app.post("/api/analytics/hit",analyticsRateLimit,async(req,res)=>{
   }catch(e){console.error("Contagem anônima:",e.message)}
   res.status(204).end();
 });
-// Sacola para o painel e para o lembrete da loja (backend/cart-reminder.js). Sem a permissão de
-// estatísticas chega sem código de visitante e só é guardada com um celular válido (legítimo
-// interesse, com o "Não quero" do checkout). Nome e celular só juntos; o e-mail não é guardado.
+// Sacola para o painel e para o lembrete por e-mail (backend/cart-reminder.js). Sem a permissão de
+// estatísticas chega sem código de visitante e só é guardada com um e-mail válido (legítimo
+// interesse, com o "Não quero" do checkout). Nome e e-mail só juntos; o WhatsApp não é guardado.
 app.post("/api/analytics/cart",analyticsRateLimit,async(req,res)=>{
   try{
     const b=req.body||{}, plan=cartSnapshotPlan(b);
@@ -2199,7 +2199,6 @@ app.post("/api/analytics/cart",analyticsRateLimit,async(req,res)=>{
     const ses=plan.analyticsSession?await supabaseRequest("site_sessions?session_id=eq."+encodeURIComponent(plan.analyticsSession)+"&select=id",{method:"GET"}):null;
     const session_id=Array.isArray(ses)?ses[0]?.id||null:null;
     const subtotal=Math.max(0,Number(b.subtotal||0)),shipping=Math.max(0,Number(b.shipping||0)),total=Math.max(0,Number(b.total||subtotal+shipping));
-    // Celular salvo sempre no mesmo formato, (85) 99999-9999: o aviso de WhatsApp da loja procura por ele.
     const row={visitor_id:plan.visitorId,session_id,cart_key:plan.cartKey,...plan.contact,items:cartSnapshotItems(b.items),subtotal,shipping,total,status:"active",last_activity_at:new Date().toISOString(),updated_at:new Date().toISOString()};
     const updated=await supabaseRequest(byKey,{method:"PATCH",body:JSON.stringify(row)});
     if(!Array.isArray(updated)||!updated.length) await supabaseRequest("cart_snapshots",{method:"POST",body:JSON.stringify(row)});
@@ -8507,10 +8506,10 @@ if (!IS_WORKERS) app.use(
 
 /* =====================================================
    PEDIDOS SEM PAGAMENTO E SACOLAS ABANDONADAS
-   - A cliente não recebe lembrete automático por e-mail (decisão da loja):
-     30 minutos depois de um pedido sem pagamento ou de uma sacola abandonada
-     (com o WhatsApp digitado no checkout), a loja é avisada para chamar a
+   - Pedido sem pagamento há 30 minutos: a loja é avisada para chamar a
      cliente no WhatsApp (veja "AVISO PARA A LOJA CHAMAR A CLIENTE").
+   - Sacola abandonada há 30 minutos (com o e-mail digitado no checkout): a
+     cliente recebe um e-mail, uma vez (veja "LEMBRETE DA SACOLA POR E-MAIL").
      Só pedidos e sacolas das últimas 24 horas, um aviso por pedido ou sacola,
      e só com as peças que ainda têm estoque.
    - Pedido aguardando pagamento há mais de 2 dias vira "expired" e sai
@@ -8615,7 +8614,8 @@ function formatEmailMoney(value) {
     return "R$ " + Number(value || 0).toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 
-function reminderEmailHtml({ eyebrow, title, paragraphs, items, buttonUrl, buttonText, footnote }) {
+// optOutUrl/optOutText: link para não receber mais (lembrete da sacola), no rodapé.
+function reminderEmailHtml({ eyebrow, title, paragraphs, items, buttonUrl, buttonText, footnote, optOutUrl, optOutText }) {
     const rows = items.map(item =>
         "<tr><td style=\"padding:12px 0;border-bottom:1px solid #eee;width:76px;vertical-align:top;\">" +
         (item.image ? "<img src=\"" + escapeEmailHtml(item.image) + "\" alt=\"\" width=\"64\" height=\"64\" style=\"display:block;width:64px;height:64px;object-fit:cover;background:#fff;border:1px solid #eee;\">" : "") +
@@ -8630,14 +8630,17 @@ function reminderEmailHtml({ eyebrow, title, paragraphs, items, buttonUrl, butto
         paragraphs.map(text => "<p style=\"font-size:15px;line-height:1.7;color:#555;margin:0 0 14px;\">" + escapeEmailHtml(text) + "</p>").join("") +
         "<table role=\"presentation\" cellspacing=\"0\" cellpadding=\"0\" style=\"width:100%;margin:22px 0 6px;border-collapse:collapse;\">" + rows + "</table>" +
         "<div style=\"text-align:center;margin:30px 0 8px;\"><a href=\"" + escapeEmailHtml(buttonUrl) + "\" style=\"display:inline-block;background:#111;color:#fff;text-decoration:none;padding:15px 26px;font-size:13px;letter-spacing:1.5px;\">" + escapeEmailHtml(buttonText) + "</a></div></div>" +
-        "<p style=\"text-align:center;font-size:11px;line-height:1.6;color:#999;margin:20px 0;\">" + escapeEmailHtml(footnote) + "<br>MONTÊ — Bolsas e acessórios</p></div></body></html>";
+        "<p style=\"text-align:center;font-size:11px;line-height:1.6;color:#999;margin:20px 0;\">" + escapeEmailHtml(footnote) +
+        (optOutUrl ? "<br><a href=\"" + escapeEmailHtml(optOutUrl) + "\" style=\"color:#777;text-decoration:underline;\">" + escapeEmailHtml(optOutText) + "</a>" : "") +
+        "<br>MONTÊ — Bolsas e acessórios</p></div></body></html>";
 }
 
-async function sendReminderEmail({ to, subject, html, text, idempotencyKey, type }) {
+// headers: cabeçalhos extras do e-mail (por exemplo, List-Unsubscribe do lembrete da sacola).
+async function sendReminderEmail({ to, subject, html, text, idempotencyKey, type, headers }) {
     const response = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json", "Accept": "application/json", "Idempotency-Key": idempotencyKey },
-        body: JSON.stringify({ from: RESEND_FROM_NAME + " <" + RESEND_FROM_EMAIL + ">", to: [to], subject, text, html, tags: [{ name: "type", value: type }] })
+        body: JSON.stringify({ from: RESEND_FROM_NAME + " <" + RESEND_FROM_EMAIL + ">", to: [to], subject, text, html, tags: [{ name: "type", value: type }], ...(headers ? { headers } : {}) })
     });
     const responseText = await response.text();
     if (!response.ok) throw new Error("Resend API " + response.status + ": " + responseText.slice(0, 300));
@@ -8672,19 +8675,15 @@ function reminderFirstName(name) {
 
 /* =====================================================
    AVISO PARA A LOJA CHAMAR A CLIENTE
-   30 minutos depois, a loja é avisada no WhatsApp dela (WHATSAPP_ADMIN_PHONE)
-   com o botão que abre a conversa com a cliente, já com a mensagem e o link
-   da sacola:
-   - sacola abandonada (a cliente digitou o WhatsApp no checkout e não tocou em
-     "Não quero" logo abaixo dele) parada há 30 minutos, sem pedido. Legítimo
-     interesse, sem cookies: veja backend/cart-reminder.js;
-   - pedido criado e não pago há 30 minutos.
-   O aviso no WhatsApp usa o modelo WHATSAPP_FOLLOWUP_TEMPLATE_NAME da API oficial
-   do WhatsApp. Enquanto ela não estiver configurada (ou se o envio falhar), o
-   mesmo aviso chega por e-mail (ORDER_NOTIFICATION_EMAILS).
+   Pedido criado e não pago há 30 minutos: a loja é avisada com o botão que abre
+   a conversa com a cliente, já com a mensagem e o link da sacola.
+   O aviso iria pelo WhatsApp da loja (WHATSAPP_ADMIN_PHONE, modelo
+   WHATSAPP_FOLLOWUP_TEMPLATE_NAME da API oficial), mas o WhatsApp não está
+   ligado ao site: o aviso chega por e-mail (ORDER_NOTIFICATION_EMAILS).
+   Sacolas abandonadas não passam mais por aqui: a cliente recebe o e-mail do
+   lembrete (veja "LEMBRETE DA SACOLA POR E-MAIL").
 ===================================================== */
 const STORE_FOLLOWUP_ORDER_AFTER_MS = 30 * 60 * 1000;
-const STORE_FOLLOWUP_CART_AFTER_MS = 30 * 60 * 1000;
 // Por aviso: pedidos/compras posteriores, aviso recente, estoque, link curto (até 2), WhatsApp,
 // e-mail e marcação.
 const STORE_FOLLOWUP_CALLS_EACH = 9;
@@ -8855,102 +8854,138 @@ async function storeFollowupPendingOrders(budget) {
     return sent;
 }
 
-async function storeFollowupAbandonedCarts(budget) {
+/* =====================================================
+   LEMBRETE DA SACOLA POR E-MAIL (legítimo interesse; backend/cart-reminder.js)
+   Sacola com o e-mail digitado no checkout, parada há 30 minutos e sem pedido: a
+   cliente recebe um e-mail com as peças que ainda têm estoque e o botão que refaz
+   a sacola. Um e-mail por sacola, no máximo um a cada 7 dias para o mesmo e-mail,
+   só nas 24 horas seguintes. Não vai para quem pediu para não receber (link no
+   rodapé do e-mail, "Não quero receber lembretes da sacola", e o List-Unsubscribe).
+===================================================== */
+const CART_REMINDER_AFTER_MS = 30 * 60 * 1000;
+const CART_REMINDER_REPEAT_MS = 7 * 24 * 60 * 60 * 1000;
+const CART_REMINDER_OPTOUT_TOKEN_TTL_MS = 400 * 24 * 60 * 60 * 1000;
+// Por sacola: lista de quem não quer, pedidos posteriores, lembrete recente, estoque, e-mail e marcação.
+const CART_REMINDER_CALLS_EACH = 6;
+
+function cartReminderOptOutUrl(email) {
+    const token = createSignedToken({ purpose: "cart-reminder-optout", h: cartReminderEmailHash(email) }, CART_REMINDER_OPTOUT_TOKEN_TTL_MS);
+    return PUBLIC_SITE_URL + "/api/lembrete-sacola/sair?t=" + encodeURIComponent(token);
+}
+
+async function remindAbandonedCarts(budget) {
     spend(budget);
     const rows = await supabaseRequest(
-        "cart_snapshots?status=eq.active&store_followup_sent_at=is.null&customer_phone=not.is.null" +
-        "&last_activity_at=lt." + isoAgo(STORE_FOLLOWUP_CART_AFTER_MS) + "&last_activity_at=gt." + isoAgo(REMINDER_WINDOW_MS) +
-        "&select=id,customer_name,customer_email,customer_phone,items,subtotal,created_at&order=last_activity_at.asc&limit=5",
+        "cart_snapshots?status=eq.active&reminder_sent_at=is.null&customer_email=not.is.null" +
+        "&last_activity_at=lt." + isoAgo(CART_REMINDER_AFTER_MS) + "&last_activity_at=gt." + isoAgo(REMINDER_WINDOW_MS) +
+        "&select=id,customer_name,customer_email,items,created_at&order=last_activity_at.asc&limit=5",
         { method: "GET" }
     );
     let sent = 0;
     for (const cart of Array.isArray(rows) ? rows : []) {
-        if (!budget.has(STORE_FOLLOWUP_CALLS_EACH)) break;
+        if (!budget.has(CART_REMINDER_CALLS_EACH)) break;
         const mark = (status, extra = {}) => {
             spend(budget);
             return supabaseRequest("cart_snapshots?id=eq." + encodeURIComponent(cart.id), {
                 method: "PATCH",
                 headers: { "Prefer": "return=minimal" },
-                body: JSON.stringify({ store_followup_sent_at: new Date().toISOString(), store_followup_status: status, ...extra })
+                body: JSON.stringify({ reminder_sent_at: new Date().toISOString(), reminder_status: status, ...extra })
             });
         };
-        const phone = brazilMobileDigits(cart.customer_phone);
-        if (!phone) { await mark("skipped_invalid_phone"); continue; }
-        // Já virou pedido (o WhatsApp do pedido é o mesmo): pago conta como convertida; sem
-        // pagamento, o aviso do pedido cuida.
+        const email = reminderEmail(cart.customer_email);
+        if (!email) { await mark("skipped_invalid_email"); continue; }
         spend(budget);
-        const orders = await supabaseRequest(
-            "orders?customer_whatsapp=eq." + phone + "&created_at=gt." + encodeURIComponent(cart.created_at) + "&select=id,status&limit=10",
-            { method: "GET" }
-        );
-        const orderList = Array.isArray(orders) ? orders : [];
-        const paid = orderList.find(o => PAID_ORDER_STATUSES.includes(o.status));
+        const optedOut = await supabaseRequest("kv_store_48db9b7e?key=eq." + encodeURIComponent(cartReminderOptOutKey(email)) + "&select=key&limit=1", { method: "GET" });
+        if (Array.isArray(optedOut) && optedOut.length) { await mark("skipped_opt_out"); continue; }
+        // Já virou pedido: pago conta como convertida; sem pagamento, o aviso do pedido cuida.
+        const later = await laterOrdersOf(email, cart.created_at, budget);
+        const paid = later.find(o => PAID_ORDER_STATUSES.includes(o.status));
         if (paid) { await mark("skipped_purchased", { status: "converted", converted_order_id: paid.id }); continue; }
-        if (orderList.length) { await mark("skipped_has_order"); continue; }
-        // Um aviso a cada 7 dias para o mesmo número.
+        if (later.length) { await mark("skipped_has_order"); continue; }
         spend(budget);
         const recent = await supabaseRequest(
-            "cart_snapshots?customer_phone=eq." + encodeURIComponent(formatBrazilMobile(phone)) +
-            "&store_followup_status=in.(sent,sent_whatsapp)&store_followup_sent_at=gt." + isoAgo(7 * 24 * 60 * 60 * 1000) + "&select=id&limit=1",
+            "cart_snapshots?customer_email=eq." + encodeURIComponent(email) +
+            "&reminder_status=eq.sent&reminder_sent_at=gt." + isoAgo(CART_REMINDER_REPEAT_MS) + "&select=id&limit=1",
             { method: "GET" }
         );
         if (Array.isArray(recent) && recent.length) { await mark("skipped_recent_reminder"); continue; }
         spend(budget);
         const items = await availableReminderItems(cart.items);
         if (!items.length) { await mark("skipped_sold_out"); continue; }
-        const firstName = reminderFirstName(cart.customer_name);
-        const cartUrl = await shortSiteUrl(cartRestoreUrl(items, "sacola_abandonada", "whatsapp"), budget);
-        // A mensagem diz como não receber mais (oposição ao legítimo interesse, LGPD art. 18, § 2º).
-        const { message, shortMessage } = abandonedCartMessages({ firstName, pieces: storeFollowupPieces(items), cartUrl });
-        const whatsappUrl = storeFollowupChatUrl(phone, message, shortMessage);
-        const total = items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0);
-        const name = safeString(cart.customer_name) || "Cliente sem nome";
-        const email = safeString(cart.customer_email);
+        const mail = abandonedCartEmail({ firstName: reminderFirstName(cart.customer_name) });
+        const cartUrl = cartRestoreUrl(items, "sacola_abandonada", "email");
+        const optOutUrl = cartReminderOptOutUrl(email);
         try {
-            const status = await deliverStoreFollowup({
-                whatsapp: { situation: "sacola abandonada há 30 minutos", name, phone, pieces: storeFollowupPieces(items), total, chatUrl: whatsappUrl },
-                email: {
-                    subject: "Chame no WhatsApp: " + name + " deixou " + formatEmailMoney(total) + " na sacola",
-                    idempotencyKey: "monte-store-followup-cart-" + cart.id,
-                    html: storeFollowupEmailHtml({
-                        eyebrow: "SACOLA ABANDONADA HÁ 30 MINUTOS",
-                        title: name + " deixou peças na sacola",
-                        details: [
-                            "WhatsApp: " + formatBrazilMobile(phone),
-                            ...(email ? ["E-mail: " + email] : []),
-                            "Peças: " + formatEmailMoney(total)
-                        ],
-                        items,
-                        whatsappUrl,
-                        message,
-                        cartUrl
-                    }),
-                    text: name + " deixou " + formatEmailMoney(total) + " na sacola.\nWhatsApp: " + formatBrazilMobile(phone) +
-                        "\n\nChamar no WhatsApp (mensagem pronta): " + whatsappUrl
-                }
-            }, budget);
-            await mark(status);
+            spend(budget);
+            await sendReminderEmail({
+                to: email,
+                subject: mail.subject,
+                type: "cart_reminder",
+                idempotencyKey: "monte-cart-reminder-" + cart.id,
+                html: reminderEmailHtml({ ...mail, items, buttonUrl: cartUrl, optOutUrl }),
+                text: [mail.title, ...mail.paragraphs, "Voltar para a sacola: " + cartUrl, mail.footnote, mail.optOutText + ": " + optOutUrl].join("\n\n"),
+                headers: { "List-Unsubscribe": "<" + optOutUrl + ">", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" }
+            });
+            await mark("sent");
             sent++;
-            console.log("📲 Aviso para a loja chamar a cliente (sacola abandonada):", status);
+            console.log("✉️ Lembrete da sacola enviado à cliente");
         } catch (error) {
             if (error?.budget) throw error;
-            console.error("Aviso para a loja (sacola abandonada) —", error.message);
+            console.error("Lembrete da sacola por e-mail —", error.message);
             await mark("error").catch(() => {});
         }
     }
     return sent;
 }
 
+// "Não quero receber lembretes da sacola" (link do e-mail e List-Unsubscribe): guarda só o
+// código do e-mail (sha-256), nunca o e-mail. Devolve false se o link não vale.
+async function saveCartReminderOptOut(token) {
+    const data = verifySignedToken(token);
+    if (!data || data.purpose !== "cart-reminder-optout" || !/^[0-9a-f]{64}$/.test(String(data.h || ""))) return false;
+    await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({ key: CART_REMINDER_OPTOUT_PREFIX + data.h, value: { at: Date.now() } })
+    });
+    return true;
+}
+
+function cartReminderOptOutPage(ok) {
+    const message = ok
+        ? "Pronto: você não vai mais receber e-mails de lembrete da sacola da MONTÊ."
+        : "Este link não vale mais. Se quiser deixar de receber os lembretes da sacola, fale com a gente pelo WhatsApp (85) 99216-3305.";
+    return "<!DOCTYPE html><html lang=\"pt-BR\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">" +
+        "<meta name=\"robots\" content=\"noindex\"><title>Lembrete da sacola | MONTÊ</title><link rel=\"stylesheet\" href=\"/style.css\"></head><body>" +
+        "<header class=\"header\"><a href=\"/\" class=\"logo\">MONTÊ</a></header><main class=\"institutional-page\"><p class=\"section-label\">MONTÊ</p>" +
+        "<h1>Lembrete da sacola</h1><p>" + escapeEmailHtml(message) + "</p>" +
+        "<p><a href=\"/politica-privacidade.html#lembrete\">Política de Privacidade</a></p>" +
+        "<a class=\"institutional-back\" href=\"/\">← Voltar para a MONTÊ</a></main></body></html>";
+}
+
+app.get("/api/lembrete-sacola/sair", analyticsRateLimit, async (req, res) => {
+    let ok = false;
+    try { ok = await saveCartReminderOptOut(req.query.t); } catch (error) { console.error("Lembrete da sacola — não receber:", error.message); }
+    res.status(ok ? 200 : 400).type("html").send(cartReminderOptOutPage(ok));
+});
+// Cancelar com um toque no aplicativo de e-mail (List-Unsubscribe-Post).
+app.post("/api/lembrete-sacola/sair", analyticsRateLimit, async (req, res) => {
+    let ok = false;
+    try { ok = await saveCartReminderOptOut(req.query.t); } catch (error) { console.error("Lembrete da sacola — não receber:", error.message); }
+    res.status(ok ? 200 : 400).json({ success: ok });
+});
+
 // Roda a cada 5 minutos no cron. Devolve quantas chamadas externas usou.
 async function runCustomerUpkeep(calls) {
     const limit = Math.max(0, Math.floor(Number(calls) || 0));
     const budget = createCallBudget(limit);
     const steps = [expireOldPendingOrders];
-    // A cliente não recebe lembrete por e-mail (pedido da loja): quem chama é a loja, pelo WhatsApp.
-    // Aviso para a loja: no WhatsApp dela, ou por e-mail enquanto o WhatsApp não estiver configurado.
+    // Pedido sem pagamento: aviso para a loja (no WhatsApp dela, ou por e-mail enquanto o WhatsApp
+    // não estiver ligado ao site). Sacola abandonada: lembrete por e-mail para a cliente.
     const storeCanBeNotified = Boolean(WHATSAPP_PHONE_NUMBER_ID && WHATSAPP_ACCESS_TOKEN && WHATSAPP_ADMIN_PHONE) ||
         Boolean(RESEND_API_KEY && RESEND_FROM_EMAIL && storeFollowupRecipients().length);
-    if (storeCanBeNotified) steps.push(storeFollowupPendingOrders, storeFollowupAbandonedCarts);
+    if (storeCanBeNotified) steps.push(storeFollowupPendingOrders);
+    if (RESEND_API_KEY && RESEND_FROM_EMAIL) steps.push(remindAbandonedCarts);
     for (const step of steps) {
         if (!budget.has(2)) break;
         try {

@@ -3537,15 +3537,15 @@ function renderAnonymousCountChoice() {
 }
 
 /* =====================================================
-   LEMBRETE DA SACOLA (legítimo interesse — LGPD art. 7º, IX, e art. 10)
-   Quem digita o WhatsApp no checkout e não termina a compra pode ser chamada uma vez pela
-   loja (aviso no WhatsApp da loja 30 minutos depois; backend/cart-reminder.js). Vale com ou
-   sem a permissão de cookies porque não usa cookies: o código da sacola fica só na memória
-   desta página e some quando ela fecha. Vão só as peças, o nome e o WhatsApp (o e-mail não).
-   Sem as estatísticas, nada sai do aparelho enquanto não houver um celular válido.
-   "Não quero", logo abaixo do WhatsApp, apaga o contato já enviado e fica guardado
-   (monte_sem_lembrete) para as próximas compras neste navegador.
-   Com a permissão de estatísticas, a sacola também vai para o painel, mesmo sem WhatsApp.
+   LEMBRETE DA SACOLA POR E-MAIL (legítimo interesse — LGPD art. 7º, IX, e art. 10)
+   Quem digita o e-mail no checkout e não termina a compra recebe um e-mail, uma vez, 30
+   minutos depois (backend/cart-reminder.js). Vale com ou sem a permissão de cookies porque
+   não usa cookies: o código da sacola fica só na memória desta página e some quando ela
+   fecha. Vão só as peças, o nome e o e-mail (o WhatsApp não).
+   Sem as estatísticas, nada sai do aparelho enquanto não houver um e-mail válido.
+   "Não quero", no checkout, apaga o contato já enviado e fica guardado (monte_sem_lembrete)
+   para as próximas compras neste navegador. O e-mail também tem o link para não receber mais.
+   Com a permissão de estatísticas, a sacola também vai para o painel, mesmo sem e-mail.
    Veja docs/teste-legitimo-interesse-lembrete-sacola.md e a Política de Privacidade.
 ===================================================== */
 const CART_CONTACT_OPTOUT_KEY = "monte_sem_lembrete";
@@ -3560,13 +3560,12 @@ function cartContactOptedOut() {
 }
 
 // O que vai para o servidor, ou null quando não há nada a mandar.
-function cartSnapshotPayload({ items, shipping, analytics, optedOut, name, phone, key }) {
+function cartSnapshotPayload({ items, shipping, analytics, optedOut, name, email, key }) {
     const list = Array.isArray(items) ? items : [];
     if (!list.length) return null;
-    let digits = String(phone || "").replace(/\D/g, "");
-    if (digits.length > 11 && digits.startsWith("55")) digits = digits.slice(2);
-    const mobile = !optedOut && /^[1-9]{2}9\d{8}$/.test(digits) ? digits : "";
-    if (!analytics && !mobile) return null;
+    const typed = String(email || "").trim().toLowerCase();
+    const address = !optedOut && typed.length <= 160 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(typed) ? typed : "";
+    if (!analytics && !address) return null;
     const subtotal = list.reduce((s, i) => s + Number(i.price || 0) * Number(i.quantity || 1), 0);
     const shippingPrice = Number(shipping || 0);
     return {
@@ -3574,8 +3573,8 @@ function cartSnapshotPayload({ items, shipping, analytics, optedOut, name, phone
         ...(analytics ? { visitor_id: analytics.visitor_id, session_id: analytics.session_id } : {}),
         items: list.map(i => ({ id: i.id, product_id: i.id, product_name: i.name, sku: i.sku, variant_id: i.variant_id || null, variant_color: i.variant_color || i.color || null, quantity: i.quantity, unit_price: i.price, total_price: Number(i.price || 0) * Number(i.quantity || 1) })),
         subtotal, shipping: shippingPrice, total: subtotal + shippingPrice,
-        customer_name: mobile ? String(name || "").trim().slice(0, 160) : "",
-        customer_phone: mobile
+        customer_name: address ? String(name || "").trim().slice(0, 160) : "",
+        customer_email: address
     };
 }
 
@@ -3583,16 +3582,16 @@ function saveCartSnapshot() {
     const analytics = privacyConsent?.analytics ? storeAnalyticsIds : null;
     const value = id => document.getElementById(id)?.value || "";
     // Valor escondido (cliente preenchida pelo CPF) não serve para o lembrete.
-    const phone = isHiddenValue(value("customerPhone")) ? "" : value("customerPhone");
+    const email = isHiddenValue(value("customerEmail")) ? "" : value("customerEmail");
     if (!cartSnapshotKey) cartSnapshotKey = analytics?.session_id || randomId();
-    const payload = cartSnapshotPayload({ items: cart, shipping: selectedShippingOption?.price, analytics, optedOut: cartContactOptedOut(), name: value("customerName"), phone, key: cartSnapshotKey });
+    const payload = cartSnapshotPayload({ items: cart, shipping: selectedShippingOption?.price, analytics, optedOut: cartContactOptedOut(), name: value("customerName"), email, key: cartSnapshotKey });
     if (!payload) {
-        // Apagou o WhatsApp ou esvaziou a sacola: o contato que já tinha ido sai do servidor.
+        // Apagou o e-mail ou esvaziou a sacola: o contato que já tinha ido sai do servidor.
         if (cartContactSent) forgetCartContact();
         return;
     }
     postJson("/api/analytics/cart", payload);
-    cartContactSent = Boolean(payload.customer_phone);
+    cartContactSent = Boolean(payload.customer_email);
 }
 
 function forgetCartContact() {
@@ -3614,7 +3613,7 @@ function renderCartContactChoice() {
     const text = document.getElementById("cartContactText"), button = document.getElementById("cartContactToggle");
     if (!text || !button) return;
     const off = cartContactOptedOut();
-    text.textContent = off ? "Combinado: a MONTÊ não vai te chamar sobre a sacola." : "Se a compra não for concluída, a MONTÊ pode te chamar uma vez neste WhatsApp para ajudar.";
+    text.textContent = off ? "Combinado: não vamos te mandar e-mail sobre a sacola." : "Se a compra não for concluída, podemos te mandar um e-mail uma vez com a sua sacola.";
     button.textContent = off ? "Desfazer" : "Não quero";
     button.setAttribute("aria-pressed", off ? "true" : "false");
 }
@@ -3623,13 +3622,16 @@ function renderCartContactChoice() {
     renderCartContactChoice();
     setInterval(saveCartSnapshot, 30000);
     // Só o intervalo não basta: no iPhone (e no navegador do Instagram) a cliente sai do app, os
-    // timers congelam e o que ela digitou depois do último salvamento se perdia. Sem o WhatsApp a
-    // loja não recebe o aviso da sacola abandonada. Salva também quando ela termina de digitar o
-    // contato e quando a página sai da tela.
-    const CONTACT_FIELDS = ["customerName", "customerPhone"];
+    // timers congelam e o que ela digitou depois do último salvamento se perdia. Sem o e-mail não
+    // há lembrete. Salva também quando ela termina de digitar o contato (ao sair do campo, ou 1,5 s
+    // depois da última letra do e-mail) e quando a página sai da tela.
+    const CONTACT_FIELDS = ["customerName", "customerEmail"];
     document.addEventListener("change", e => { if (CONTACT_FIELDS.includes(e.target?.id)) saveCartSnapshot(); });
+    let emailTyping = 0;
     document.addEventListener("input", e => {
-        if (e.target?.id === "customerPhone" && phoneDigits(e.target.value).length === 11) saveCartSnapshot();
+        if (e.target?.id !== "customerEmail") return;
+        clearTimeout(emailTyping);
+        emailTyping = setTimeout(saveCartSnapshot, 1500);
     });
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveCartSnapshot(); });
     window.addEventListener("pagehide", saveCartSnapshot);
