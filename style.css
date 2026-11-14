@@ -7464,6 +7464,11 @@ html.intro-skipped .header { animation-delay: .5s; }
 .cep-help:hover { color: var(--co-ink); text-decoration-color: currentColor; }
 
 .field-hint { margin: 12px 2px 0; font-size: 11.5px; line-height: 1.5; color: var(--co-muted); }
+/* Lembrete da sacola: aviso logo abaixo do rastreio, com "Não quero" e "Saiba mais" como links. */
+.field-hint.cart-contact { margin-top: 4px; }
+.cart-contact-toggle,
+.cart-contact a { padding: 0; border: 0; background: none; color: var(--co-ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; white-space: nowrap; }
+.cart-contact a { color: var(--co-muted); }
 
 /* Avisos dentro do checkout (pré-venda na entrega, Sale sem troca no pagamento). */
 #cartOverlay .presale-delivery-notice,

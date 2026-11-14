@@ -56,12 +56,15 @@ function page({ consent, injected = true, readyState = "complete" }) {
 }
 
 test("sem escolha ou com estatísticas recusadas: nada da Cloudflare é carregado", () => {
-    for (const consent of [null, { analytics: false, reminders: false }, { analytics: false, reminders: true }]) {
+    // O lembrete saiu da permissão de cookies: uma escolha antiga com ele, sem estatísticas,
+    // também não liga as estatísticas da loja.
+    for (const consent of [null, { analytics: false }, { analytics: false, reminders: false }, { analytics: false, reminders: true }]) {
         const p = page({ consent });
         p.apply();
         assert.equal(p.added.length, 0);
         assert.deepEqual(p.listeners, {});
         assert.equal(p.calls.google, 0);
+        assert.equal(p.calls.store, 0);
     }
 });
 
