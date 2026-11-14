@@ -15,6 +15,7 @@ const SmsText = require("../sms-text.js");
 const { MobizonError, createMobizonClient, messageStatus, failureLabel, validWebhookSignature } = require("./mobizon-sms.js");
 // Contagem anônima de visitas (todas as visitantes, sem cookies e sem código de identificação).
 const { anonymousHits, anonymousSeries, storeDay } = require("./anonymous-visits.js");
+const { CART_CONTACT_RETENTION_MS, brazilMobileDigits, formatBrazilMobile, cartSnapshotPlan, abandonedCartMessages } = require("./cart-reminder.js");
 // Os totais por dia da contagem anônima ficam 25 meses (comparar com o mesmo mês do ano anterior).
 const ANON_RETENTION_MS = 761 * 24 * 60 * 60 * 1000;
 
@@ -1885,13 +1886,8 @@ function isValidCpf(value){
     digit=(sum*10)%11; if(digit===10) digit=0;
     return digit===Number(cpf[10]);
 }
-// Celular com DDD e 9 dígitos (aceita o +55 na frente). Devolve só os 11 dígitos, ou "" se não for celular.
+// brazilMobileDigits (backend/cart-reminder.js): celular com DDD e 9 dígitos, ou "".
 // A InfinitePay não abre o pagamento com telefone incompleto: nenhum pedido com 9 ou 10 dígitos foi pago.
-function brazilMobileDigits(value){
-    let digits=String(value??"").replace(/\D/g,"");
-    if(digits.length>11&&digits.startsWith("55")) digits=digits.slice(2);
-    return /^[1-9]{2}9\d{8}$/.test(digits)?digits:"";
-}
 function passwordMatches(password){try{const [salt,storedHex]=ADMIN_PASSWORD_HASH.split(":");if(!salt||!storedHex)return false;const stored=Buffer.from(storedHex,"hex");const derived=crypto.scryptSync(String(password||""),salt,stored.length);return crypto.timingSafeEqual(stored,derived)}catch{return false}}
 function loginKey(req,email){return `${clientIp(req)}:${safeString(email).toLowerCase()}`}
 // Bloqueio após 5 senhas erradas seguidas (mesmo IP e e-mail) por 15 minutos. Fica no
@@ -2185,18 +2181,27 @@ app.post("/api/analytics/hit",analyticsRateLimit,async(req,res)=>{
   }catch(e){console.error("Contagem anônima:",e.message)}
   res.status(204).end();
 });
+// Sacola para o painel e para o lembrete da loja (backend/cart-reminder.js). Sem a permissão de
+// estatísticas chega sem código de visitante e só é guardada com um celular válido (legítimo
+// interesse, com o "Não quero" do checkout). Nome e celular só juntos; o e-mail não é guardado.
 app.post("/api/analytics/cart",analyticsRateLimit,async(req,res)=>{
   try{
-    const b=req.body||{}, visitor_id=safeString(b.visitor_id).slice(0,120), session_key=safeString(b.session_id).slice(0,120);
-    if(!visitor_id||!session_key) return res.status(400).json({success:false,message:"Identificadores ausentes."});
-    const ses=await supabaseRequest("site_sessions?session_id=eq."+encodeURIComponent(session_key)+"&select=id",{method:"GET"});
-    const session_id=Array.isArray(ses)?ses[0]?.id:null;
+    const b=req.body||{}, plan=cartSnapshotPlan(b);
+    if(plan.action==="invalid") return res.status(400).json({success:false,message:"Identificadores ausentes."});
+    const byKey="cart_snapshots?cart_key=eq."+encodeURIComponent(plan.cartKey);
+    if(plan.action==="forget"){
+      // "Não quero" ou celular apagado: a sacola guardada só para o lembrete sai inteira; com as
+      // estatísticas, sai só o contato.
+      await supabaseRequest(byKey+"&visitor_id=is.null",{method:"DELETE",headers:{Prefer:"return=minimal"}});
+      await supabaseRequest(byKey,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({customer_name:null,customer_phone:null,customer_email:null})});
+      return res.status(204).end();
+    }
+    const ses=plan.analyticsSession?await supabaseRequest("site_sessions?session_id=eq."+encodeURIComponent(plan.analyticsSession)+"&select=id",{method:"GET"}):null;
+    const session_id=Array.isArray(ses)?ses[0]?.id||null:null;
     const subtotal=Math.max(0,Number(b.subtotal||0)),shipping=Math.max(0,Number(b.shipping||0)),total=Math.max(0,Number(b.total||subtotal+shipping));
     // Celular salvo sempre no mesmo formato, (85) 99999-9999: o aviso de WhatsApp da loja procura por ele.
-    const typedPhone=safeString(b.customer_phone).slice(0,60), mobile=brazilMobileDigits(typedPhone);
-    const customer_phone=mobile?"("+mobile.slice(0,2)+") "+mobile.slice(2,7)+"-"+mobile.slice(7):(typedPhone||null);
-    const row={visitor_id,session_id,cart_key:session_key,customer_name:safeString(b.customer_name).slice(0,160)||null,customer_email:safeString(b.customer_email).trim().toLowerCase().slice(0,160)||null,customer_phone,items:cartSnapshotItems(b.items),subtotal,shipping,total,status:"active",last_activity_at:new Date().toISOString(),updated_at:new Date().toISOString()};
-    const updated=await supabaseRequest("cart_snapshots?cart_key=eq."+encodeURIComponent(session_key),{method:"PATCH",body:JSON.stringify(row)});
+    const row={visitor_id:plan.visitorId,session_id,cart_key:plan.cartKey,...plan.contact,items:cartSnapshotItems(b.items),subtotal,shipping,total,status:"active",last_activity_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+    const updated=await supabaseRequest(byKey,{method:"PATCH",body:JSON.stringify(row)});
     if(!Array.isArray(updated)||!updated.length) await supabaseRequest("cart_snapshots",{method:"POST",body:JSON.stringify(row)});
     res.status(201).json({success:true});
   }catch(e){console.error("Analytics cart:",e);res.status(400).json({success:false,message:"Não foi possível salvar o carrinho."})}
@@ -8670,8 +8675,9 @@ function reminderFirstName(name) {
    30 minutos depois, a loja é avisada no WhatsApp dela (WHATSAPP_ADMIN_PHONE)
    com o botão que abre a conversa com a cliente, já com a mensagem e o link
    da sacola:
-   - sacola abandonada (a cliente digitou o WhatsApp no checkout e aceitou o
-     lembrete nos cookies) parada há 30 minutos, sem pedido;
+   - sacola abandonada (a cliente digitou o WhatsApp no checkout e não tocou em
+     "Não quero" logo abaixo dele) parada há 30 minutos, sem pedido. Legítimo
+     interesse, sem cookies: veja backend/cart-reminder.js;
    - pedido criado e não pago há 30 minutos.
    O aviso no WhatsApp usa o modelo WHATSAPP_FOLLOWUP_TEMPLATE_NAME da API oficial
    do WhatsApp. Enquanto ela não estiver configurada (ou se o envio falhar), o
@@ -8687,10 +8693,6 @@ const WHATSAPP_FOLLOWUP_TEMPLATE_LANGUAGE = safeString(process.env.WHATSAPP_FOLL
 
 function storeFollowupRecipients() {
     return ORDER_NOTIFICATION_EMAILS.split(",").map(v => v.trim().toLowerCase()).filter(Boolean);
-}
-
-function formatBrazilMobile(digits) {
-    return "(" + digits.slice(0, 2) + ") " + digits.slice(2, 7) + "-" + digits.slice(7);
 }
 
 function storeFollowupPieces(items) {
@@ -8898,10 +8900,9 @@ async function storeFollowupAbandonedCarts(budget) {
         if (!items.length) { await mark("skipped_sold_out"); continue; }
         const firstName = reminderFirstName(cart.customer_name);
         const cartUrl = await shortSiteUrl(cartRestoreUrl(items, "sacola_abandonada", "whatsapp"), budget);
-        const greeting = "Oi" + (firstName ? ", " + firstName : "") + "! Aqui é da MONTÊ. Vi que você deixou " +
-            storeFollowupPieces(items) + " na sacola. Ficou alguma dúvida? Posso te ajudar a finalizar.";
-        const message = greeting + " Sua sacola está aqui: " + cartUrl;
-        const whatsappUrl = storeFollowupChatUrl(phone, message, greeting);
+        // A mensagem diz como não receber mais (oposição ao legítimo interesse, LGPD art. 18, § 2º).
+        const { message, shortMessage } = abandonedCartMessages({ firstName, pieces: storeFollowupPieces(items), cartUrl });
+        const whatsappUrl = storeFollowupChatUrl(phone, message, shortMessage);
         const total = items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0);
         const name = safeString(cart.customer_name) || "Cliente sem nome";
         const email = safeString(cart.customer_email);
@@ -9003,6 +9004,15 @@ const KV_RETENTION = [
 async function purgeExpiredAnalytics() {
     const minimal = { method: "DELETE", headers: { Prefer: "return=minimal" } };
     await supabaseRequest("cart_snapshots?updated_at=lt." + isoAgo(CART_SNAPSHOT_RETENTION_MS), minimal);
+    // Lembrete da sacola (backend/cart-reminder.js): depois de 30 dias saem o nome e o celular, e a
+    // sacola guardada só para o lembrete (sem código de visitante) sai inteira.
+    await supabaseRequest("cart_snapshots?visitor_id=is.null&updated_at=lt." + isoAgo(CART_CONTACT_RETENTION_MS), minimal);
+    await supabaseRequest("cart_snapshots?updated_at=lt." + isoAgo(CART_CONTACT_RETENTION_MS) +
+        "&or=(customer_name.not.is.null,customer_phone.not.is.null,customer_email.not.is.null)", {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ customer_name: null, customer_phone: null, customer_email: null })
+    });
     await supabaseRequest("site_sessions?last_seen_at=lt." + isoAgo(ANALYTICS_RETENTION_MS), minimal);
     // Contagem anônima: totais por dia com mais de 25 meses.
     await supabaseRequest("site_hits_daily?day=lt." + storeDay(new Date(Date.now() - ANON_RETENTION_MS)), minimal)

@@ -3339,8 +3339,9 @@ document.addEventListener("DOMContentLoaded", () => {
    PRIVACIDADE — PERMISSÃO DE COOKIES (LGPD)
    Necessários (sacola e a própria escolha) ficam sempre ativos.
    Estatísticas (Google Analytics, Cloudflare Web Analytics e as
-   estatísticas da loja) e o lembrete da sacola por e-mail só funcionam
-   depois que a cliente permite.
+   estatísticas da loja) só funcionam depois que a cliente permite.
+   O lembrete da sacola não usa cookies e não depende desta escolha
+   (veja "LEMBRETE DA SACOLA").
    A escolha vale 12 meses e muda pelo link "Preferências de cookies".
 ===================================================== */
 
@@ -3348,8 +3349,8 @@ const CONSENT_KEY = "monte_consent";
 const CONSENT_MAX_AGE = 365 * 24 * 60 * 60 * 1000;
 let privacyConsent = readPrivacyConsent();
 
-// Antes da permissão as chamadas de estatística não fazem nada.
-window.monteAnalytics = { track() {}, saveCart() {} };
+// Antes da permissão as chamadas de estatística não fazem nada; a sacola segue para o lembrete.
+window.monteAnalytics = { track() {}, saveCart: saveCartSnapshot };
 
 function readPrivacyConsent() {
     try {
@@ -3361,18 +3362,18 @@ function readPrivacyConsent() {
 
 function savePrivacyConsent(choice) {
     const before = privacyConsent;
-    privacyConsent = { v: 1, analytics: !!choice.analytics, reminders: !!choice.reminders, at: Date.now() };
+    privacyConsent = { v: 1, analytics: !!choice.analytics, at: Date.now() };
     try { localStorage.setItem(CONSENT_KEY, JSON.stringify(privacyConsent)); } catch {}
     hideCookieConsent();
     // Permissão retirada: apaga o que já estava guardado e recarrega para parar o que estava rodando.
-    if ((before?.analytics && !privacyConsent.analytics) || (before?.reminders && !privacyConsent.reminders)) {
+    if (before?.analytics && !privacyConsent.analytics) {
         forgetTrackingData();
         location.reload();
         return;
     }
     applyPrivacyConsent();
-    if (privacyConsent.analytics || privacyConsent.reminders) {
-        window.monteAnalytics.record?.("consent_granted", { metadata: { analytics: privacyConsent.analytics, reminders: privacyConsent.reminders } });
+    if (privacyConsent.analytics) {
+        window.monteAnalytics.record?.("consent_granted", { metadata: { analytics: true } });
     }
 }
 
@@ -3391,65 +3392,40 @@ function forgetTrackingData() {
 }
 
 function applyPrivacyConsent() {
-    if (privacyConsent?.analytics || privacyConsent?.reminders) startStoreAnalytics();
     if (privacyConsent?.analytics) {
+        startStoreAnalytics();
         loadGoogleAnalytics();
         loadCloudflareAnalytics();
     }
 }
 
+const randomId = () => window.crypto?.randomUUID ? window.crypto.randomUUID() : Date.now().toString(36) + "-" + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+const postJson = async (path, data) => { try { await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true, body: JSON.stringify(data) }); } catch {} };
+
+// Códigos das estatísticas da loja (só com a permissão): a sacola também vai para o painel.
+let storeAnalyticsIds = null;
 let storeAnalyticsStarted = false;
 function startStoreAnalytics() {
     if (storeAnalyticsStarted) return;
     storeAnalyticsStarted = true;
     const VK = "monte_analytics_visitor", SK = "monte_analytics_session", TK = "monte_analytics_session_started";
-    const uid = () => window.crypto?.randomUUID ? window.crypto.randomUUID() : Date.now().toString(36) + "-" + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
     const read = (store, key) => { try { return window[store].getItem(key); } catch { return null; } };
     const write = (store, key, value) => { try { window[store].setItem(key, value); } catch {} };
-    const visitor_id = read("localStorage", VK) || uid();
+    const visitor_id = read("localStorage", VK) || randomId();
     write("localStorage", VK, visitor_id);
     let session_id = read("sessionStorage", SK), started = Number(read("sessionStorage", TK) || 0);
     if (!session_id || !started || Date.now() - started > 1800000) {
-        session_id = uid();
+        session_id = randomId();
         write("sessionStorage", SK, session_id);
         write("sessionStorage", TK, String(Date.now()));
     }
-    const post = async (path, data) => { try { await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true, body: JSON.stringify(data) }); } catch {} };
-    const record = (name, extra) => post("/api/analytics/event", { visitor_id, session_id, event_name: name, path: location.pathname + location.search, referrer: document.referrer, ...extra });
+    storeAnalyticsIds = { visitor_id, session_id };
+    const record = (name, extra) => postJson("/api/analytics/event", { visitor_id, session_id, event_name: name, path: location.pathname + location.search, referrer: document.referrer, ...extra });
     // Páginas, produtos vistos e sacola: só com a permissão de estatísticas.
     const track = (name, extra) => { if (privacyConsent?.analytics) record(name, extra); };
-    // A sacola é salva com estatísticas ou lembrete; nome, e-mail e telefone só com o lembrete.
-    function saveCart() {
-        const items = Array.isArray(cart) ? cart : [];
-        if (!items.length) return;
-        const reminders = privacyConsent?.reminders === true;
-        const shippingPrice = Number(selectedShippingOption?.price || 0);
-        const subtotal = items.reduce((s, i) => s + Number(i.price || 0) * Number(i.quantity || 1), 0);
-        post("/api/analytics/cart", {
-            visitor_id, session_id,
-            items: items.map(i => ({ id: i.id, product_id: i.id, product_name: i.name, sku: i.sku, variant_id: i.variant_id || null, variant_color: i.variant_color || i.color || null, quantity: i.quantity, unit_price: i.price, total_price: Number(i.price || 0) * Number(i.quantity || 1) })),
-            subtotal, shipping: shippingPrice, total: subtotal + shippingPrice,
-            customer_name: reminders ? document.getElementById("customerName")?.value || "" : "",
-            // Valor escondido (cliente preenchida pelo CPF) não serve para o lembrete.
-            customer_email: reminders && !isHiddenValue(document.getElementById("customerEmail")?.value) ? document.getElementById("customerEmail")?.value || "" : "",
-            customer_phone: reminders && !isHiddenValue(document.getElementById("customerPhone")?.value) ? document.getElementById("customerPhone")?.value || "" : ""
-        });
-    }
-    window.monteAnalytics = { track, saveCart, record };
+    window.monteAnalytics = { track, saveCart: saveCartSnapshot, record };
     if (document.readyState === "complete") track("page_view");
     else window.addEventListener("load", () => track("page_view"), { once: true });
-    setInterval(saveCart, 30000);
-    // Só o intervalo não basta: no iPhone (e no navegador do Instagram) a cliente sai do app, os
-    // timers congelam e o que ela digitou depois do último salvamento se perdia. Sem o WhatsApp a
-    // loja não recebe o aviso da sacola abandonada. Salva também quando ela termina de digitar o
-    // contato e quando a página sai da tela.
-    const CONTACT_FIELDS = ["customerName", "customerEmail", "customerPhone"];
-    document.addEventListener("change", e => { if (CONTACT_FIELDS.includes(e.target?.id)) saveCart(); });
-    document.addEventListener("input", e => {
-        if (e.target?.id === "customerPhone" && phoneDigits(e.target.value).length === 11) saveCart();
-    });
-    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveCart(); });
-    window.addEventListener("pagehide", saveCart);
     document.addEventListener("click", e => {
         const el = e.target.closest?.("[data-product-id]");
         if (el) track("view_product", { product_id: el.dataset.productId, product_name: el.dataset.productName || null });
@@ -3560,11 +3536,109 @@ function renderAnonymousCountChoice() {
     if (note) note.textContent = gpc ? "Seu navegador pede para não rastrear, então as suas não são." : off ? "As suas não são contadas neste navegador." : "";
 }
 
+/* =====================================================
+   LEMBRETE DA SACOLA (legítimo interesse — LGPD art. 7º, IX, e art. 10)
+   Quem digita o WhatsApp no checkout e não termina a compra pode ser chamada uma vez pela
+   loja (aviso no WhatsApp da loja 30 minutos depois; backend/cart-reminder.js). Vale com ou
+   sem a permissão de cookies porque não usa cookies: o código da sacola fica só na memória
+   desta página e some quando ela fecha. Vão só as peças, o nome e o WhatsApp (o e-mail não).
+   Sem as estatísticas, nada sai do aparelho enquanto não houver um celular válido.
+   "Não quero", logo abaixo do WhatsApp, apaga o contato já enviado e fica guardado
+   (monte_sem_lembrete) para as próximas compras neste navegador.
+   Com a permissão de estatísticas, a sacola também vai para o painel, mesmo sem WhatsApp.
+   Veja docs/teste-legitimo-interesse-lembrete-sacola.md e a Política de Privacidade.
+===================================================== */
+const CART_CONTACT_OPTOUT_KEY = "monte_sem_lembrete";
+let cartSnapshotKey = "";
+let cartContactSent = false;
+// Navegador sem armazenamento (aba anônima, por exemplo): o "Não quero" vale pelo menos nesta página.
+let cartContactOptOutHere = null;
+
+function cartContactOptedOut() {
+    if (cartContactOptOutHere !== null) return cartContactOptOutHere;
+    try { return localStorage.getItem(CART_CONTACT_OPTOUT_KEY) === "1"; } catch { return false; }
+}
+
+// O que vai para o servidor, ou null quando não há nada a mandar.
+function cartSnapshotPayload({ items, shipping, analytics, optedOut, name, phone, key }) {
+    const list = Array.isArray(items) ? items : [];
+    if (!list.length) return null;
+    let digits = String(phone || "").replace(/\D/g, "");
+    if (digits.length > 11 && digits.startsWith("55")) digits = digits.slice(2);
+    const mobile = !optedOut && /^[1-9]{2}9\d{8}$/.test(digits) ? digits : "";
+    if (!analytics && !mobile) return null;
+    const subtotal = list.reduce((s, i) => s + Number(i.price || 0) * Number(i.quantity || 1), 0);
+    const shippingPrice = Number(shipping || 0);
+    return {
+        cart_key: key,
+        ...(analytics ? { visitor_id: analytics.visitor_id, session_id: analytics.session_id } : {}),
+        items: list.map(i => ({ id: i.id, product_id: i.id, product_name: i.name, sku: i.sku, variant_id: i.variant_id || null, variant_color: i.variant_color || i.color || null, quantity: i.quantity, unit_price: i.price, total_price: Number(i.price || 0) * Number(i.quantity || 1) })),
+        subtotal, shipping: shippingPrice, total: subtotal + shippingPrice,
+        customer_name: mobile ? String(name || "").trim().slice(0, 160) : "",
+        customer_phone: mobile
+    };
+}
+
+function saveCartSnapshot() {
+    const analytics = privacyConsent?.analytics ? storeAnalyticsIds : null;
+    const value = id => document.getElementById(id)?.value || "";
+    // Valor escondido (cliente preenchida pelo CPF) não serve para o lembrete.
+    const phone = isHiddenValue(value("customerPhone")) ? "" : value("customerPhone");
+    if (!cartSnapshotKey) cartSnapshotKey = analytics?.session_id || randomId();
+    const payload = cartSnapshotPayload({ items: cart, shipping: selectedShippingOption?.price, analytics, optedOut: cartContactOptedOut(), name: value("customerName"), phone, key: cartSnapshotKey });
+    if (!payload) {
+        // Apagou o WhatsApp ou esvaziou a sacola: o contato que já tinha ido sai do servidor.
+        if (cartContactSent) forgetCartContact();
+        return;
+    }
+    postJson("/api/analytics/cart", payload);
+    cartContactSent = Boolean(payload.customer_phone);
+}
+
+function forgetCartContact() {
+    cartContactSent = false;
+    const key = cartSnapshotKey || (privacyConsent?.analytics ? storeAnalyticsIds?.session_id : "");
+    if (key) postJson("/api/analytics/cart", { cart_key: key, forget_contact: true });
+}
+
+function toggleCartContact() {
+    const stop = !cartContactOptedOut();
+    cartContactOptOutHere = stop;
+    try { if (stop) localStorage.setItem(CART_CONTACT_OPTOUT_KEY, "1"); else localStorage.removeItem(CART_CONTACT_OPTOUT_KEY); } catch {}
+    renderCartContactChoice();
+    if (stop) forgetCartContact();
+    else saveCartSnapshot();
+}
+
+function renderCartContactChoice() {
+    const text = document.getElementById("cartContactText"), button = document.getElementById("cartContactToggle");
+    if (!text || !button) return;
+    const off = cartContactOptedOut();
+    text.textContent = off ? "Combinado: a MONTÊ não vai te chamar sobre a sacola." : "Se a compra não for concluída, a MONTÊ pode te chamar uma vez neste WhatsApp para ajudar.";
+    button.textContent = off ? "Desfazer" : "Não quero";
+    button.setAttribute("aria-pressed", off ? "true" : "false");
+}
+
+(function setupCartSnapshots() {
+    renderCartContactChoice();
+    setInterval(saveCartSnapshot, 30000);
+    // Só o intervalo não basta: no iPhone (e no navegador do Instagram) a cliente sai do app, os
+    // timers congelam e o que ela digitou depois do último salvamento se perdia. Sem o WhatsApp a
+    // loja não recebe o aviso da sacola abandonada. Salva também quando ela termina de digitar o
+    // contato e quando a página sai da tela.
+    const CONTACT_FIELDS = ["customerName", "customerPhone"];
+    document.addEventListener("change", e => { if (CONTACT_FIELDS.includes(e.target?.id)) saveCartSnapshot(); });
+    document.addEventListener("input", e => {
+        if (e.target?.id === "customerPhone" && phoneDigits(e.target.value).length === 11) saveCartSnapshot();
+    });
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveCartSnapshot(); });
+    window.addEventListener("pagehide", saveCartSnapshot);
+})();
+
 function showCookieConsent(customize = false) {
     const box = document.getElementById("cookieConsent");
     if (!box) return;
     document.getElementById("consentAnalytics").checked = privacyConsent ? privacyConsent.analytics : false;
-    document.getElementById("consentReminders").checked = privacyConsent ? privacyConsent.reminders : false;
     document.getElementById("cookieOptions").hidden = !customize;
     renderAnonymousCountChoice();
     document.getElementById("cookieCustomize").hidden = customize;
@@ -3577,14 +3651,11 @@ function hideCookieConsent() {
     if (box) box.hidden = true;
 }
 
-function acceptCookies() { savePrivacyConsent({ analytics: true, reminders: true }); }
-function rejectCookies() { savePrivacyConsent({ analytics: false, reminders: false }); }
+function acceptCookies() { savePrivacyConsent({ analytics: true }); }
+function rejectCookies() { savePrivacyConsent({ analytics: false }); }
 function customizeCookies() { showCookieConsent(true); }
 function saveCookieChoices() {
-    savePrivacyConsent({
-        analytics: document.getElementById("consentAnalytics").checked,
-        reminders: document.getElementById("consentReminders").checked
-    });
+    savePrivacyConsent({ analytics: document.getElementById("consentAnalytics").checked });
 }
 function openCookiePreferences(event) {
     event?.preventDefault?.();
@@ -3592,6 +3663,9 @@ function openCookiePreferences(event) {
 }
 
 applyPrivacyConsent();
+// Versão anterior: o lembrete fazia parte da permissão de cookies e guardava o código de
+// visitante mesmo sem as estatísticas. Sem elas, esse código sai do aparelho.
+if (privacyConsent && !privacyConsent.analytics) forgetTrackingData();
 (function askCookieConsent() {
     const wantsPreferences = new URLSearchParams(location.search).get("cookies") === "preferencias";
     if (privacyConsent && !wantsPreferences) return;
@@ -4706,7 +4780,7 @@ registerClickActions({
     nextCategoryPage, nextCollectionPage, nextNewPage, nextSalePage, nextSlide, openCart, openSearch,
     openWhatsAppReservation, previousCategoryPage, previousCollectionPage, previousNewPage,
     previousSalePage, previousSlide, removeCoupon, removeFromCart, toggleMobileMenu, updateItemQuantity,
-    acceptCookies, rejectCookies, customizeCookies, saveCookieChoices, openCookiePreferences, toggleAnonymousCount,
+    acceptCookies, rejectCookies, customizeCookies, saveCookieChoices, openCookiePreferences, toggleAnonymousCount, toggleCartContact,
     applyEmailSuggestion, forgetReturningCustomer
 });
 

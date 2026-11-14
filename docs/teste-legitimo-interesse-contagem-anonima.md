@@ -63,7 +63,8 @@ Saber quantas pessoas visitam a loja, de onde vêm e quantas chegam à sacola e 
 - **Sem histórico por pessoa:** não há caminho de navegação por pessoa, lista de páginas por
   pessoa nem ligação com pedido, nome, e-mail ou telefone.
 - **O que continua com consentimento:** as estatísticas detalhadas (código no navegador, Google
-  Analytics, Cloudflare Web Analytics) e o lembrete da sacola.
+  Analytics, Cloudflare Web Analytics). O lembrete da sacola passou para o legítimo interesse em
+  14/11/2026, com teste próprio (`docs/teste-legitimo-interesse-lembrete-sacola.md`).
 - **Alternativa menos invasiva:** não encontramos uma que atenda à finalidade. Com o modelo só de
   consentimento, faltava a maior parte das visitas, e os números ficavam distorcidos.
 
