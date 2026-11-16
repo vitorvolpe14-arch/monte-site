@@ -16,6 +16,8 @@ const { MobizonError, createMobizonClient, messageStatus, failureLabel, validWeb
 // Contagem anônima de visitas (todas as visitantes, sem cookies e sem código de identificação).
 const { anonymousHits, anonymousSeries, storeDay } = require("./anonymous-visits.js");
 const { CART_CONTACT_RETENTION_MS, CART_REMINDER_OPTOUT_PREFIX, brazilMobileDigits, formatBrazilMobile, reminderEmail, cartReminderEmailHash, cartReminderOptOutKey, cartSnapshotPlan, abandonedCartEmail } = require("./cart-reminder.js");
+// Notificações do painel no celular (venda nova, pagamento pendente, segurança).
+const { PUSH_TOPICS, isAllowedPushEndpoint, cleanSubscription, cleanTopics, generateVapidKeys, sendWebPush, salePushMessage, pendingPushMessage, securityPushMessage } = require("./web-push.js");
 // Os totais por dia da contagem anônima ficam 25 meses (comparar com o mesmo mês do ano anterior).
 const ANON_RETENTION_MS = 761 * 24 * 60 * 60 * 1000;
 
@@ -1938,11 +1940,14 @@ async function recordAdminAccountFailure(){
         await supabaseRequest("kv_store_48db9b7e?on_conflict=key",{method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({key:ADMIN_ACCOUNT_KEY,value:next})});
         if(lockNow){
             console.warn("Login admin: conta bloqueada por 15 minutos após "+ADMIN_ACCOUNT_MAX_FAILURES+" senhas erradas.");
-            sendAdminSecurityAlert("Muitas tentativas de login no painel","O painel da MONTÊ recebeu "+ADMIN_ACCOUNT_MAX_FAILURES+" senhas erradas em menos de 15 minutos e o login foi bloqueado por 15 minutos. Se não foi você, troque a senha do painel.").catch(()=>{});
+            // Em segundo plano (no Workers, o waitUntil mantém o aviso vivo depois da resposta).
+            runInBackground(sendAdminSecurityAlert("Muitas tentativas de login no painel","O painel da MONTÊ recebeu "+ADMIN_ACCOUNT_MAX_FAILURES+" senhas erradas em menos de 15 minutos e o login foi bloqueado por 15 minutos. Se não foi você, troque a senha do painel."));
         }
     }catch(error){console.warn("Login admin — falha da conta não registrada:",error.message)}
 }
 async function sendAdminSecurityAlert(subject,message){
+    // No celular (quem ativou "Segurança" no sino do painel) e por e-mail.
+    await sendAdminPush("security",securityPushMessage(subject,message));
     const recipients=safeString(process.env.ORDER_NOTIFICATION_EMAILS).split(",").map(v=>v.trim().toLowerCase()).filter(Boolean);
     if(!RESEND_API_KEY||!RESEND_FROM_EMAIL||!recipients.length)return;
     await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from:RESEND_FROM_NAME+" <"+RESEND_FROM_EMAIL+">",to:recipients,subject:"MONTÊ — Alerta de segurança: "+subject,text:message})});
@@ -1980,6 +1985,171 @@ app.post("/api/admin/logout",async(req,res)=>{
     return res.json({success:true});
 });
 app.get("/api/admin/session",async(req,res)=>{try{const s=await currentAdminSession(req);if(!s)return res.status(401).json({success:false});return res.json({success:true,email:s.email})}catch{return res.status(503).json({success:false})}});
+
+/* =====================================================
+   NOTIFICAÇÕES DO PAINEL NO CELULAR (Web Push)
+   O sino do painel (admin-push.js) ativa as notificações no aparelho; aqui ficam a chave
+   da loja, os aparelhos (tabela admin_push_subscriptions, backend/sql/notificacoes-painel.sql)
+   e o envio (backend/web-push.js). Avisos:
+   - sales: venda nova (aviso de pagamento da InfinitePay), uma vez por pedido;
+   - pending: pedido sem pagamento há 30 minutos (cron, junto com o e-mail para a loja);
+   - security: login do painel bloqueado por senhas erradas.
+   A notificação é um aviso a mais: se falhar, o pedido, os e-mails e o resto seguem iguais.
+===================================================== */
+const PUSH_VAPID_KV_KEY = "admin_push_vapid";
+let pushVapidCache = null;
+
+// Chave VAPID da loja: criada na primeira vez e guardada no kv_store. Se duas instâncias
+// criarem ao mesmo tempo, vale a gravada primeiro (ignore-duplicates) e todas leem essa.
+async function pushVapidKeys() {
+    if (pushVapidCache) return pushVapidCache;
+    const read = async () => (await supabaseRequest("kv_store_48db9b7e?key=eq." + PUSH_VAPID_KV_KEY + "&select=value&limit=1", { method: "GET" }))?.[0]?.value;
+    let keys = await read();
+    if (!keys?.publicKey || !keys?.privateJwk) {
+        await supabaseRequest("kv_store_48db9b7e?on_conflict=key", {
+            method: "POST",
+            headers: { "Prefer": "resolution=ignore-duplicates,return=minimal" },
+            body: JSON.stringify({ key: PUSH_VAPID_KV_KEY, value: await generateVapidKeys() })
+        });
+        keys = await read();
+    }
+    if (!keys?.publicKey || !keys?.privateJwk) throw new Error("Chave das notificações indisponível.");
+    pushVapidCache = keys;
+    return keys;
+}
+
+// Aparelho que não aceita mais (desinstalou o app, desativou): sai da lista. Outro erro fica anotado.
+async function pushDeliveryFailed(device, result, budget) {
+    console.warn("Notificação do painel não entregue (" + (device.device || "aparelho") + "):", result.status, result.error);
+    if (budget && !budget.has(1)) return;
+    spend(budget);
+    const query = "admin_push_subscriptions?id=eq." + encodeURIComponent(device.id);
+    await (result.gone
+        ? supabaseRequest(query, { method: "DELETE", headers: { "Prefer": "return=minimal" } })
+        : supabaseRequest(query, { method: "PATCH", headers: { "Prefer": "return=minimal" }, body: JSON.stringify({ last_error: (result.status + " " + result.error).slice(0, 300), last_error_at: new Date().toISOString() }) })
+    ).catch(error => console.warn("Notificações — aparelho não atualizado:", error.message));
+}
+
+// Manda a notificação a todos os aparelhos que querem este tipo de aviso. message pode ser uma
+// função (async), chamada só se houver aparelho. Nunca lança erro; com budget (cron), para antes
+// do limite de chamadas.
+async function sendAdminPush(topic, message, budget) {
+    try {
+        if (budget && !budget.has(2)) return { sent: 0, skipped: "budget" };
+        spend(budget);
+        const devices = await supabaseRequest("admin_push_subscriptions?topics=cs.%7B" + topic + "%7D&select=id,endpoint,p256dh,auth,device&order=id.asc&limit=10", { method: "GET" });
+        if (!Array.isArray(devices) || !devices.length) return { sent: 0 };
+        if (!pushVapidCache) {
+            if (budget && !budget.has(4)) return { sent: 0, skipped: "budget" };
+            spend(budget, 3);
+        }
+        const vapidKeys = await pushVapidKeys();
+        const payload = typeof message === "function" ? await message() : message;
+        let sent = 0;
+        for (const device of devices) {
+            if (budget && !budget.has(1)) break;
+            spend(budget);
+            const result = await sendWebPush(device, payload, { vapidKeys, subject: PUBLIC_SITE_URL });
+            if (result.ok) sent++;
+            else await pushDeliveryFailed(device, result, budget);
+        }
+        return { sent };
+    } catch (error) {
+        console.error("Notificações do painel (" + topic + "):", error.message);
+        return { sent: 0, error: error.message };
+    }
+}
+
+// Venda nova: uma notificação por pedido. Quem marca admin_push_sent_at primeiro manda (duas
+// instâncias podem atender o mesmo aviso de pagamento ao mesmo tempo).
+async function notifyAdminSalePush(order) {
+    if (!order?.id) return;
+    const claimed = await supabaseRequest("orders?id=eq." + encodeURIComponent(order.id) + "&admin_push_sent_at=is.null&select=id", {
+        method: "PATCH",
+        body: JSON.stringify({ admin_push_sent_at: new Date().toISOString() })
+    });
+    if (!Array.isArray(claimed) || !claimed.length) return;
+    const result = await sendAdminPush("sales", async () => {
+        // Número no ícone do app: pedidos pagos para separar e enviar (o mesmo do menu Pedidos).
+        const open = await supabaseRequest("orders?status=in.(paid,processing)&select=is_test,approval_status&limit=1000", { method: "GET" }).catch(() => null);
+        const toShip = Array.isArray(open) ? open.filter(o => o.is_test !== true && o.approval_status !== "pending").length : undefined;
+        return salePushMessage(order, { code: formatOrderCode(order.order_code || order.order_nsu), toShip });
+    });
+    console.log("📲 Notificação de venda nova:", order.order_nsu, (result.sent || 0) + " aparelho(s)");
+}
+
+function pushDeviceLabel(req) {
+    const ua = safeString(req.headers["user-agent"]);
+    if (/iPhone/.test(ua)) return "iPhone";
+    if (/iPad/.test(ua)) return "iPad";
+    if (/Android/.test(ua)) return "Android";
+    if (/Macintosh/.test(ua)) return "Mac";
+    if (/Windows/.test(ua)) return "Windows";
+    return "Outro aparelho";
+}
+async function pushDeviceByEndpoint(endpoint) {
+    if (!isAllowedPushEndpoint(endpoint)) return null;
+    const rows = await supabaseRequest("admin_push_subscriptions?endpoint=eq." + encodeURIComponent(endpoint) + "&select=id,endpoint,p256dh,auth,device,topics&limit=1", { method: "GET" });
+    return rows?.[0] || null;
+}
+const pushUnavailable = (res, where, error) => {
+    console.error("Notificações — " + where + ":", error.message);
+    return res.status(503).json({ success: false, message: "As notificações não estão disponíveis agora. Tente de novo." });
+};
+
+app.get("/api/admin/push/key", requireAdmin, async (req, res) => {
+    try { return res.json({ success: true, publicKey: (await pushVapidKeys()).publicKey }); }
+    catch (error) { return pushUnavailable(res, "chave", error); }
+});
+// Este aparelho está na lista? E com quais avisos?
+app.post("/api/admin/push/status", requireAdmin, async (req, res) => {
+    try {
+        const device = await pushDeviceByEndpoint(safeString(req.body?.endpoint));
+        return res.json({ success: true, subscribed: !!device, topics: device ? cleanTopics(device.topics) : PUSH_TOPICS });
+    } catch (error) { return pushUnavailable(res, "situação", error); }
+});
+// Ativar (ou atualizar os avisos). Sem "topics", um aparelho que já existe mantém os avisos dele.
+app.post("/api/admin/push/subscribe", requireAdmin, async (req, res) => {
+    const subscription = cleanSubscription(req.body?.subscription);
+    if (!subscription) return res.status(400).json({ success: false, message: "Este aparelho não mandou uma assinatura de notificações válida." });
+    const row = { ...subscription, device: pushDeviceLabel(req), updated_at: new Date().toISOString(), last_error: null, last_error_at: null };
+    if (Array.isArray(req.body?.topics)) row.topics = cleanTopics(req.body.topics);
+    try {
+        await supabaseRequest("admin_push_subscriptions?on_conflict=endpoint", { method: "POST", headers: { "Prefer": "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(row) });
+        const device = await pushDeviceByEndpoint(subscription.endpoint);
+        return res.json({ success: true, subscribed: true, topics: cleanTopics(device?.topics) });
+    } catch (error) { return pushUnavailable(res, "ativar", error); }
+});
+app.post("/api/admin/push/unsubscribe", requireAdmin, async (req, res) => {
+    const endpoint = safeString(req.body?.endpoint);
+    if (!isAllowedPushEndpoint(endpoint)) return res.json({ success: true });
+    try {
+        await supabaseRequest("admin_push_subscriptions?endpoint=eq." + encodeURIComponent(endpoint), { method: "DELETE", headers: { "Prefer": "return=minimal" } });
+        return res.json({ success: true });
+    } catch (error) { return pushUnavailable(res, "desativar", error); }
+});
+// Teste: só para este aparelho.
+app.post("/api/admin/push/test", requireAdmin, async (req, res) => {
+    try {
+        const device = await pushDeviceByEndpoint(safeString(req.body?.endpoint));
+        if (!device) return res.status(404).json({ success: false, message: "Ative as notificações neste aparelho primeiro." });
+        const result = await sendWebPush(device, {
+            title: "Notificações da MONTÊ ativadas",
+            body: "É assim que as vendas novas vão chegar neste aparelho.",
+            url: "/admin",
+            tag: "teste"
+        }, { vapidKeys: await pushVapidKeys(), subject: PUBLIC_SITE_URL });
+        if (result.ok) return res.json({ success: true });
+        await pushDeliveryFailed(device, result);
+        return res.status(502).json({
+            success: false,
+            message: result.gone
+                ? "Este aparelho não aceita mais as notificações. Ative de novo."
+                : "O serviço de notificações do aparelho recusou o envio (" + (result.status || "sem resposta") + "). Tente de novo em instantes."
+        });
+    } catch (error) { return pushUnavailable(res, "teste", error); }
+});
+
 const CAROUSEL_KV_KEY = "site_carousel_images";
 
 // Configuração do carrossel: { images: [url...], sizes: { url: [largura, altura] } }.
@@ -7807,6 +7977,13 @@ app.post(
             });
             if (pixPaidByCard) console.warn("⚠️ Pedido com desconto do Pix pago com cartão:", orderNsu);
 
+            // Notificação de venda nova no celular (sino do painel), sem atrasar a resposta.
+            runInBackground(notifyAdminSalePush({
+                ...order, id: order.id, order_nsu: orderNsu, order_code: order.order_code,
+                customer_name: order.customer_name, total: order.total, items: order.items,
+                approval_status: order.approval_status, pix_paid_by_card: pixPaidByCard
+            }));
+
             const adminWhatsApp = await ensureWhatsAppAdminNewOrderNotification({
                 ...order,
                 id: order.id,
@@ -8685,8 +8862,8 @@ function reminderFirstName(name) {
 ===================================================== */
 const STORE_FOLLOWUP_ORDER_AFTER_MS = 30 * 60 * 1000;
 // Por aviso: pedidos/compras posteriores, aviso recente, estoque, link curto (até 2), WhatsApp,
-// e-mail e marcação.
-const STORE_FOLLOWUP_CALLS_EACH = 9;
+// e-mail, marcação e a notificação no celular (lista de aparelhos e envio).
+const STORE_FOLLOWUP_CALLS_EACH = 12;
 const WHATSAPP_FOLLOWUP_TEMPLATE_NAME = safeString(process.env.WHATSAPP_FOLLOWUP_TEMPLATE_NAME || "monte_sacola_abandonada");
 const WHATSAPP_FOLLOWUP_TEMPLATE_LANGUAGE = safeString(process.env.WHATSAPP_FOLLOWUP_TEMPLATE_LANGUAGE || "pt_BR");
 
@@ -8850,6 +9027,8 @@ async function storeFollowupPendingOrders(budget) {
             console.error("Aviso para a loja (pagamento pendente) —", code, error.message);
             await mark("error").catch(() => {});
         }
+        // No celular também (mesmo se o e-mail falhar): o toque abre a conversa com a cliente.
+        await sendAdminPush("pending", pendingPushMessage({ id: order.id, name, code, total: order.total, whatsappUrl }), budget);
     }
     return sent;
 }

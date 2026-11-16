@@ -2357,8 +2357,8 @@ label{font-size:12.5px;color:var(--ad-ink-2);font-weight:500;gap:7px}
 .modal-head{position:sticky;top:0;z-index:6;display:flex;justify-content:space-between;align-items:center;gap:16px;margin:0 0 20px;padding:24px 0 16px;background:#fff;border-bottom:1px solid var(--ad-line)}
 .modal-head .eyebrow{margin:0 0 6px}
 .modal-head h2{margin:0;font-size:26px}
-.app .modal-head button,.modal .modal-head button,#closeModal,#closeOrderModal{display:grid;place-items:center;flex:none;width:40px;height:40px;min-height:0;padding:0;border:1px solid var(--ad-line);border-radius:50%!important;background:#fff;color:var(--ad-ink);font-size:22px;letter-spacing:0;line-height:1;box-shadow:none}
-#closeModal:hover,#closeOrderModal:hover{border-color:var(--ad-ink);background:#fff}
+.app .modal-head button,.modal .modal-head button,#closeModal,#closeOrderModal,#closePushModal{display:grid;place-items:center;flex:none;width:40px;height:40px;min-height:0;padding:0;border:1px solid var(--ad-line);border-radius:50%!important;background:#fff;color:var(--ad-ink);font-size:22px;letter-spacing:0;line-height:1;box-shadow:none}
+#closeModal:hover,#closeOrderModal:hover,#closePushModal:hover{border-color:var(--ad-ink);background:#fff}
 #orderDetails{padding-bottom:28px}
 .detail-card{box-shadow:none;background:var(--ad-soft);border-radius:12px}
 .detail-card h3{font-size:19px}
@@ -3082,8 +3082,8 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 3px rgba(0,0,0,.06)}
 [data-theme="dark"] .app a.sms-recharge{background:var(--ad-ink);color:var(--ad-on-ink)}
 [data-theme="dark"] .app a.sms-recharge:hover{background:#d9d9d4}
 [data-theme="dark"] .app .variant-row button,[data-theme="dark"] .modal .variant-row .remove-variant,[data-theme="dark"] .image-remove,
-[data-theme="dark"] #closeModal,[data-theme="dark"] #closeOrderModal{background:var(--ad-card);color:var(--ad-ink);border:1px solid var(--ad-line-strong)}
-[data-theme="dark"] #closeModal:hover,[data-theme="dark"] #closeOrderModal:hover,[data-theme="dark"] .image-remove:hover{background:var(--ad-hover);border-color:var(--ad-ink-2);color:var(--ad-ink)}
+[data-theme="dark"] #closeModal,[data-theme="dark"] #closeOrderModal,[data-theme="dark"] #closePushModal{background:var(--ad-card);color:var(--ad-ink);border:1px solid var(--ad-line-strong)}
+[data-theme="dark"] #closeModal:hover,[data-theme="dark"] #closeOrderModal:hover,[data-theme="dark"] #closePushModal:hover,[data-theme="dark"] .image-remove:hover{background:var(--ad-hover);border-color:var(--ad-ink-2);color:var(--ad-ink)}
 [data-theme="dark"] .app button:focus-visible,[data-theme="dark"] .modal button:focus-visible,[data-theme="dark"] .app a:focus-visible,[data-theme="dark"] .app summary:focus-visible{outline-color:var(--ad-ink)}
 
 /* Campos */
@@ -3295,3 +3295,36 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 3px rgba(0,0,0,.06)}
 }
 /* Toques: sem o destaque cinza do iPhone nem zoom ao tocar duas vezes nos botões. */
 .app button,.app a,.modal button,#loginForm button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+
+/* =====================================================
+   NOTIFICAÇÕES NO CELULAR (sino do menu — admin-push.js)
+   Bolinha verde no sino: notificações ativas neste aparelho.
+===================================================== */
+.push-toggle{position:relative}
+.push-dot{display:none;position:absolute;top:9px;left:22px;width:8px;height:8px;border-radius:50%;background:var(--ad-up,#2e9e5b);box-shadow:0 0 0 2px var(--ad-side,#000);pointer-events:none}
+.push-toggle.is-on .push-dot{display:block}
+.push-modal-card{width:min(560px,100%)}
+.push-body{padding:0 0 26px}
+.push-body [hidden]{display:none!important}
+.push-state{margin:0 0 16px;font-size:15px;line-height:1.5;color:var(--ad-ink)}
+.push-state.is-on::before{content:"";display:inline-block;width:8px;height:8px;margin:0 9px 1px 0;border-radius:50%;background:var(--ad-up,#2e9e5b)}
+.push-note{margin:0 0 18px;padding:14px 16px;border:1px solid var(--ad-line);border-radius:12px;background:var(--ad-soft,#f6f6f4);font-size:13.5px;line-height:1.6;color:var(--ad-ink-2,#333)}
+.push-note p{margin:0 0 8px}
+.push-note ol{margin:0;padding-left:20px}
+.push-note li{margin:5px 0}
+.push-topics{display:grid;gap:10px;min-width:0;margin:0 0 20px;padding:0;border:0}
+.push-topics legend{margin:0 0 10px;padding:0;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ad-muted)}
+.push-topic{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border:1px solid var(--ad-line);border-radius:12px;color:var(--ad-ink);cursor:pointer}
+.push-topic input{flex:none;width:18px;height:18px;margin:2px 0 0;padding:0}
+.push-topic span{display:grid;gap:3px;min-width:0}
+.push-topic strong{font-size:14px;font-weight:600}
+.push-topic small{font-size:12.5px;line-height:1.45;color:var(--ad-muted)}
+.push-actions{display:flex;flex-wrap:wrap;gap:10px}
+.push-actions button{min-height:46px;padding:0 22px;border-radius:999px}
+.push-message{margin:12px 0 0}
+@media (max-width:800px){
+  .app .sidebar-bottom .push-toggle .push-label{display:none}
+  .push-dot{top:5px;left:auto;right:5px}
+  .push-actions{flex-direction:column}
+  .push-actions button{width:100%}
+}
