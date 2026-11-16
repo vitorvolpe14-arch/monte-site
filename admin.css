@@ -3265,3 +3265,33 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 3px rgba(0,0,0,.06)}
 .admin-product-link-text{flex:1 1 150px;min-width:0;overflow:visible;white-space:normal;text-overflow:clip;overflow-wrap:anywhere;word-break:normal;font-size:11.5px;line-height:1.35;-webkit-user-select:all;user-select:all}
 .app .admin-product-link .link-copy{flex:none;min-height:28px;padding:0 12px!important;font-size:9.5px!important}
 .app .admin-product-link .link-copy.is-done{border-color:var(--ad-up);color:var(--ad-up)}
+
+/* =====================================================
+   APP NO IPHONE (painel na tela de início — veja admin-app.js)
+   No app, o painel usa a tela inteira (viewport-fit=cover) e a barra de
+   status fica transparente (black-translucent). As margens
+   env(safe-area-inset-*) tiram o conteúdo de baixo do relógio, do notch ou
+   Dynamic Island, da barra de início e, com o celular deitado, das laterais.
+   No navegador do computador elas valem 0: nada muda.
+===================================================== */
+/* O relógio do app é sempre branco: atrás dele fica uma faixa escura, nos dois temas. */
+@media (display-mode:standalone){
+  body::before{content:"";position:fixed;top:0;left:0;right:0;z-index:100;height:env(safe-area-inset-top);background:#121211;pointer-events:none}
+}
+/* Tela larga (iPad, celular deitado): menu à esquerda e conteúdo longe das bordas. */
+@media (min-width:801px){
+  .app .sidebar{padding-top:calc(28px + env(safe-area-inset-top));padding-bottom:calc(16px + env(safe-area-inset-bottom));padding-left:calc(14px + env(safe-area-inset-left))}
+  .main{padding-top:env(safe-area-inset-top);padding-right:max(clamp(20px,4vw,56px),env(safe-area-inset-right));padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+}
+/* Celular em pé: o topo com o menu desce abaixo do relógio; o fim da página e das janelas sobe acima da barra de início. */
+@media (max-width:800px){
+  .app .sidebar{padding-top:calc(12px + env(safe-area-inset-top));padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}
+  .main{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right));padding-bottom:calc(48px + env(safe-area-inset-bottom))}
+  .auth-side{padding-top:calc(36px + env(safe-area-inset-top))}
+  .auth-card{margin-bottom:calc(40px + env(safe-area-inset-bottom))}
+  .modal-card{max-height:min(94vh,calc(100vh - env(safe-area-inset-top) - 10px))}
+  .order-modal-card::after{content:"";display:block;height:env(safe-area-inset-bottom)}
+  .product-modal-actions{padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+}
+/* Toques: sem o destaque cinza do iPhone nem zoom ao tocar duas vezes nos botões. */
+.app button,.app a,.modal button,#loginForm button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}

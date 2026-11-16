@@ -1,0 +1,11 @@
+/* Página "Sem conexão" do app do painel (admin-offline.html). Fontes do sistema: sem internet, as do painel não carregam. */
+*{box-sizing:border-box}
+html{color-scheme:dark}
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom));background:#0e0e0d;color:#f2f2ef;font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;-webkit-text-size-adjust:100%}
+.offline{width:min(380px,100%);text-align:center}
+.logo{display:block;width:120px;height:auto;margin:0 auto 40px;fill:#f2f2ef}
+h1{margin:0 0 12px;font:400 32px/1.15 Georgia,"Times New Roman",serif}
+p{margin:0 0 32px;color:#a8a8a2;font-size:15px;line-height:1.55}
+.retry{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 28px;border-radius:999px;background:#f2f2ef;color:#0e0e0d;font-size:12px;font-weight:600;letter-spacing:.12em;text-decoration:none;-webkit-tap-highlight-color:transparent}
+.retry:active{background:#d9d9d4}
+.retry:focus-visible{outline:2px solid #f2f2ef;outline-offset:3px}
