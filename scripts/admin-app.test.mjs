@@ -79,10 +79,13 @@ test("admin-app.js registra o service worker em /admin, sem cache do navegador",
 });
 
 // Service worker rodando num ambiente simulado (self, caches, fetch).
-function loadServiceWorker({ online }) {
+function loadServiceWorker({ online, windows = [], openWindowFails = false }) {
     const listeners = {};
     const store = new Map();
     const fetched = [];
+    const shown = [];
+    const badges = [];
+    const opened = [];
     const cache = {
         addAll: async urls => { for (const url of urls) store.set(url, "conteúdo de " + url); },
     };
@@ -94,7 +97,13 @@ function loadServiceWorker({ online }) {
             location: new URL("https://loja.test/admin-sw.js?v=1"),
             addEventListener: (type, fn) => { listeners[type] = fn; },
             skipWaiting: async () => {},
-            clients: { claim: async () => {} },
+            clients: {
+                claim: async () => {},
+                matchAll: async () => windows,
+                openWindow: async url => { opened.push(url); if (openWindowFails) throw new TypeError("não pode abrir"); return null; },
+            },
+            registration: { showNotification: async (title, options) => { shown.push({ title, options }); } },
+            navigator: { setAppBadge: async n => { badges.push(n); }, clearAppBadge: async () => { badges.push(0); } },
         },
         caches: {
             open: async () => cache,
@@ -118,7 +127,7 @@ function loadServiceWorker({ online }) {
         await Promise.all(waits);
         return { responded: response !== undefined, response: await response };
     };
-    return { dispatch, store, fetched };
+    return { dispatch, store, fetched, shown, badges, opened };
 }
 const request = (url, mode = "no-cors", method = "GET") => ({ url: "https://loja.test" + url, mode, method });
 
@@ -172,4 +181,59 @@ test("arquivos do app não ficam de fora da publicação", () => {
             assert.ok(!pattern.test(file), file + " é ignorado por " + rule);
         }
     }
+});
+
+const pushEvent = data => ({ data: { json: () => data, text: () => JSON.stringify(data) } });
+const clickEvent = data => { const event = { notification: { data, closed: false, close() { event.notification.closed = true; } } }; return event; };
+
+test("service worker: mostra a notificação e o número de pedidos no ícone", async () => {
+    const sw = loadServiceWorker({ online: true });
+    await sw.dispatch("push", pushEvent({ title: "Venda nova · R$ 389,00", body: "MONTÊ-1042 · Ana", url: "/admin#pedido=7", tag: "pedido-7", badge: 3 }));
+    assert.equal(sw.shown.length, 1);
+    assert.equal(sw.shown[0].title, "Venda nova · R$ 389,00");
+    assert.equal(sw.shown[0].options.body, "MONTÊ-1042 · Ana");
+    assert.equal(sw.shown[0].options.tag, "pedido-7");
+    assert.equal(sw.shown[0].options.data.url, "/admin#pedido=7");
+    assert.ok(exists(pathOf(sw.shown[0].options.icon)), "falta o ícone " + sw.shown[0].options.icon);
+    assert.deepEqual(sw.badges, [3]);
+    // Sem dados legíveis: ainda mostra alguma coisa (o iPhone exige uma notificação por envio).
+    await sw.dispatch("push", { data: { json: () => { throw new Error("x"); }, text: () => "texto" } });
+    assert.equal(sw.shown[1].title, "MONTÊ");
+    assert.equal(sw.shown[1].options.body, "texto");
+});
+
+test("service worker: tocar abre o pedido no painel (aberto ou não) ou o WhatsApp", async () => {
+    const messages = [];
+    let focused = 0;
+    const panel = { url: "https://loja.test/admin", focus: async () => { focused++; }, postMessage: m => messages.push(m) };
+    const open = loadServiceWorker({ online: true, windows: [{ url: "https://loja.test/", focus: async () => {}, postMessage: () => {} }, panel] });
+    const event = clickEvent({ url: "/admin#pedido=7" });
+    await open.dispatch("notificationclick", event);
+    assert.ok(event.notification.closed);
+    assert.equal(focused, 1);
+    assert.deepEqual(JSON.parse(JSON.stringify(messages)), [{ type: "monte-open", url: "/admin#pedido=7" }]);
+    assert.deepEqual(open.opened, []);
+
+    const closed = loadServiceWorker({ online: true });
+    await closed.dispatch("notificationclick", clickEvent({ url: "/admin#pedido=7" }));
+    assert.deepEqual(closed.opened, ["https://loja.test/admin#pedido=7"]);
+
+    const whatsapp = loadServiceWorker({ online: true, windows: [panel] });
+    await whatsapp.dispatch("notificationclick", clickEvent({ url: "https://wa.me/5585999999999?text=Oi", fallbackUrl: "/admin#pedido=8" }));
+    assert.deepEqual(whatsapp.opened, ["https://wa.me/5585999999999?text=Oi"]);
+
+    const refused = loadServiceWorker({ online: true, openWindowFails: true });
+    await refused.dispatch("notificationclick", clickEvent({ url: "https://wa.me/5585999999999", fallbackUrl: "/admin#pedido=8" })).catch(() => {});
+    assert.deepEqual(refused.opened, ["https://wa.me/5585999999999", "https://loja.test/admin#pedido=8"]);
+});
+
+test("sino do painel: todos os elementos que admin-push.js usa existem no admin.html", () => {
+    const source = read("admin-push.js");
+    const ids = [...new Set([...source.matchAll(/el\("([A-Za-z]+)"\)/g)].map(m => m[1]))];
+    assert.ok(ids.length > 8, ids.join(" "));
+    for (const id of ids) assert.match(html, new RegExp('id="' + id + '"'), "falta #" + id + " no admin.html");
+    const values = [...html.matchAll(/<label class="push-topic"><input type="checkbox" value="([a-z]+)"/g)].map(m => m[1]);
+    assert.deepEqual(values, ["sales", "pending", "security"]);
+    const pushScript = html.indexOf('<script src="admin-push.js?v=');
+    assert.ok(pushScript > html.indexOf('<script src="admin.js?'), "admin-push.js precisa vir depois do admin.js");
 });

@@ -5,8 +5,9 @@
    (admin.webmanifest, ícones em assets/app e, no fim do admin.css, as
    margens do relógio, do notch e da barra de início).
    Este arquivo:
-   - registra o admin-sw.js, que só mostra "Sem conexão" quando o app abre
-     sem internet (nada do painel fica guardado no celular);
+   - registra o admin-sw.js: mostra "Sem conexão" quando o app abre sem
+     internet (nada do painel fica guardado no celular) e as notificações
+     do sino (admin-push.js);
    - ao voltar para o app depois de alguns minutos fora dele, confere se o
      login ainda vale (senão mostra a tela de entrar) e atualiza pedidos e
      produtos: no app não existe o botão de recarregar do navegador.
@@ -17,8 +18,8 @@
 
     if ("serviceWorker" in navigator) {
         window.addEventListener("load", function () {
-            navigator.serviceWorker.register("/admin-sw.js?v=20261116-app", { scope: "/admin", updateViaCache: "none" })
-                .catch(function (error) { console.warn("App do painel: aviso de sem conexão indisponível.", error); });
+            navigator.serviceWorker.register("/admin-sw.js?v=20261116-push", { scope: "/admin", updateViaCache: "none" })
+                .catch(function (error) { console.warn("App do painel: service worker indisponível (sem conexão e notificações).", error); });
         });
     }
 
