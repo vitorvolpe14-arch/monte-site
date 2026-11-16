@@ -2,13 +2,20 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<link rel="icon" href="/favicon.ico?v=1" sizes="32x32"><link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml"><link rel="apple-touch-icon" href="/assets/app/admin-icon-180.png?v=1">
 <meta name="robots" content="noindex, nofollow">
 <title>MONTÊ — Gestão</title>
 <meta name="color-scheme" content="dark light">
+<!-- App do celular: Safari → Compartilhar → Adicionar à Tela de Início (veja admin-app.js). -->
+<link rel="manifest" href="/admin.webmanifest?v=1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="MONTÊ">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#121211">
 <script src="admin-theme.js?v=20261112-escuro"></script>
-<link rel="stylesheet" href="admin.css?v=20261112-copiar-link">
+<link rel="stylesheet" href="admin.css?v=20261116-app">
 </head>
 <body>
 <div id="loginView" class="auth-view">
@@ -454,5 +461,6 @@
 <script src="admin-carousel.js?v=20261104-previa-link"></script>
 <script src="sms-text.js?v=20261110-sms-motivo"></script>
 <script src="admin-sms.js?v=20261110-sms-arquivo"></script>
+<script src="admin-app.js?v=20261116-app"></script>
 </body>
 </html>
