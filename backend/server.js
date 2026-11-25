@@ -8,6 +8,7 @@ const { pixLinkDiscountPercent, infinitePayPixQuote, isExpectedPixAmount, paidPr
 const { PROMOTION_GIFTS_CEILING, promotionGiftCount } = require("./gift-promotion.js");
 const { OLIST_SALE_SITUATIONS, olistSaleSummary, olistSaleDetail, olistSalesListNow } = require("./olist-sales.js");
 const { olistWaitingSales } = require("./olist-stock-waiting.js");
+const { VariantsError, saveProductVariants } = require("./product-variants.js");
 const { infinitePayNet, currentInfinitePayFees, olistStoreNet, cardBillingByMonth, currentMachineFees } = require("./infinitepay-fees.js");
 const { sanitizeReportRow, reportRowKey, reportUntil, sanitizeSummary, mergeCoverage, reportTotals, sanitizeStatementRow, sanitizeStatementSummary, statementMatches, mergeStatement } = require("./infinitepay-report-import.js");
 // Contagem de SMS e leitura de listas de celulares: o mesmo arquivo roda no painel (navegador).
@@ -4503,90 +4504,13 @@ app.post("/api/admin/olist/sales/sync", requireAdmin, async (req, res) => {
 app.put("/api/admin/products/:id/variants",requireAdmin,async(req,res)=>{
     try{
         const productId=safeString(req.params.id);
-        const variants=Array.isArray(req.body?.variants)?req.body.variants:[];
         if(!/^[0-9a-f-]{36}$/i.test(productId)) return res.status(400).json({success:false,message:"Produto inválido."});
-        if(variants.length>50) return res.status(400).json({success:false,message:"Quantidade de variações excede o limite."});
-
-        const existing=await supabaseRequest(
-            `product_variants?product_id=eq.${encodeURIComponent(productId)}&select=id,color,sku,stock,active`
-        );
-        const incomingIds=new Set(variants.map(v=>safeString(v.id)).filter(Boolean));
-
-        for(const old of (existing||[])){
-            if(!incomingIds.has(old.id)){
-                if(Number(old.stock||0)>0){
-                    return res.status(409).json({
-                        success:false,
-                        message:`A variação "${old.color}" possui estoque. Zere o estoque antes de removê-la.`
-                    });
-                }
-                await supabaseRequest(
-                    `product_variants?id=eq.${encodeURIComponent(old.id)}`,
-                    {method:"DELETE",headers:{"Prefer":"return=minimal"}}
-                );
-            }
-        }
-
-        for(const v of variants){
-            const color=safeString(v.color);
-            const sku=safeString(v.sku)||null;
-            const active=v.active!==false;
-            const requestedStock=Number(v.stock);
-
-            if(!color) continue;
-            if(color.length>80 || (sku && sku.length>80) || !Number.isInteger(requestedStock) || requestedStock<0 || requestedStock>100000){
-                return res.status(400).json({success:false,message:"Dados de variação ou estoque inválidos."});
-            }
-
-            if(v.id){
-                const current=(existing||[]).find(x=>x.id===v.id);
-                if(!current) return res.status(404).json({success:false,message:"Variação não encontrada."});
-
-                await supabaseRequest(
-                    `product_variants?id=eq.${encodeURIComponent(v.id)}`,
-                    {
-                        method:"PATCH",
-                        body:JSON.stringify({color,sku,active})
-                    }
-                );
-
-                const currentStock=Number(current.stock||0);
-                const delta=requestedStock-currentStock;
-                if(delta!==0){
-                    await supabaseRequest("rpc/adjust_product_variant_stock",{
-                        method:"POST",
-                        body:JSON.stringify({
-                            p_variant_id:v.id,
-                            p_delta:delta,
-                            p_movement_type:"adjustment",
-                            p_reason:"Atualização de estoque pelo painel administrativo",
-                            p_created_by:req.adminSession.email
-                        })
-                    });
-                }
-            }else{
-                const created=await supabaseRequest("product_variants",{
-                    method:"POST",
-                    body:JSON.stringify({product_id:productId,color,sku,stock:0,active})
-                });
-                const createdVariant=Array.isArray(created)?created[0]:created;
-                if(requestedStock>0){
-                    await supabaseRequest("rpc/adjust_product_variant_stock",{
-                        method:"POST",
-                        body:JSON.stringify({
-                            p_variant_id:createdVariant.id,
-                            p_delta:requestedStock,
-                            p_movement_type:"restock",
-                            p_reason:"Estoque inicial pelo painel administrativo",
-                            p_created_by:req.adminSession.email
-                        })
-                    });
-                }
-            }
-        }
-
+        // Cor tirada no painel sai do site mesmo com estoque; veja backend/product-variants.js.
+        await saveProductVariants({productId,variants:req.body?.variants,adminEmail:req.adminSession.email,db:supabaseRequest});
+        publicCache.delete("catalog");
         return res.json({success:true});
     }catch(e){
+        if(e instanceof VariantsError) return res.status(e.status).json({success:false,message:e.message});
         console.error("Admin variants PUT:",e);
         const msg=String(e.message||"");
         if(msg.includes("Estoque insuficiente")) return res.status(400).json({success:false,message:"Estoque insuficiente para este ajuste."});
